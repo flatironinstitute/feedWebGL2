@@ -4,7 +4,7 @@
   "description": "Tools for implementing WebGL2 feedback processing stages for graphics preprocessing or other purposes.",
   "main": "dist/index.js",
   "files": [
-    "dist/my_plugin.js",
+    "dist/feedWebGL.js",
     "dist/index.js"
   ],
   "dependencies": {

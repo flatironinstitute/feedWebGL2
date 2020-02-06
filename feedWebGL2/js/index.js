@@ -4,11 +4,11 @@ if (!global.jQuery) {
   global.jQuery = require('jquery');
 }
 
-// my_plugin installs itself into the global jQuery object
-require("./my_plugin")
+// The plugins install themselves into the global jQuery object
+require("./feedWebGL")
 
-function hello_jest_is_loaded() {
+function feedWebGL_is_loaded() {
   return true;
 }
 
-export default hello_jest_is_loaded;
+export default feedWebGL_is_loaded;

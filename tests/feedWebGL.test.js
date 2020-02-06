@@ -1,18 +1,13 @@
 
-/*
-global.jQuery = function(argument) {
-    return global.jQuery.jQuery_function(argument);
-};
-*/
 
 // var index = require('../dist/index');
-import hello_jest_is_loaded from "../dist/index";
+import feedWebGL_is_loaded from "../dist/index";
 
-describe('testing my_plugin', () => {
+describe('testing feedWebGL', () => {
 
     it('loads the index', () => {
         //expect(true).toEqual(true);
-        expect(hello_jest_is_loaded()).toBe(true);
+        expect(feedWebGL_is_loaded()).toBe(true);
     });
 
     it("defines the plugin", () => {
