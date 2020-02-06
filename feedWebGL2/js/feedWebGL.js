@@ -2,7 +2,7 @@
 // silly jquery plugin for experimentation only
 
 (function($) {
-    $.fn.plugin_functionality = function (options) {
+    $.fn.feedWebGL = function (options) {
         // plugin implementation here
         console.log("plugin called " + this);
         var settings = $.extend({
