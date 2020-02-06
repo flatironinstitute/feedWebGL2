@@ -11,13 +11,13 @@ cache:
 before_install:
 - npm update
 - sudo apt-get update
-- sudo apt-get install python3
+#- sudo apt-get install python3
 #- python3 start_test_http_server.py &
 install:
 - npm install
 script:
-#- npm test
-- npm run coveralls
+- npm test
+#- npm run coveralls
 #after_success:
 #- python3 stop_test_http_server.py 
 #after_failure:
