@@ -31,10 +31,38 @@ describe('testing feedWebGL', () => {
         var d = jQuery("<div/>");
         var context = d.feedWebGL2();
         var shader = "bogus shader for smoke-testing only";
-        var options = {vertex_shader: shader};
+        var options = {vertex_shader: shader, compile_now:false};
         var program = context.program(options);
         expect(program.name).toBeTruthy();
+        expect(program.gl_program).toBeNull();
         expect(context.programs[program.name]).toEqual(program);
+    });
+
+    it('compiles a program', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var shader = "bogus shader for smoke-testing only";
+        var options = {vertex_shader: shader, compile_now:true};
+        var program = context.program(options);
+        expect(program.name).toBeTruthy();
+        expect(program.gl_program).toBeTruthy();
+        expect(context.programs[program.name]).toEqual(program);
+    });
+
+    it('fails a compile', () => {
+        var mockoptions = {fail_compile: true};
+        mockCanvas(window, mockoptions);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var shader = "bogus shader for smoke-testing only";
+        var options = {vertex_shader: shader, compile_now:false};
+        var program = context.program(options);
+        expect(program.name).toBeTruthy();
+        var compile_fn = (() => program.compile());
+        expect(compile_fn).toThrow()
+        var check_fn = (() => program.check_error());
+        expect(check_fn).toThrow()
     });
 
   });

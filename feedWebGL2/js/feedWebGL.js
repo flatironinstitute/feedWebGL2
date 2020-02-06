@@ -69,19 +69,40 @@
                             bytes_per_component: 4,
                         },
                     },
+                    compile_now: true
                 }, options);
-                if (!options.vertex_shader) {
+                if (!this.settings.vertex_shader) {
                     throw new Error("feedback program requires a vertex shader.");
                 }
+                this.error = null;
                 this.context = context;
                 this.name = this.settings.name || context.fresh_name("program");
-                this.vertex_shader = this.settings.vertex_shader;
-                this.fragment_shader = this.settings.fragment_shader;
+                // compile program in separate step for easy testing.
+                this.gl_program = null;
+                if (this.settings.compile_now) {
+                    this.compile();
+                }
+            };
+            compile() {
+                var context = this.context;
+                var gl = context.gl;
+                var vertex_shader_code = this.settings.vertex_shader;
+                var fragment_shader_code = this.settings.fragment_shader;
                 this.gl_program = context.gl.createProgram();
+                // compile shaders
+                this.vertex_shader = this.compileShader(vertex_shader_code, gl.VERTEX_SHADER);
+                this.fragment_shader = this.compileShader(fragment_shader_code, gl.FRAGMENT_SHADER);
                 // set up feedbacks...
+            };
+            check_error() {
+                if (this.error) {
+                    throw new Error("previous error: " + this.error);
+                }
             };
             compileShader(code, type) {
                 this.check_error();
+                var gl = this.context.gl;
+                var program = this.gl_program;
                 let shader = gl.createShader(type);
                 gl.shaderSource(shader, code);
                 gl.compileShader(shader);
@@ -92,7 +113,7 @@
                     this.error = err;
                     throw new Error(err);
                 } else {
-                    gl.attachShader(this.program, shader);
+                    gl.attachShader(program, shader);
                 }
                 return shader;
             };
