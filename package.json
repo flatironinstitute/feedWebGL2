@@ -1,7 +1,7 @@
 {
   "name": "feedWebGL2",
   "version": "1.0.0",
-  "description": "Example npm module using jest for testing.",
+  "description": "Tools for implementing WebGL2 feedback processing stages for graphics preprocessing or other purposes.",
   "main": "dist/index.js",
   "files": [
     "dist/my_plugin.js",
@@ -27,25 +27,25 @@
     "build-css": "touch html/bundle.css && parcelify html/entry.js -c html/bundle.css",
     "build-js": "browserify html/entry.js > html/bundle.js",
     "start": "npm run build-css && npm run build-js && opener html/index.html",
-    "build": "babel src -D -d dist",
+    "build": "babel feedWebGL2/js -D -d dist",
     "prepare": "npm run build",
     "test": "jest",
     "coverage": "jest --coverage",
     "coveralls": "jest --coverage && cat ./tests/coverage/lcov.info | coveralls",
-    "lint": "eslint src test --ignore-pattern tests/coverage*"
+    "lint": "eslint feedWebGL2/js test --ignore-pattern tests/coverage*"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/flatironinstitute/feedWebGL2.git"
   },
   "keywords": [
-    "hello",
-    "world",
-    "jest",
-    "testing",
-    "npm",
-    "jquery",
-    "plugin"
+    "webGL",
+    "graphics",
+    "accellerator",
+    "shader",
+    "transform",
+    "feedback",
+    "preprocess"
   ],
   "author": "Aaron Watters",
   "license": "ISC",
