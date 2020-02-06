@@ -17,4 +17,24 @@ describe('testing feedWebGL', () => {
         expect(context.gl).toBeTruthy();
     });
 
+    it('allocates a buffer', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var buffer = context.buffer(null, 4);
+        expect(buffer.name).toBeTruthy();
+        expect(context.buffers[buffer.name]).toEqual(buffer);
+    });
+
+    it('creates a program', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var shader = "bogus shader for smoke-testing only";
+        var options = {vertex_shader: shader};
+        var program = context.program(options);
+        expect(program.name).toBeTruthy();
+        expect(context.programs[program.name]).toEqual(program);
+    });
+
   });

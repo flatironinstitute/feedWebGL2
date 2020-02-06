@@ -7,6 +7,7 @@ if (!global.jQuery) {
 
 
 function mockCanvas (window) {
+    var count = 0;
     var imgdata = function(w, h) {
         var length = w * h * 4;
         var result = new Array(length);
@@ -18,7 +19,9 @@ function mockCanvas (window) {
     window.HTMLCanvasElement.prototype.getContext = function (kind) {
         return {
             _info: "This is a mock canvas context",
-            _kind: kind
+            _kind: kind,
+            createBuffer: function () { count++; return "mock buffer object " + count; },
+            createProgram: function () { count++; return "mock program object " + count; },
         };
     }
 
