@@ -93,6 +93,9 @@
                     this.compile();
                 }
             };
+            feedback_variables() {
+                return this.feedback_order.map(x => x.name);
+            }
             compile() {
                 var context = this.context;
                 var gl = context.gl;

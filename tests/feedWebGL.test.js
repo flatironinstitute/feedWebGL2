@@ -85,6 +85,8 @@ describe('testing feedWebGL', () => {
         expect(program.feedback_order[fA.index]).toEqual(fA);
         expect(fA.num_components).toEqual(3);
         expect(fB.bytes_per_component).toEqual(2);
+        var fvs = program.feedback_variables();
+        expect(fvs[fB.index]).toEqual("feedback_B");
     });
 
   });
