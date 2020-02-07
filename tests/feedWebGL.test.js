@@ -34,6 +34,7 @@ describe('testing feedWebGL', () => {
         buffer.allocate_size(13);
         expect(buffer.byte_size).toEqual(4*13);
     });
+
     it('initializes a buffer from an array', () => {
         mockCanvas(window);
         var d = jQuery("<div/>");
@@ -56,7 +57,7 @@ describe('testing feedWebGL', () => {
         expect(context.programs[program.name]).toEqual(program);
     });
 
-    it('compiles a program', () => {
+    it('compiles and links a program', () => {
         mockCanvas(window);
         var d = jQuery("<div/>");
         var context = d.feedWebGL2();
@@ -81,6 +82,19 @@ describe('testing feedWebGL', () => {
         expect(compile_fn).toThrow()
         var check_fn = (() => program.check_error());
         expect(check_fn).toThrow()
+    });
+
+    it('fails a link', () => {
+        var mockoptions = {fail_link: true};
+        mockCanvas(window, mockoptions);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var shader = "bogus shader for smoke-testing only";
+        var options = {vertex_shader: shader, compile_now:false};
+        var program = context.program(options);
+        var compile_fn = (() => program.compile());
+        expect(compile_fn).toThrow()
+        expect(program.error).toEqual("Error linking shader program");
     });
 
     it('makes feedback variables', () => {

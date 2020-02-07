@@ -139,6 +139,16 @@
                 this.vertex_shader = this.compileShader(vertex_shader_code, gl.VERTEX_SHADER);
                 this.fragment_shader = this.compileShader(fragment_shader_code, gl.FRAGMENT_SHADER);
                 // set up feedbacks...
+                var varyings = this.feedback_variables();
+                gl.transformFeedbackVaryings(this.gl_program, varyings, gl.SEPARATE_ATTRIBS);
+                gl.linkProgram(this.gl_program);
+                if (!gl.getProgramParameter(this.gl_program, gl.LINK_STATUS)) {
+                    var err = "Error linking shader program";
+                    this.error = err;
+                    console.log(gl.getProgramInfoLog(this.gl_program));
+                    throw new Error(err);
+                }
+                return this.gl_program;
             };
             check_error() {
                 if (this.error) {
