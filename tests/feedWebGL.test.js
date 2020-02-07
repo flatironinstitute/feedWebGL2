@@ -98,10 +98,10 @@ describe('testing feedWebGL', () => {
             vertex_shader: shader,
         };
         var program = context.program(options);
-        var run = program.runner(1000000);
-        expect(run.name).toBeTruthy();
-        expect(program.runners[run.name]).toBe(run);
-        expect(run.num_instances).toBe(1000000);
+        var runr = program.runner(1000000);
+        expect(runr.name).toBeTruthy();
+        expect(program.runners[runr.name]).toBe(runr);
+        expect(runr.num_instances).toBe(1000000);
     });
 
     it('creates vector and matrix uniforms', () => {
@@ -112,11 +112,11 @@ describe('testing feedWebGL', () => {
         var options = {
             vertex_shader: shader,
             uniforms: {
-                "translation": {
+                translation: {
                     vtype: "4fv",
                     default_value: [-1, -1, -1, 0],
                 },
-                "affine_transform": {
+                affine_transform: {
                     vtype: "4fv",
                     is_matrix: true,
                     default_value: [0,1,0,0, 1,0,0,0, 0,0,1,0, 0,0,0,1, ],
@@ -133,6 +133,38 @@ describe('testing feedWebGL', () => {
         expect(t.is_matrix()).toBe(false);
         expect(a.is_matrix()).toBe(true);
         expect(t.value).toEqual([-1, -1, -1, 0]);
+    });
+
+    it('creates mesh and vertex inputs', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var shader = "bogus shader for smoke-testing only";
+        var options = {
+            vertex_shader: shader,
+            inputs: {
+                "location": {
+                    num_components: 3,
+                },
+                "scale": {},  // implicitly just one component
+                "point_offset":  {
+                    per_vertex: true,  // repeat for every mesh
+                    num_components: 3,
+                },
+            },
+        };
+        var program = context.program(options);
+        var runr = program.runner(1000000);
+        var inputs = runr.inputs;
+        var l = inputs.location;
+        var s = inputs.scale;
+        var p = inputs.point_offset;
+        expect(s.name).toEqual("scale");
+        expect(p.runner).toBe(runr);
+        expect(s.num_components).toEqual(1);
+        expect(l.num_components).toEqual(3);
+        expect(l.is_mesh_input()).toEqual(true);
+        expect(p.is_mesh_input()).toEqual(false);
     });
 
   });

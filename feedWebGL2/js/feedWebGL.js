@@ -83,6 +83,16 @@
                         //    default_value: [0,1,0,0, 1,0,0,0, 0,0,1,0, 0,0,0,1, ],
                         //},
                     },
+                    inputs: {
+                    //    "location": {
+                    //        num_components: 3,
+                    //    },
+                    //    "scale": {},  // implicitly just one component
+                    //    "point_offset":  {
+                    //        per_vertex: true,  // repeat for every mesh
+                    //        num_components: 3,
+                    //    }
+                    },
                     compile_now: true
                 }, options);
                 if (!this.settings.vertex_shader) {
@@ -175,6 +185,19 @@
                     }
                     this.uniforms[name] = uniform;
                 }
+                // preprocess instance inputs defined for the program
+                this.inputs = {};
+                var input_descriptions = program.settings.inputs;
+                for (var name in input_descriptions) {
+                    var desc = input_descriptions[name];
+                    var input = null;
+                    if (desc.per_vertex) {
+                        input = new VertexInput(this, name, desc.num_components);
+                    } else {
+                        input = new MeshInput(this, name, desc.num_components);
+                    }
+                    this.inputs[name] = input;
+                }
             }
         };
 
@@ -212,6 +235,23 @@
             // xxxxx
             is_matrix() {
                 return true;  // mainly for testing
+            };
+        };
+
+        class MeshInput {
+            constructor (runner, name, num_components) {
+                this.runner = runner;
+                this.name = name;
+                this.num_components = num_components || 1;
+            };
+            is_mesh_input() {
+                return true;  // mainly for testing
+            };
+        };
+
+        class VertexInput extends MeshInput {
+            is_mesh_input() {
+                return false;  // mainly for testing
             };
         };
 
