@@ -167,6 +167,36 @@ describe('testing feedWebGL', () => {
         expect(t.value).toEqual([-1, -1, -1, 0]);
     });
 
+    it('installs uniforms', () => {
+        var mockoptions = {dump_methods: true};
+        mockCanvas(window, mockoptions);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var shader = "bogus shader for smoke-testing only";
+        var options = {
+            vertex_shader: shader,
+            uniforms: {
+                translation: {
+                    vtype: "4fv",
+                    default_value: [-1, -1, -1, 0],
+                },
+                affine_transform: {
+                    vtype: "4fv",
+                    is_matrix: true,
+                    default_value: [0,1,0,0, 1,0,0,0, 0,0,1,0, 0,0,0,1, ],
+                },
+            },
+        };
+        var program = context.program(options);
+        var run = program.runner(1000000);
+        run.install_uniforms();
+        var uniforms = run.uniforms;
+        var t = uniforms.translation;
+        var a = uniforms.affine_transform;
+        expect(t.location).toBeTruthy();
+        expect(a.location).toBeTruthy();
+    });
+
     it('creates mesh and vertex inputs', () => {
         mockCanvas(window);
         var d = jQuery("<div/>");

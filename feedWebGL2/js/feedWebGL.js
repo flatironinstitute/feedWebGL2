@@ -208,6 +208,14 @@
                     }
                     this.inputs[name] = input;
                 }
+            };
+            install_uniforms() {
+                var program = this.program;
+                var gl = program.context.gl;
+                gl.useProgram(program.gl_program);
+                for (name in this.uniforms) {
+                    this.uniforms[name].install();
+                }
             }
         };
 
@@ -260,12 +268,27 @@
             is_matrix() {
                 return false;  // mainly for testing
             };
+            method_name() {
+                return "uniform" + this.vtype;
+            };
+            install() {
+                var program = this.runner.program;
+                var gl = program.context.gl;
+                this.location = gl.getUniformLocation(program.gl_program, this.name);
+                var method_name = this.method_name();
+                console.log("method name " + method_name);
+                var method = gl[this.method_name()];
+                method.call(gl, this.location, this.value);
+            };
         };
 
         class MatrixUniform extends VectorUniform {
             // xxxxx
             is_matrix() {
                 return true;  // mainly for testing
+            };
+            method_name() {
+                return "uniformMatrix" + this.vtype;
             };
         };
 

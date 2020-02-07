@@ -39,6 +39,8 @@ function mockCanvas (window, options) {
             enableVertexAttribArray: function () { count++; return "mock enable vertex attrib arr " + count; },
             vertexAttribPointer: function () { count++; return "mock vertex attrib pointer" + count; },
             vertexAttribDivisor: function () { count++; return "mock vert attr div " + count; },
+            getUniformLocation: function () { count++; return "mock get uniform loc " + count; },
+            useProgram: function () { count++; return "mock use program " + count; },
             VERTEX_SHADER: "VS",
             FRAGMENT_SHADER: "FS",
             ARRAY_BUFFER: "AB",
@@ -48,11 +50,15 @@ function mockCanvas (window, options) {
         var ucount = {"1": 1, "2": 2, "3": 3, "4":4};
         var utype = {"f": 1, "i": 2, "u":3};
         // this defines too many matrix setters, but whatever
+        var method;
         for (var k in ukind) {
             for (var c in ucount) {
                 for (var t in utype) {
-                    var method = ukind + ucount + utype + "v";
+                    method = k + c + t + "v";
                     context[method] = function () { count++; return "mock uniform setter " + count; };
+                    //if (options.dump_methods) {
+                    //    console.log("method: " + method);
+                    //}
                 }
             }
         }
