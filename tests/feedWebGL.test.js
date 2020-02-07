@@ -89,4 +89,19 @@ describe('testing feedWebGL', () => {
         expect(fvs[fB.index]).toEqual("feedback_B");
     });
 
+    it('makes a runner', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var shader = "bogus shader for smoke-testing only";
+        var options = {
+            vertex_shader: shader,
+        };
+        var program = context.program(options);
+        var run = program.runner(1000000);
+        expect(run.name).toBeTruthy();
+        expect(program.runners[run.name]).toBe(run);
+        expect(run.num_instances).toBe(1000000);
+    });
+
   });

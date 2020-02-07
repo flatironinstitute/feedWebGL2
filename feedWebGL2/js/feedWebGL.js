@@ -63,6 +63,7 @@
                     name: null,
                     vertex_shader: null,
                     fragment_shader: noop_fragment_shader,
+                    run_type: "POINTS",   // run glsl program point by point (not triangles or lines, default)
                     feedbacks: {
                         "gl_Position": {
                             num_components: 4,
@@ -80,6 +81,7 @@
                 // preprocess the feedbacks
                 this.feedbacks_by_name = {};
                 this.feedback_order = [];
+                this.runners = {};
                 for (var name in this.settings.feedbacks) {
                     var feedback_desc = this.settings.feedbacks[name];
                     var feedback = new FeedbackVariable(this, name, feedback_desc.num_components, feedback_desc.bytes_per_component);
@@ -92,6 +94,14 @@
                 if (this.settings.compile_now) {
                     this.compile();
                 }
+            };
+            runner(num_instances, vertices_per_instance, name, run_type) {
+                name = name || this.context.fresh_name("runner");
+                run_type = run_type || this.settings.run_type;
+                vertices_per_instance = vertices_per_instance || 1;
+                var run = new FeedbackRunner(this, num_instances, vertices_per_instance, name, run_type);
+                this.runners[run.name] = run;
+                return run;
             };
             feedback_variables() {
                 return this.feedback_order.map(x => x.name);
@@ -130,6 +140,16 @@
                 }
                 return shader;
             };
+        };
+
+        class FeedbackRunner {
+            constructor(program, num_instances, vertices_per_instance, name, run_type) {
+                this.program = program;
+                this.vertices_per_instance = vertices_per_instance;
+                this.num_instances = num_instances;
+                this.name = name;
+                this.run_type = run_type;
+            }
         };
 
         class FeedbackBuffer {
