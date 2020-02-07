@@ -199,4 +199,36 @@ describe('testing feedWebGL', () => {
         expect(p.is_mesh_input()).toEqual(false);
     });
 
+    it('binds mesh and vertex inputs to a buffer', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var shader = "bogus shader for smoke-testing only";
+        var options = {
+            vertex_shader: shader,
+            inputs: {
+                "location": {
+                    num_components: 3,
+                },
+                "scale": {},  // implicitly just one component
+                "point_offset":  {
+                    per_vertex: true,  // repeat for every mesh
+                    num_components: 3,
+                },
+            },
+        };
+        var program = context.program(options);
+        var runr = program.runner(1000000);
+        var inputs = runr.inputs;
+        var l = inputs.location;
+        var s = inputs.scale;
+        var p = inputs.point_offset;
+        var buffer = context.buffer(null, 4);
+        var valuesArray = new Float32Array([1,2,3,3,5]);
+        buffer.initialize_from_array(valuesArray);
+        p.bindBuffer(buffer);
+        s.bindBuffer(buffer, 2, 1);
+        expect(s.byte_offset).toEqual(2 * 1 * 4);
+    });
+
   });

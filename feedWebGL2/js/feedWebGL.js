@@ -274,15 +274,38 @@
                 this.runner = runner;
                 this.name = name;
                 this.num_components = num_components || 1;
+                this.position = null;
             };
             is_mesh_input() {
                 return true;  // mainly for testing
+            };
+            bindBuffer(tf_buffer, skip_elements, element_stride) {
+                var gl = this.runner.program.context.gl;
+                var shaderProgram = this.runner.program.gl_program;
+                gl.bindBuffer(gl.ARRAY_BUFFER, tf_buffer.buffer);
+                skip_elements = skip_elements || 0;
+                element_stride = element_stride || 0;
+                this.position = gl.getAttribLocation(shaderProgram, this.name);
+                this.define_divisor(gl);
+                gl.enableVertexAttribArray(this.position);
+                this.byte_offset = skip_elements * this.num_components * tf_buffer.bytes_per_element;
+                this.byte_stride = element_stride * this.num_components * tf_buffer.bytes_per_element;
+                gl.vertexAttribPointer(this.position, tf_buffer.num_components,
+                    gl.FLOAT, false, this.byte_stride, this.byte_offset);
+            };
+            define_divisor(gl) {
+                // one per mesh
+                gl.vertexAttribPointer(this.position, 1);
             };
         };
 
         class VertexInput extends MeshInput {
             is_mesh_input() {
                 return false;  // mainly for testing
+            };
+            define_divisor(gl) {
+                // no divisor: vertex element
+                gl.vertexAttribDivisor(this.position, 0);
             };
         };
 
