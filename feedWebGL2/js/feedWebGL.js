@@ -205,8 +205,29 @@
             constructor(context, name, bytes_per_element) {
                 this.context = context;
                 this.name = name;
-                this.bytes_per_element = bytes_per_element;
+                this.bytes_per_element = bytes_per_element || 4;
                 this.buffer = context.gl.createBuffer();
+                this.byte_size = null;
+                this.num_elements = null;
+            };
+            initialize_from_array(array) {
+                if (this.bytes_per_element != array.BYTES_PER_ELEMENT) {
+                    throw new Error("byte per element must match " + this.bytes_per_element + " <> " + array.BYTES_PER_ELEMENT);
+                }
+                this.num_elements = array.length;
+                this.byte_size = this.bytes_per_element * this.num_elements;
+                var gl = this.context.gl;
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+                gl.bufferData(gl.ARRAY_BUFFER, this.byte_size, gl.DYNAMIC_COPY);  //  ?? dynamic copy??
+                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            }
+            allocate_size(num_elements) {
+                this.num_elements = num_elements;
+                this.byte_size = this.bytes_per_element * num_elements;
+                var gl = this.context.gl;
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+                gl.bufferData(gl.ARRAY_BUFFER, this.byte_size, gl.DYNAMIC_COPY);  //  ?? dynamic copy??
+                gl.bindBuffer(gl.ARRAY_BUFFER, null);
             };
         };
 

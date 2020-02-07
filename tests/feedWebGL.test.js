@@ -26,6 +26,24 @@ describe('testing feedWebGL', () => {
         expect(context.buffers[buffer.name]).toEqual(buffer);
     });
 
+    it('sizes a buffer', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var buffer = context.buffer(null, 4);
+        buffer.allocate_size(13);
+        expect(buffer.byte_size).toEqual(4*13);
+    });
+    it('initializes a buffer from an array', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var buffer = context.buffer(null, 4);
+        var valuesArray = new Float32Array([1,2,3,3,5]);
+        buffer.initialize_from_array(valuesArray);
+        expect(buffer.byte_size).toEqual(4*5);
+    });
+
     it('creates a program', () => {
         mockCanvas(window);
         var d = jQuery("<div/>");
