@@ -65,4 +65,26 @@ describe('testing feedWebGL', () => {
         expect(check_fn).toThrow()
     });
 
+    it('makes feedback variables', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var shader = "bogus shader for smoke-testing only";
+        var options = {
+            vertex_shader: shader,
+            feedbacks: {
+                feedback_A: {num_components: 3},
+                feedback_B: {bytes_per_component: 2},
+            },
+        };
+        var program = context.program(options);
+        var fA = program.feedbacks_by_name.feedback_A;
+        var fB = program.feedbacks_by_name.feedback_B;
+        expect(fA).toBeTruthy();
+        expect(fB).toBeTruthy();
+        expect(program.feedback_order[fA.index]).toEqual(fA);
+        expect(fA.num_components).toEqual(3);
+        expect(fB.bytes_per_component).toEqual(2);
+    });
+
   });

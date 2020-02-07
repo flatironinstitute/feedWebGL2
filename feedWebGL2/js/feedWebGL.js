@@ -77,6 +77,16 @@
                 this.error = null;
                 this.context = context;
                 this.name = this.settings.name || context.fresh_name("program");
+                // preprocess the feedbacks
+                this.feedbacks_by_name = {};
+                this.feedback_order = [];
+                for (var name in this.settings.feedbacks) {
+                    var feedback_desc = this.settings.feedbacks[name];
+                    var feedback = new FeedbackVariable(this, name, feedback_desc.num_components, feedback_desc.bytes_per_component);
+                    this.feedbacks_by_name[name] = feedback;
+                    this.feedback_order.push(feedback);
+                    feedback.index = this.feedback_order.length - 1;
+                }
                 // compile program in separate step for easy testing.
                 this.gl_program = null;
                 if (this.settings.compile_now) {
@@ -125,6 +135,15 @@
                 this.name = name;
                 this.bytes_per_element = bytes_per_element;
                 this.buffer = context.gl.createBuffer();
+            };
+        };
+
+        class FeedbackVariable {
+            constructor(program, name, num_components, bytes_per_component) {
+                this.program = program;
+                this.name = name;
+                this.num_components = num_components || 1;
+                this.bytes_per_component = bytes_per_component || 4;
             };
         };
 
