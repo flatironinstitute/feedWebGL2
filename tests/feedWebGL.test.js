@@ -104,4 +104,35 @@ describe('testing feedWebGL', () => {
         expect(run.num_instances).toBe(1000000);
     });
 
+    it('creates vector and matrix uniforms', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var shader = "bogus shader for smoke-testing only";
+        var options = {
+            vertex_shader: shader,
+            uniforms: {
+                "translation": {
+                    vtype: "4fv",
+                    default_value: [-1, -1, -1, 0],
+                },
+                "affine_transform": {
+                    vtype: "4fv",
+                    is_matrix: true,
+                    default_value: [0,1,0,0, 1,0,0,0, 0,0,1,0, 0,0,0,1, ],
+                },
+            },
+        };
+        var program = context.program(options);
+        var run = program.runner(1000000);
+        var uniforms = run.uniforms;
+        var t = uniforms.translation;
+        var a = uniforms.affine_transform;
+        expect(t.name).toEqual("translation")
+        expect(t.vtype).toEqual("4fv")
+        expect(t.is_matrix()).toBe(false);
+        expect(a.is_matrix()).toBe(true);
+        expect(t.value).toEqual([-1, -1, -1, 0]);
+    });
+
   });

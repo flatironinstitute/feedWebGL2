@@ -70,6 +70,19 @@
                             bytes_per_component: 4,
                         },
                     },
+                    uniforms: {
+                        //"translation": {
+                        //    // https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext/unifor
+                        //    vtype: "4fv",
+                        //    default_value: [-1, -1, -1, 0],
+                        //},
+                        //"affine_transform": {
+                        //    // https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext/unifor
+                        //    vtype: "4fv",
+                        //    is_matrix: true,
+                        //    default_value: [0,1,0,0, 1,0,0,0, 0,0,1,0, 0,0,0,1, ],
+                        //},
+                    },
                     compile_now: true
                 }, options);
                 if (!this.settings.vertex_shader) {
@@ -149,6 +162,19 @@
                 this.num_instances = num_instances;
                 this.name = name;
                 this.run_type = run_type;
+                // preprocess the uniforms defined for the program
+                var uniform_descriptions = program.settings.uniforms;
+                this.uniforms = {};
+                for (var name in uniform_descriptions) {
+                    var desc = uniform_descriptions[name];
+                    var uniform = null;
+                    if (desc.is_matrix) {
+                        uniform = new MatrixUniform(this, name, desc.vtype, desc.default_value);
+                    } else {
+                        uniform = new VectorUniform(this, name, desc.vtype, desc.default_value);
+                    }
+                    this.uniforms[name] = uniform;
+                }
             }
         };
 
@@ -167,6 +193,25 @@
                 this.name = name;
                 this.num_components = num_components || 1;
                 this.bytes_per_component = bytes_per_component || 4;
+            };
+        };
+
+        class VectorUniform {
+            constructor (runner, name, vtype, default_value) {
+                this.runner = runner;
+                this.name = name;
+                this.vtype = vtype;
+                this.value = default_value;
+            };
+            is_matrix() {
+                return false;  // mainly for testing
+            };
+        };
+
+        class MatrixUniform extends VectorUniform {
+            // xxxxx
+            is_matrix() {
+                return true;  // mainly for testing
             };
         };
 
