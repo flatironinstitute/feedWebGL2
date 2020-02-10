@@ -358,15 +358,76 @@ describe('testing feedWebGL', () => {
         var l = inputs.location;
         var s = inputs.scale;
         var p = inputs.point_offset;
-        //var buffer = context.buffer(null, 4);
-        //var valuesArray = new Float32Array([1,2,3,3,5]);
-        //buffer.initialize_from_array(valuesArray);
-        //p.bindBuffer(buffer);
-        //s.bindBuffer(buffer, 2, 1);
         // 2 elements, 3 components, 4 bytes each
         expect(p.byte_offset).toEqual(2 * 3 * 4);
         // 1 element, 3 components, 4 bytes
         expect(p.byte_stride).toEqual(1 * 3 * 4);
+    });
+
+    it('completes a mock run', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2({
+            buffers: {
+                "location_buffer": {
+                    num_components: 3,
+                    vectors: [
+                        [0,0,1],
+                        [1,1,0],
+                        [1,1,1],
+                    ],
+                },
+                "scale_buffer": {
+                    // implicitly one component
+                    array: new Float32Array([1,2,3,3,5]),
+                },
+            },
+        });
+        var shader = "bogus shader for smoke-testing only";
+        var options = {
+            vertex_shader: shader,
+            uniforms: {
+                translation: {
+                    vtype: "4fv",
+                    default_value: [-1, -1, -1, 0],
+                },
+                affine_transform: {
+                    vtype: "4fv",
+                    is_matrix: true,
+                    default_value: [0,1,0,0, 1,0,0,0, 0,0,1,0, 0,0,0,1, ],
+                },
+            },
+            inputs: {
+                "location": {
+                    bytes_per_element: 4,
+                    from_buffer: {
+                        name: "location_buffer",  // implicitly densely packed, no skip
+                    },
+                },
+                "scale": {
+                    from_buffer: {
+                        name: "scale_buffer",
+                    },
+                },  // implicitly just one component
+                "point_offset":  {
+                    per_vertex: true,  // repeat for every mesh
+                    num_components: 3,
+                    from_buffer: {
+                        name: "location_buffer",
+                        skip_elements: 2,
+                        element_stride: 1,
+                    }
+                },
+            },
+            feedbacks: {
+                feedback_A: {num_components: 3},
+                feedback_B: {bytes_per_component: 4, num_components: 2},
+            },
+        };
+        var program = context.program(options);
+        var runr = program.runner(10, 7);
+        runr.run();
+        expect(runr.run_count).toEqual(1);
     });
 
   });

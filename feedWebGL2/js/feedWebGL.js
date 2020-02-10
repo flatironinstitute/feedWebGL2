@@ -250,17 +250,64 @@ data loading convenience interfaces on runner.
                     }
                     this.inputs[name] = input;
                 }
-                this.allocated_feedbacks = {};
+                this.allocated_feedbacks = null;
+                this.uniforms_installed = false;
+                this.run_count = 0;
+            };
+            check_input_bindings() {
+                var unbound = [];
+                for (var name in this.inputs) {
+                    if (!this.inputs[name].bound) {
+                        unbound.push(name);
+                    }
+                }
+                if (unbound.length > 0) {
+                    throw new Error("No buffer bound to inputs in run: " + unbound);
+                }
+            };
+            run() {
+                this.check_input_bindings();
+                var program = this.program;
+                var gl = program.context.gl;
+                gl.useProgram(program.gl_program);
+                if (!this.allocated_feedbacks) {
+                    this.allocate_feedback_buffers();
+                }
+                if (!this.uniforms_installed) {
+                    this.install_uniforms();
+                }
+                var mode_name = this.run_type || "POINTS";
+                var mode = gl[mode_name];
+                var rasterize = program.settings.rasterize;
+                if (!rasterize) {
+                    gl.enable(gl.RASTERIZER_DISCARD);
+                }
+                gl.beginTransformFeedback(mode);
+                var vertices_per_instance = this.vertices_per_instance;
+                var num_instances = this.num_instances;
+                if ((vertices_per_instance) && (vertices_per_instance > 1)) {
+                    gl.drawArraysInstanced(mode, 0, vertices_per_instance, num_instances);
+                } else {
+                    gl.drawArrays(mode, 0, vertices_per_instance);
+                }
+                gl.endTransformFeedback();
+                if (!rasterize) {
+                    gl.disable(gl.RASTERIZER_DISCARD);
+                }
+                this.run_count += 1;  // mainly for debug and test.
             };
             install_uniforms() {
                 var program = this.program;
                 var gl = program.context.gl;
                 gl.useProgram(program.gl_program);
-                for (name in this.uniforms) {
+                for (var name in this.uniforms) {
                     this.uniforms[name].install();
                 }
+                this.uniforms_installed = true;
             };
             allocate_feedback_buffers() {
+                // should deallocate if already allocated???
+                this.allocated_feedbacks = {};
                 var number_of_outputs = this.vertices_per_instance * this.num_instances;
                 var program = this.program;
                 var gl = program.context.gl;
@@ -420,6 +467,7 @@ data loading convenience interfaces on runner.
                 this.name = name;
                 this.num_components = num_components || 1;
                 this.position = null;
+                this.bound = false;
             };
             is_mesh_input() {
                 return true;  // mainly for testing
@@ -437,6 +485,7 @@ data loading convenience interfaces on runner.
                 this.byte_stride = element_stride * this.num_components * tf_buffer.bytes_per_element;
                 gl.vertexAttribPointer(this.position, tf_buffer.num_components,
                     gl.FLOAT, false, this.byte_stride, this.byte_offset);
+                this.bound = true;
             };
             define_divisor(gl) {
                 // one per mesh
@@ -455,5 +504,8 @@ data loading convenience interfaces on runner.
         };
 
         return new FeedbackContext(options);
-    }
+    };
+    $.fn.feedWebGL2.example = function (options) {
+        // not finished...
+    };
 })(jQuery);

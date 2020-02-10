@@ -45,11 +45,18 @@ function mockCanvas (window, options) {
             bindTransformFeedback: function () { count++; return "mock bind transform feedback " + count; },
             bindBufferBase: function () { count++; return "mock bind buffer base " + count; },
             flush: function () { count++; return "mock flush " + count; },
+            enable: function () { count++; return "mock enable " + count; },
+            disable: function () { count++; return "mock disable " + count; },
+            beginTransformFeedback: function () { count++; return "mock begin transform feedback " + count; },
+            endTransformFeedback: function () { count++; return "mock end transform feedback " + count; },
+            drawArrays: function () { count++; return "mock draw arrays " + count; },
+            drawArraysInstanced: function () { count++; return "mock draw arrays instanced " + count; },
             VERTEX_SHADER: "VS",
             FRAGMENT_SHADER: "FS",
             ARRAY_BUFFER: "AB",
             DYNAMIC_COPY: "DC",
             TRANSFORM_FEEDBACK_BUFFER: "TFB",
+            POINTS: "POINTS",
         };
         context.getBufferSubData = function(target, offset, dstBuffer) {
             // fill buffer with fake data
