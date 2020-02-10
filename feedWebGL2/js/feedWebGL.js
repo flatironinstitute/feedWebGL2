@@ -274,6 +274,14 @@ data loading convenience interfaces on runner.
                     this.allocated_feedbacks[feedback.name] = allocated;
                 }
             };
+            feedback_array(name, optionalPreAllocatedArrBuffer) {
+                var feedback = this.allocated_feedbacks[name];
+                return feedback.get_array(optionalPreAllocatedArrBuffer);
+            };
+            feedback_vectors(name) {
+                var feedback = this.allocated_feedbacks[name];
+                return feedback.get_vectors();
+            };
         };
 
         class FeedbackBuffer {
@@ -343,8 +351,34 @@ data loading convenience interfaces on runner.
                 this.feedback_buffer = context.buffer(context.fresh_name("feedbackBuffer"), this.bytes_per_element);
                 this.feedback_buffer.allocate_size(this.output_components);
                 gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, feedback_index, this.feedback_buffer.buffer);
+            };
+            get_array(arrBuffer) {
+                if (!arrBuffer) {
+                    arrBuffer = new Float32Array(this.output_components);
+                }
+                var gl = this.feedback_variable.program.context.gl;
+                gl.flush();   // make sure processing has completed (???)
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.feedback_buffer.buffer);
+                gl.getBufferSubData(gl.ARRAY_BUFFER, 0, arrBuffer);
+                return arrBuffer;
+            };
+            get_vectors() {
+                var arrBuffer = this.get_array();
+                var num_components = this.feedback_variable.num_components;
+                var max_index = this.output_components / num_components;
+                var vectors = [];
+                for (var i=0; i<max_index; i++) {
+                    var v = [];
+                    for (var j=0; j<num_components; j++) {
+                        var index = i*num_components + j;
+                        var val = arrBuffer[index];
+                        v.push(val);
+                    }
+                    vectors.push(v);
+                }
+                return vectors;
             }
-        }
+        };
 
         class VectorUniform {
             constructor (runner, name, vtype, default_value) {

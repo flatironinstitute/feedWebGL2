@@ -44,11 +44,18 @@ function mockCanvas (window, options) {
             createTransformFeedback: function () { count++; return "mock create transform feedback " + count; },
             bindTransformFeedback: function () { count++; return "mock bind transform feedback " + count; },
             bindBufferBase: function () { count++; return "mock bind buffer base " + count; },
+            flush: function () { count++; return "mock flush " + count; },
             VERTEX_SHADER: "VS",
             FRAGMENT_SHADER: "FS",
             ARRAY_BUFFER: "AB",
             DYNAMIC_COPY: "DC",
             TRANSFORM_FEEDBACK_BUFFER: "TFB",
+        };
+        context.getBufferSubData = function(target, offset, dstBuffer) {
+            // fill buffer with fake data
+            for (var i=0; i<dstBuffer.length; i++) {
+                dstBuffer[i] = i;
+            }
         };
         var ukind = {"uniformMatrix":1, "uniform": 2};
         var ucount = {"1": 1, "2": 2, "3": 3, "4":4};
