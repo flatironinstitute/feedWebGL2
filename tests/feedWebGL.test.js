@@ -154,6 +154,9 @@ describe('testing feedWebGL', () => {
         var allocated = runr.allocated_feedbacks;
         var allocated_A = allocated.feedback_A;
         expect(allocated_A.runner).toBe(runr);
+        expect(allocated_A.name).toBe("feedback_A");
+        // instances * vertices * ncomponents * bytes
+        expect(allocated_A.buffer_bytes).toBe(100 * 4 * 3 * 4);
     });
 
     it('creates vector and matrix uniforms', () => {
