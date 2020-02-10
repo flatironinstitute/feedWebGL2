@@ -136,6 +136,26 @@ describe('testing feedWebGL', () => {
         expect(runr.num_instances).toBe(1000000);
     });
 
+    it('allocates feedback buffers', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var shader = "bogus shader for smoke-testing only";
+        var options = {
+            vertex_shader: shader,
+            feedbacks: {
+                feedback_A: {num_components: 3},
+                feedback_B: {bytes_per_component: 2},
+            },
+        };
+        var program = context.program(options);
+        var runr = program.runner(100, 4);
+        runr.allocate_feedback_buffers();
+        var allocated = runr.allocated_feedbacks;
+        var allocated_A = allocated.feedback_A;
+        expect(allocated_A.runner).toBe(runr);
+    });
+
     it('creates vector and matrix uniforms', () => {
         mockCanvas(window);
         var d = jQuery("<div/>");

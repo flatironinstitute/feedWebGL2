@@ -41,10 +41,14 @@ function mockCanvas (window, options) {
             vertexAttribDivisor: function () { count++; return "mock vert attr div " + count; },
             getUniformLocation: function () { count++; return "mock get uniform loc " + count; },
             useProgram: function () { count++; return "mock use program " + count; },
+            createTransformFeedback: function () { count++; return "mock create transform feedback " + count; },
+            bindTransformFeedback: function () { count++; return "mock bind transform feedback " + count; },
+            bindBufferBase: function () { count++; return "mock bind buffer base " + count; },
             VERTEX_SHADER: "VS",
             FRAGMENT_SHADER: "FS",
             ARRAY_BUFFER: "AB",
             DYNAMIC_COPY: "DC",
+            TRANSFORM_FEEDBACK_BUFFER: "TFB",
         };
         var ukind = {"uniformMatrix":1, "uniform": 2};
         var ucount = {"1": 1, "2": 2, "3": 3, "4":4};

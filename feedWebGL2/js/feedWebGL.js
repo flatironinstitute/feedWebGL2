@@ -1,6 +1,14 @@
 
 // jQuery plugin for webGL feedback programs.
 
+/*
+todo:
+
+get feedback array
+runner.run
+data loading convenience interfaces on runner.
+*/
+
 (function($) {
     $.fn.feedWebGL2 = function (options) {
         var jquery_object = this;
@@ -208,6 +216,7 @@
                     }
                     this.inputs[name] = input;
                 }
+                this.allocated_feedbacks = {};
             };
             install_uniforms() {
                 var program = this.program;
@@ -216,7 +225,21 @@
                 for (name in this.uniforms) {
                     this.uniforms[name].install();
                 }
-            }
+            };
+            allocate_feedback_buffers() {
+                var number_of_outputs = this.vertices_per_instance * this.num_instances;
+                var program = this.program;
+                var gl = program.context.gl;
+                this.transformFeedback = gl.createTransformFeedback();
+                gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, this.transformFeedback);
+                // allocate feedback buffers IN THE RIGHT ORDER as specified during the link.
+                var feedback_order = program.feedback_order;
+                for (var i=0; i<feedback_order.length; i++) {
+                    var feedback = feedback_order[i];
+                    var allocated = feedback.allocate_buffer(i, this, number_of_outputs);
+                    this.allocated_feedbacks[feedback.name] = allocated;
+                }
+            };
         };
 
         class FeedbackBuffer {
@@ -256,7 +279,27 @@
                 this.num_components = num_components || 1;
                 this.bytes_per_component = bytes_per_component || 4;
             };
+            allocate_buffer(feedback_index, runner, number_of_outputs) {
+                return new AllocatedFeedbackVariable(feedback_index, this, runner, number_of_outputs);
+            };
         };
+
+        class AllocatedFeedbackVariable {
+            constructor(feedback_index, feedback_variable, runner, number_of_outputs) {
+                this.name = feedback_variable.name;   // convenience for debugging
+                this.feedback_index = feedback_index;
+                this.feedback_variable = feedback_variable;
+                this.runner = runner;
+                this.number_of_outputs = number_of_outputs;
+                this.output_components = this.feedback_variable.num_components * number_of_outputs;
+                this.buffer_bytes = this.feedback_variable.bytes_per_component * this.output_components;
+                var context = this.feedback_variable.program.context;
+                var gl = context.gl;
+                this.feedback_buffer = context.buffer(context.fresh_name("feedbackBuffer"), this.bytes_per_element);
+                this.feedback_buffer.allocate_size(this.output_components);
+                gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, feedback_index, this.feedback_buffer.buffer);
+            }
+        }
 
         class VectorUniform {
             constructor (runner, name, vtype, default_value) {
