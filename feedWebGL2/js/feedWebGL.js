@@ -19,8 +19,10 @@ data loading convenience interfaces on runner.
                 this.settings = $.extend({
                     // default settings:
                     gl: null,    // the underlying gl context to use
+                    buffers: {},
                 }, options);
 
+                // set up the context if needed.
                 var canvas = null;
                 var gl = this.settings.gl;
                 if (!gl) {
@@ -34,10 +36,34 @@ data loading convenience interfaces on runner.
                 this.buffers = {};
                 this.programs = {};
                 this.error = null;
+
+                // allocate buffers
+                for (var name in this.settings.buffers) {
+                    var desc = this.settings.buffers[name];
+                    var bytes_per_element = desc.bytes_per_element || 4;
+                    var buffer = this.buffer(name, bytes_per_element);
+                    var vectors = desc.vectors;
+                    var array = desc.array;
+                    if (vectors) {
+                        // vectors automatically override any array
+                        buffer.initialize_from_vectors(vectors)
+                    } else if (array) {
+                        buffer.initialize_from_array(array);
+                    } else {
+                        throw new Error("buffer descriptor must specify array or vector initial values.")
+                    }
+                }
             };
             fresh_name(prefix) {
                 this.counter += 1;
                 return prefix + this.counter;
+            };
+            get_buffer(name) {
+                var result = this.buffers[name];
+                if (!result) {
+                    throw new Error("no such buffer name " + name);
+                }
+                return result;
             }
             buffer(name, bytes_per_element) {
                 name = name || this.fresh_name("buffer");
@@ -186,6 +212,7 @@ data loading convenience interfaces on runner.
         class FeedbackRunner {
             constructor(program, num_instances, vertices_per_instance, name, run_type) {
                 this.program = program;
+                var context = program.context;
                 this.vertices_per_instance = vertices_per_instance;
                 this.num_instances = num_instances;
                 this.name = name;
@@ -213,6 +240,13 @@ data loading convenience interfaces on runner.
                         input = new VertexInput(this, name, desc.num_components);
                     } else {
                         input = new MeshInput(this, name, desc.num_components);
+                    }
+                    var from_buffer = desc.from_buffer;
+                    if (from_buffer) {
+                        var buffer = context.get_buffer(from_buffer.name);
+                        var skip_elements = from_buffer.skip_elements || 0;
+                        var element_stride = from_buffer.element_stride || 0;
+                        input.bindBuffer(buffer, skip_elements, element_stride);
                     }
                     this.inputs[name] = input;
                 }
@@ -261,6 +295,17 @@ data loading convenience interfaces on runner.
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
                 gl.bufferData(gl.ARRAY_BUFFER, this.byte_size, gl.DYNAMIC_COPY);  //  ?? dynamic copy??
                 gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            };
+            initialize_from_vectors(vectors) {
+                var all_values = [];
+                for (var i=0; i<vectors.length; i++) {
+                    var vec = vectors[i];
+                    for (var j=0; j<vec.length; j++) {
+                        all_values.push(vec[i]);
+                    }
+                }
+                var array = new Float32Array(all_values);
+                this.initialize_from_array(array);
             }
             allocate_size(num_elements) {
                 this.num_elements = num_elements;
