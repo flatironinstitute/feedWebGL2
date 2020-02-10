@@ -505,7 +505,107 @@ data loading convenience interfaces on runner.
 
         return new FeedbackContext(options);
     };
-    $.fn.feedWebGL2.example = function (options) {
-        // not finished...
+
+    $.fn.feedWebGL2.example = function (container) {
+        // example: stretch triangle vertices in or out from the centroid
+
+        var init_html = `<canvas id="glcanvas" width="600" height="600">
+                            Oh no! Your browser doesn't support canvas!
+                        </canvas>`;
+
+        container.empty();
+        var $canvas = $(init_html).appendTo(container);
+        var glCanvas = $canvas[0];
+
+        // **** webgl2!
+        var gl = glCanvas.getContext("webgl2");
+        // set up and clear the viewport
+        gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+        gl.clearColor(0.8, 0.9, 1.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        var shader = "bogus shader for smoke-testing only";
+
+        var context = container.feedWebGL2({
+            gl: gl,
+            buffers: {
+                "vertex_buffer": {
+                    num_components: 3,
+                    vectors: [
+                        [0,0,1],
+                        [1,1,0],
+                        [1,1,1],
+                        [0,0,-1],
+                        [-1,-1,0],
+                        [-1,-1,-1],
+                    ],
+                },
+                "scale_buffer": {
+                    // implicitly one component
+                    array: new Float32Array([0.5, 0.8, 0.3]),
+                },
+            },
+        });
+
+        var program = context.program({
+            vertex_shader: shader,
+            rasterize: true,  // display the result
+            uniforms: {
+                affine_transform: {
+                    vtype: "4fv",
+                    is_matrix: true,
+                    default_value: [0,1,0,0, 1,0,0,0, 0,0,1,0, 0,0,0,1, ],
+                },
+            },
+            inputs: {
+                "vertexA":  {
+                    per_vertex: false,  // 1 per triangle
+                    num_components: 3,  // 3 vector
+                    from_buffer: {
+                        name: "vertex_buffer",
+                        skip_elements: 0,   // first point
+                        element_stride: 3,  // skip 3 to get to next one
+                    }
+                },
+                "vertexB":  {
+                    per_vertex: false,  // 1 per triangle
+                    num_components: 3,  // 3 vector
+                    from_buffer: {
+                        name: "vertex_buffer",
+                        skip_elements: 1,   // second point
+                        element_stride: 3,  // skip 3 to get to next one
+                    }
+                },
+                "vertexC":  {
+                    per_vertex: false,  // 1 per triangle
+                    num_components: 3,  // 3 vector
+                    from_buffer: {
+                        name: "vertex_buffer",
+                        skip_elements: 2,   // third point
+                        element_stride: 3,  // skip 3 to get to next one
+                    }
+                },
+                "distortion":  {
+                    per_vertex: true,  // repeat for each triangle
+                    num_components: 1, // scalar
+                    from_buffer: {
+                        name: "scale_buffer",
+                        skip_elements: 0,
+                        element_stride: 0,
+                    }
+                },
+            },
+            feedbacks: {
+                location: {num_components: 3},
+                color: {bytes_per_component: 4, num_components: 2},
+            },
+        });
+
+        // 2 instances with 3 vertices per instance
+        var runr = program.runner(10, 7, "stretch triangles", "TRIANGLES");
+
+        runr.run()
+
+        return runr;
     };
 })(jQuery);

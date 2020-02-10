@@ -430,4 +430,11 @@ describe('testing feedWebGL', () => {
         expect(runr.run_count).toEqual(1);
     });
 
+    it('runs the example in mocking mode', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var runr = jQuery.fn.feedWebGL2.example(d);
+        expect(runr.run_count).toEqual(1);
+    });
+
   });
