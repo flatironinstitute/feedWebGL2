@@ -356,7 +356,7 @@ data loading convenience interfaces on runner.
                 for (var i=0; i<vectors.length; i++) {
                     var vec = vectors[i];
                     for (var j=0; j<vec.length; j++) {
-                        all_values.push(vec[i]);
+                        all_values.push(vec[j]);
                     }
                 }
                 var array = new Float32Array(all_values);
@@ -440,14 +440,19 @@ data loading convenience interfaces on runner.
             method_name() {
                 return "uniform" + this.vtype;
             };
+            call_method(gl) {
+                var method = gl[this.method_name()];
+                method.call(gl, this.location, this.value);
+            };
             install() {
                 var program = this.runner.program;
                 var gl = program.context.gl;
                 this.location = gl.getUniformLocation(program.gl_program, this.name);
-                var method_name = this.method_name();
-                console.log("method name " + method_name);
-                var method = gl[this.method_name()];
-                method.call(gl, this.location, this.value);
+                //var method_name = this.method_name();
+                //console.log("method name " + method_name);
+                //var method = gl[this.method_name()];
+                //method.call(gl, this.location, this.value);
+                this.call_method(gl)
             };
         };
 
@@ -458,6 +463,10 @@ data loading convenience interfaces on runner.
             };
             method_name() {
                 return "uniformMatrix" + this.vtype;
+            };
+            call_method(gl) {
+                var method = gl[this.method_name()];
+                method.call(gl, this.location, false, this.value);
             };
         };
 
@@ -483,13 +492,14 @@ data loading convenience interfaces on runner.
                 gl.enableVertexAttribArray(this.position);
                 this.byte_offset = skip_elements * this.num_components * tf_buffer.bytes_per_element;
                 this.byte_stride = element_stride * this.num_components * tf_buffer.bytes_per_element;
-                gl.vertexAttribPointer(this.position, tf_buffer.num_components,
+                // ??? does webgl2 support types other than gl.float?
+                gl.vertexAttribPointer(this.position, this.num_components,
                     gl.FLOAT, false, this.byte_stride, this.byte_offset);
                 this.bound = true;
             };
             define_divisor(gl) {
                 // one per mesh
-                gl.vertexAttribPointer(this.position, 1);
+                gl.vertexAttribDivisor(this.position, 1);
             };
         };
 
@@ -507,7 +517,7 @@ data loading convenience interfaces on runner.
     };
 
     $.fn.feedWebGL2.example = function (container) {
-        // example: stretch triangle vertices in or out from the centroid
+        // example: stretch triangle vertices in or out from the center
 
         var init_html = `<canvas id="glcanvas" width="600" height="600">
                             Oh no! Your browser doesn't support canvas!
@@ -524,7 +534,39 @@ data loading convenience interfaces on runner.
         gl.clearColor(0.8, 0.9, 1.0, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT);
 
-        var shader = "bogus shader for smoke-testing only";
+        var distortion_vertex_shader = `#version 300 es
+
+            uniform mat4 affine_transform;
+
+            // per mesh inputs
+            in vec3 vertexA, vertexB, vertexC;
+
+            // per instance input
+            in float distortion;
+
+            // feedbacks out
+            out vec3 location, color;
+
+            void main() {
+                // initially invalid position
+                gl_Position = vec4(-100.0, 0.0, 0.0, 1.0);
+                location = gl_Position.xyz;
+                color = vec3(1.0, 0.0, 0.0);
+
+                vec3 center = (vertexA + vertexB + vertexC) / 3.0;  // triangle center
+                vec3[3] vertices = vec3[](vertexA, vertexB, vertexC); // triangle vertices
+                vec3 this_vertex = vertices[gl_VertexID]; // the current vertex for this instance
+                vec3 offset = this_vertex - center;
+                vec3 shifted_vertex = (distortion * offset) + center;
+                gl_Position.xyz = shifted_vertex;
+                gl_Position[3] = 1.0;
+                gl_Position = affine_transform * gl_Position;
+
+                location = gl_Position.xyz;
+                color = abs(normalize(center));
+            }
+
+        `;
 
         var context = container.feedWebGL2({
             gl: gl,
@@ -548,7 +590,7 @@ data loading convenience interfaces on runner.
         });
 
         var program = context.program({
-            vertex_shader: shader,
+            vertex_shader: distortion_vertex_shader,
             rasterize: true,  // display the result
             uniforms: {
                 affine_transform: {
@@ -597,12 +639,12 @@ data loading convenience interfaces on runner.
             },
             feedbacks: {
                 location: {num_components: 3},
-                color: {bytes_per_component: 4, num_components: 2},
+                color: {bytes_per_component: 4, num_components: 3},
             },
         });
 
         // 2 instances with 3 vertices per instance
-        var runr = program.runner(10, 7, "stretch triangles", "TRIANGLES");
+        var runr = program.runner(2, 3, "stretch triangles", "TRIANGLES");
 
         runr.run()
 
