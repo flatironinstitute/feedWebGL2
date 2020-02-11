@@ -672,19 +672,19 @@ data loading convenience interfaces on runner.
                 vec3 shifted_vertex = (distortion * offset) + center;
                 gl_Position.xyz = shifted_vertex;
                 gl_Position[3] = 1.0;
-                gl_Position = affine_transform * gl_Position;
+                //gl_Position = affine_transform * gl_Position;
 
                 location = gl_Position.xyz;
                 color = abs(normalize(center));
 
                 // DEBUG ONLY
-                location[0] = float(gl_VertexID) * 0.2;
-                location[1] = float(gl_VertexID * gl_VertexID - gl_InstanceID) * 0.2;
-                location[2] = float(gl_InstanceID) * 0.2;
+                //location[0] = float(gl_VertexID) * 0.2;
+                //location[1] = float(gl_VertexID * gl_VertexID - gl_InstanceID) * 0.2;
+                //location[2] = float(gl_InstanceID) * 0.2;
 
-                location = vertexA;
-                location[2] = distortion;
-                gl_Position.xyz = location;
+                //location = this_vertex;
+                //location[2] = distortion;
+                //gl_Position.xyz = location;
             }
 
         `;
@@ -697,10 +697,10 @@ data loading convenience interfaces on runner.
                     vectors: [
                         [0,0,1],
                         [1,1,0],
-                        [1,1,1],
+                        [1,-1,1],
                         [0,0,-1],
                         [-1,-1,0],
-                        [-1,-1,-1],
+                        [-1,1,-1],
                     ],
                 },
                 "scale_buffer": {
