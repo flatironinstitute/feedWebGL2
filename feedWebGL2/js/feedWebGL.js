@@ -285,7 +285,7 @@ data loading convenience interfaces on runner.
                 gl.beginTransformFeedback(mode);
                 var vertices_per_instance = this.vertices_per_instance;
                 var num_instances = this.num_instances;
-                if ((vertices_per_instance) && (vertices_per_instance > 1)) {
+                if ((num_instances) && (num_instances > 1)) {
                     gl.drawArraysInstanced(mode, 0, vertices_per_instance, num_instances);
                 } else {
                     gl.drawArrays(mode, 0, vertices_per_instance);
@@ -294,6 +294,7 @@ data loading convenience interfaces on runner.
                 if (!rasterize) {
                     gl.disable(gl.RASTERIZER_DISCARD);
                 }
+                gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
                 this.run_count += 1;  // mainly for debug and test.
             };
             install_uniforms() {
@@ -348,7 +349,7 @@ data loading convenience interfaces on runner.
                 this.byte_size = this.bytes_per_element * this.num_elements;
                 var gl = this.context.gl;
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-                gl.bufferData(gl.ARRAY_BUFFER, this.byte_size, gl.DYNAMIC_COPY);  //  ?? dynamic copy??
+                gl.bufferData(gl.ARRAY_BUFFER, array, gl.DYNAMIC_COPY);  //  ?? dynamic copy??
                 gl.bindBuffer(gl.ARRAY_BUFFER, null);
             };
             initialize_from_vectors(vectors) {
@@ -405,6 +406,7 @@ data loading convenience interfaces on runner.
                 }
                 var gl = this.feedback_variable.program.context.gl;
                 gl.flush();   // make sure processing has completed (???)
+                gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, null);
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.feedback_buffer.buffer);
                 gl.getBufferSubData(gl.ARRAY_BUFFER, 0, arrBuffer);
                 return arrBuffer;
@@ -516,6 +518,116 @@ data loading convenience interfaces on runner.
         return new FeedbackContext(options);
     };
 
+    $.fn.feedWebGL2.trivial_example = function (container) {
+        // example: switch first and second component
+
+        var init_html = `<canvas id="glcanvas" width="600" height="600">
+                            Oh no! Your browser doesn't support canvas!
+                        </canvas>`;
+
+        container.empty();
+        var $canvas = $(init_html).appendTo(container);
+        var glCanvas = $canvas[0];
+
+        // **** webgl2!
+        var gl = glCanvas.getContext("webgl2");
+        // set up and clear the viewport
+        gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+        gl.clearColor(0.8, 0.9, 1.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        var switch_vertex_shader = `#version 300 es
+            // per mesh input
+            in vec3 input_vertex;
+
+            // feedbacks out
+            out vec3 output_vertex;
+
+            // non-feedback out
+            out vec3 vcolor;
+
+            void main() {
+                output_vertex[0] = input_vertex[1];
+                output_vertex[1] = input_vertex[0];
+                output_vertex[2] = input_vertex[2] -0.11;
+                vcolor = abs(normalize(output_vertex));
+                gl_Position.xyz = output_vertex;
+                gl_Position[3] = 1.0;
+            }
+        `;
+        var switch_fragment_shader = `#version 300 es
+        #ifdef GL_ES
+            precision highp float;
+        #endif
+        
+        in vec3 vcolor;
+        out vec4 color;
+
+        void main() {
+            color[3] = 1.0;
+            color.xyz = vcolor;
+        }
+        `;
+
+        var context = container.feedWebGL2({
+            gl: gl,
+            buffers: {
+                "vertex_buffer": {
+                    num_components: 3,
+                    vectors: [
+                        [0,0,1],
+                        [1,-1,0],
+                        [1,0,1],
+                        [0,0,-1],
+                        [-1,-1,0],
+                        [-1,0,-1],
+                    ],
+                },
+            },
+        });
+
+        var program = context.program({
+            vertex_shader: switch_vertex_shader,
+            fragment_shader: switch_fragment_shader,
+            rasterize: true,  // display the result
+            uniforms: {},
+            inputs: {
+                input_vertex:  {
+                    per_vertex: true,
+                    num_components: 3,  // 3 vector
+                    from_buffer: {
+                        name: "vertex_buffer",
+                        skip_elements: 0,   // start at the beginning
+                        element_stride: 0,  // dense packing
+                    }
+                },
+            },
+            feedbacks: {
+                output_vertex: {num_components: 3},
+            },
+        });
+
+        // 1 instances with 6 vertices per instance
+        var runr = program.runner(1, 6, "switch coordinates", "TRIANGLES");
+
+        runr.run()
+
+        var location_array = runr.feedback_array("output_vertex");
+
+        $("<h3>" + location_array.length + " output vertex floats</h3>").appendTo(container);
+
+        var tf = function(x) { return x.toFixed(2); };
+
+        for (var i=0; i<location_array.length; i++) {
+            if (i % 3 == 0) {
+                $("<br/>").appendTo(container);
+                $("<b>" + (i/3) + ": </b>").appendTo(container);
+            }
+            $("<span> " + tf(location_array[i]) + "<span>").appendTo(container);
+        }
+        return runr;
+    };
+
     $.fn.feedWebGL2.example = function (container) {
         // example: stretch triangle vertices in or out from the center
 
@@ -564,6 +676,15 @@ data loading convenience interfaces on runner.
 
                 location = gl_Position.xyz;
                 color = abs(normalize(center));
+
+                // DEBUG ONLY
+                location[0] = float(gl_VertexID) * 0.2;
+                location[1] = float(gl_VertexID * gl_VertexID - gl_InstanceID) * 0.2;
+                location[2] = float(gl_InstanceID) * 0.2;
+
+                location = vertexA;
+                location[2] = distortion;
+                gl_Position.xyz = location;
             }
 
         `;
@@ -648,6 +769,19 @@ data loading convenience interfaces on runner.
 
         runr.run()
 
+        var location_array = runr.feedback_array("location");
+
+        $("<h3>" + location_array.length + " location floats</h3>").appendTo(container);
+
+        var tf = function(x) { return x.toFixed(2); };
+
+        for (var i=0; i<location_array.length; i++) {
+            if (i % 3 == 0) {
+                $("<br/>").appendTo(container);
+                $("<b>" + (i/3) + ": </b>").appendTo(container);
+            }
+            $("<span> " + tf(location_array[i]) + "<span>").appendTo(container);
+        }
         return runr;
     };
 })(jQuery);
