@@ -657,13 +657,13 @@ data loading convenience interfaces on runner.
             in float distortion;
 
             // feedbacks out
-            out vec3 location, color;
+            out vec3 location, vcolor;
 
             void main() {
                 // initially invalid position
                 gl_Position = vec4(-100.0, 0.0, 0.0, 1.0);
                 location = gl_Position.xyz;
-                color = vec3(1.0, 0.0, 0.0);
+                vcolor = vec3(1.0, 0.0, 0.0);
 
                 vec3 center = (vertexA + vertexB + vertexC) / 3.0;  // triangle center
                 vec3[3] vertices = vec3[](vertexA, vertexB, vertexC); // triangle vertices
@@ -672,22 +672,26 @@ data loading convenience interfaces on runner.
                 vec3 shifted_vertex = (distortion * offset) + center;
                 gl_Position.xyz = shifted_vertex;
                 gl_Position[3] = 1.0;
-                //gl_Position = affine_transform * gl_Position;
+                gl_Position = affine_transform * gl_Position;
 
                 location = gl_Position.xyz;
-                color = abs(normalize(center));
-
-                // DEBUG ONLY
-                //location[0] = float(gl_VertexID) * 0.2;
-                //location[1] = float(gl_VertexID * gl_VertexID - gl_InstanceID) * 0.2;
-                //location[2] = float(gl_InstanceID) * 0.2;
-
-                //location = this_vertex;
-                //location[2] = distortion;
-                //gl_Position.xyz = location;
+                vcolor = abs(normalize(center));
             }
 
         `;
+        var distortion_fragment_shader = `#version 300 es
+            #ifdef GL_ES
+                precision highp float;
+            #endif
+            
+            in vec3 vcolor;
+            out vec4 color;
+
+            void main() {
+                color[3] = 1.0;
+                color.xyz = vcolor;
+            }
+            `;
 
         var context = container.feedWebGL2({
             gl: gl,
@@ -699,7 +703,7 @@ data loading convenience interfaces on runner.
                         [1,1,0],
                         [1,-1,1],
                         [0,0,-1],
-                        [-1,-1,0],
+                        [1,1,0],
                         [-1,1,-1],
                     ],
                 },
@@ -712,6 +716,7 @@ data loading convenience interfaces on runner.
 
         var program = context.program({
             vertex_shader: distortion_vertex_shader,
+            fragment_shader: distortion_fragment_shader,
             rasterize: true,  // display the result
             uniforms: {
                 affine_transform: {
@@ -760,16 +765,17 @@ data loading convenience interfaces on runner.
             },
             feedbacks: {
                 location: {num_components: 3},
-                color: {bytes_per_component: 4, num_components: 3},
+                vcolor: {bytes_per_component: 4, num_components: 3},
             },
         });
 
         // 2 instances with 3 vertices per instance
-        var runr = program.runner(2, 3, "stretch triangles", "TRIANGLES");
+        var runr = program.runner(2, 3, "distort triangles", "TRIANGLES");
 
         runr.run()
 
         var location_array = runr.feedback_array("location");
+        var color_array = runr.feedback_array("vcolor");
 
         $("<h3>" + location_array.length + " location floats</h3>").appendTo(container);
 
@@ -781,6 +787,15 @@ data loading convenience interfaces on runner.
                 $("<b>" + (i/3) + ": </b>").appendTo(container);
             }
             $("<span> " + tf(location_array[i]) + "<span>").appendTo(container);
+        }
+        
+        $("<h3>" + color_array.length + " color floats</h3>").appendTo(container);
+        for (var i=0; i<color_array.length; i++) {
+            if (i % 3 == 0) {
+                $("<br/>").appendTo(container);
+                $("<b>" + (i/3) + ": </b>").appendTo(container);
+            }
+            $("<span> " + tf(color_array[i]) + "<span>").appendTo(container);
         }
         return runr;
     };
