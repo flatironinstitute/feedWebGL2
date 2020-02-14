@@ -404,6 +404,7 @@ data loading convenience interfaces on runner.
             };
             copy_into_buffer(feedbackBuffer, start_at_component_index) {
                 // copy entire contents of feedback output into segment of feedback buffer
+                start_at_component_index = start_at_component_index || 0;
                 var gl = this.feedback_variable.program.context.gl;
                 gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, null);
                 var readTarget = gl.COPY_READ_BUFFER;
