@@ -402,6 +402,20 @@ data loading convenience interfaces on runner.
                 this.feedback_buffer.allocate_size(this.output_components);
                 gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, feedback_index, this.feedback_buffer.buffer);
             };
+            copy_into_buffer(feedbackBuffer, start_at_component_index) {
+                // copy entire contents of feedback output into segment of feedback buffer
+                var gl = this.feedback_variable.program.context.gl;
+                gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, null);
+                var readTarget = gl.COPY_READ_BUFFER;
+                var writeTarget = gl.ARRAY_BUFFER;
+                var readOffset = 0;
+                var writeOffset = feedbackBuffer.bytes_per_component * start_at_component_index;
+                var size = this.buffer_bytes;
+                // https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext/copyBufferSubData
+                gl.bindBuffer(readTarget, this.feedback_buffer.buffer);
+                gl.bindBuffer(writeTarget, feedbackBuffer.buffer);
+                gl.copyBufferSubData(readTarget, writeTarget, readOffset, writeOffset, size);
+            };
             get_array(arrBuffer) {
                 if (!arrBuffer) {
                     arrBuffer = new Float32Array(this.output_components);
@@ -496,7 +510,8 @@ data loading convenience interfaces on runner.
                 gl.enableVertexAttribArray(this.position);
                 this.byte_offset = skip_elements * this.num_components * tf_buffer.bytes_per_element;
                 this.byte_stride = element_stride * this.num_components * tf_buffer.bytes_per_element;
-                // ??? does webgl2 support types other than gl.float?
+                // xxxxx need to support, eg, integers too:
+                // https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext/vertexAttribIPointer
                 gl.vertexAttribPointer(this.position, this.num_components,
                     gl.FLOAT, false, this.byte_stride, this.byte_offset);
                 this.bound = true;

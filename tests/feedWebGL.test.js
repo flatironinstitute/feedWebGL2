@@ -184,6 +184,32 @@ describe('testing feedWebGL', () => {
         var array_alias = runr.feedback_array("feedback_B", array_B);
         expect(array_alias).toBe(array_B);
     });
+    
+    it('copies feedback buffers', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var shader = "bogus shader for smoke-testing only";
+        var options = {
+            vertex_shader: shader,
+            feedbacks: {
+                feedback_A: {num_components: 3},
+                feedback_B: {bytes_per_component: 4, num_components: 2},
+            },
+        };
+        var program = context.program(options);
+        var roptions = {num_instances: 13, vertices_per_instance: 4};
+        var runr = program.runner(roptions);
+        runr.allocate_feedback_buffers();
+        var allocated = runr.allocated_feedbacks;
+        var allocated_A = allocated.feedback_A;
+        var allocated_B = allocated.feedback_B;
+        var copy_to_buffer = context.buffer();
+        var total_size = allocated_A.feedback_buffer.num_elements + allocated_B.feedback_buffer.num_elements
+        copy_to_buffer.allocate_size(total_size);
+        allocated_A.copy_into_buffer(copy_to_buffer);
+        allocated_B.copy_into_buffer(copy_to_buffer, allocated_A.feedback_buffer.num_elements);
+    });
 
     it('creates vector and matrix uniforms', () => {
         mockCanvas(window);

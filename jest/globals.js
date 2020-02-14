@@ -54,11 +54,13 @@ function mockCanvas (window, options) {
             viewport: function () { count++; return "mock view port " + count; },
             clearColor: function () { count++; return "mock clear color " + count; },
             clear: function () { count++; return "mock clear " + count; },
+            copyBufferSubData: function () { count++; return "mock copy buffer sub data " + count; },
             VERTEX_SHADER: "VS",
             FRAGMENT_SHADER: "FS",
             ARRAY_BUFFER: "AB",
             DYNAMIC_COPY: "DC",
             TRANSFORM_FEEDBACK_BUFFER: "TFB",
+            COPY_READ_BUFFER: "TFB",
             POINTS: "POINTS",
         };
         context.getBufferSubData = function(target, offset, dstBuffer) {
