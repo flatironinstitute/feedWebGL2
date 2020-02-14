@@ -97,37 +97,13 @@ data loading convenience interfaces on runner.
                     name: null,
                     vertex_shader: null,
                     fragment_shader: noop_fragment_shader,
-                    run_type: "POINTS",   // run glsl program point by point (not triangles or lines, default)
                     feedbacks: {
                         "gl_Position": {
                             num_components: 4,
                             bytes_per_component: 4,
                         },
                     },
-                    uniforms: {
-                        //"translation": {
-                        //    // https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext/unifor
-                        //    vtype: "4fv",
-                        //    default_value: [-1, -1, -1, 0],
-                        //},
-                        //"affine_transform": {
-                        //    // https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext/unifor
-                        //    vtype: "4fv",
-                        //    is_matrix: true,
-                        //    default_value: [0,1,0,0, 1,0,0,0, 0,0,1,0, 0,0,0,1, ],
-                        //},
-                    },
-                    inputs: {
-                    //    "location": {
-                    //        num_components: 3,
-                    //    },
-                    //    "scale": {},  // implicitly just one component
-                    //    "point_offset":  {
-                    //        per_vertex: true,  // repeat for every mesh
-                    //        num_components: 3,
-                    //    }
-                    },
-                    compile_now: true
+                    compile_now: true,
                 }, options);
                 if (!this.settings.vertex_shader) {
                     throw new Error("feedback program requires a vertex shader.");
@@ -152,11 +128,8 @@ data loading convenience interfaces on runner.
                     this.compile();
                 }
             };
-            runner(num_instances, vertices_per_instance, name, run_type) {
-                name = name || this.context.fresh_name("runner");
-                run_type = run_type || this.settings.run_type;
-                vertices_per_instance = vertices_per_instance || 1;
-                var run = new FeedbackRunner(this, num_instances, vertices_per_instance, name, run_type);
+            runner(options) {
+                var run = new FeedbackRunner(this, options);
                 this.runners[run.name] = run;
                 return run;
             };
@@ -210,15 +183,44 @@ data loading convenience interfaces on runner.
         };
 
         class FeedbackRunner {
-            constructor(program, num_instances, vertices_per_instance, name, run_type) {
+            // num_instances, vertices_per_instance, name, run_type
+            constructor(program, options) {
+                this.settings = $.extend({
+                    // default settings:
+                    name: null,
+                    run_type: "POINTS",   // run glsl program point by point (not triangles or lines, default)
+                    uniforms: {
+                        //"translation": {
+                        //    // https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext/unifor
+                        //    vtype: "4fv",
+                        //    default_value: [-1, -1, -1, 0],
+                        //},
+                        //"affine_transform": {
+                        //    // https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext/unifor
+                        //    vtype: "4fv",
+                        //    is_matrix: true,
+                        //    default_value: [0,1,0,0, 1,0,0,0, 0,0,1,0, 0,0,0,1, ],
+                        //},
+                    },
+                    inputs: {
+                    //    "location": {
+                    //        num_components: 3,
+                    //    },
+                    //    "scale": {},  // implicitly just one component
+                    //    "point_offset":  {
+                    //        per_vertex: true,  // repeat for every mesh
+                    //        num_components: 3,
+                    //    }
+                    },
+                }, options);
                 this.program = program;
                 var context = program.context;
-                this.vertices_per_instance = vertices_per_instance;
-                this.num_instances = num_instances;
-                this.name = name;
-                this.run_type = run_type;
+                this.name = this.settings.name || context.fresh_name("FeedbackRunner");
+                this.vertices_per_instance = this.settings.vertices_per_instance || 1;
+                this.num_instances = this.settings.num_instances;
+                this.run_type = this.settings.run_type;
                 // preprocess the uniforms defined for the program
-                var uniform_descriptions = program.settings.uniforms;
+                var uniform_descriptions = this.settings.uniforms;
                 this.uniforms = {};
                 for (var name in uniform_descriptions) {
                     var desc = uniform_descriptions[name];
@@ -232,7 +234,7 @@ data loading convenience interfaces on runner.
                 }
                 // preprocess instance inputs defined for the program
                 this.inputs = {};
-                var input_descriptions = program.settings.inputs;
+                var input_descriptions = this.settings.inputs;
                 for (var name in input_descriptions) {
                     var desc = input_descriptions[name];
                     var input = null;
@@ -276,9 +278,9 @@ data loading convenience interfaces on runner.
                 if (!this.uniforms_installed) {
                     this.install_uniforms();
                 }
-                var mode_name = this.run_type || "POINTS";
+                var mode_name = this.settings.run_type || "POINTS";
                 var mode = gl[mode_name];
-                var rasterize = program.settings.rasterize;
+                var rasterize = this.settings.rasterize;
                 if (!rasterize) {
                     gl.enable(gl.RASTERIZER_DISCARD);
                 }
@@ -519,7 +521,7 @@ data loading convenience interfaces on runner.
     };
 
     $.fn.feedWebGL2.trivial_example = function (container) {
-        // example: switch first and second component
+        // example: switch first and second component of location
 
         var init_html = `<canvas id="glcanvas" width="600" height="600">
                             Oh no! Your browser doesn't support canvas!
@@ -589,6 +591,17 @@ data loading convenience interfaces on runner.
         var program = context.program({
             vertex_shader: switch_vertex_shader,
             fragment_shader: switch_fragment_shader,
+            feedbacks: {
+                output_vertex: {num_components: 3},
+            },
+        });
+
+        // 1 instances with 6 vertices per instance
+        var roptions = {
+            name: "switch coordinates",
+            run_type: "TRIANGLES",
+            num_instances: 1, 
+            vertices_per_instance: 6,
             rasterize: true,  // display the result
             uniforms: {},
             inputs: {
@@ -602,13 +615,8 @@ data loading convenience interfaces on runner.
                     }
                 },
             },
-            feedbacks: {
-                output_vertex: {num_components: 3},
-            },
-        });
-
-        // 1 instances with 6 vertices per instance
-        var runr = program.runner(1, 6, "switch coordinates", "TRIANGLES");
+        };
+        var runr = program.runner(roptions);
 
         runr.run()
 
@@ -717,6 +725,18 @@ data loading convenience interfaces on runner.
         var program = context.program({
             vertex_shader: distortion_vertex_shader,
             fragment_shader: distortion_fragment_shader,
+            feedbacks: {
+                location: {num_components: 3},
+                vcolor: {bytes_per_component: 4, num_components: 3},
+            },
+        });
+
+        // 2 instances with 3 vertices per instance
+        var roptions = {
+            name: "distort triangles",
+            run_type: "TRIANGLES",
+            num_instances: 2, 
+            vertices_per_instance: 3,
             rasterize: true,  // display the result
             uniforms: {
                 affine_transform: {
@@ -763,14 +783,9 @@ data loading convenience interfaces on runner.
                     }
                 },
             },
-            feedbacks: {
-                location: {num_components: 3},
-                vcolor: {bytes_per_component: 4, num_components: 3},
-            },
-        });
-
-        // 2 instances with 3 vertices per instance
-        var runr = program.runner(2, 3, "distort triangles", "TRIANGLES");
+        };
+        var runr = program.runner(roptions);
+        //var runr = program.runner(2, 3, "distort triangles", "TRIANGLES");
 
         runr.run()
 

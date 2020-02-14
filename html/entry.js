@@ -11,6 +11,7 @@ jQuery(function(){
   debugger;
   var $ = jQuery;
   d = $("#container");
+  //runr = jQuery.fn.feedWebGL2.trivial_example(d);
   runr = jQuery.fn.feedWebGL2.example(d);
 });
 

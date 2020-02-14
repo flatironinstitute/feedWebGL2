@@ -130,7 +130,8 @@ describe('testing feedWebGL', () => {
             vertex_shader: shader,
         };
         var program = context.program(options);
-        var runr = program.runner(1000000);
+        var roptions = {num_instances: 1000000};
+        var runr = program.runner(roptions);
         expect(runr.name).toBeTruthy();
         expect(program.runners[runr.name]).toBe(runr);
         expect(runr.num_instances).toBe(1000000);
@@ -149,7 +150,8 @@ describe('testing feedWebGL', () => {
             },
         };
         var program = context.program(options);
-        var runr = program.runner(100, 4);
+        var roptions = {num_instances: 100, vertices_per_instance: 4};
+        var runr = program.runner(roptions);
         runr.allocate_feedback_buffers();
         var allocated = runr.allocated_feedbacks;
         var allocated_A = allocated.feedback_A;
@@ -172,7 +174,8 @@ describe('testing feedWebGL', () => {
             },
         };
         var program = context.program(options);
-        var runr = program.runner(13, 4);
+        var roptions = {num_instances: 13, vertices_per_instance: 4};
+        var runr = program.runner(roptions);
         runr.allocate_feedback_buffers();
         var vectors_A = runr.feedback_vectors("feedback_A")
         expect(vectors_A.length).toEqual(13 * 4);
@@ -189,6 +192,10 @@ describe('testing feedWebGL', () => {
         var shader = "bogus shader for smoke-testing only";
         var options = {
             vertex_shader: shader,
+        };
+        var program = context.program(options);
+        var roptions = {
+            num_instances: 1000000,
             uniforms: {
                 translation: {
                     vtype: "4fv",
@@ -201,8 +208,7 @@ describe('testing feedWebGL', () => {
                 },
             },
         };
-        var program = context.program(options);
-        var run = program.runner(1000000);
+        var run = program.runner(roptions);
         var uniforms = run.uniforms;
         var t = uniforms.translation;
         var a = uniforms.affine_transform;
@@ -221,6 +227,10 @@ describe('testing feedWebGL', () => {
         var shader = "bogus shader for smoke-testing only";
         var options = {
             vertex_shader: shader,
+        };
+        var program = context.program(options);
+        var roptions = {
+            num_instances: 1000000,
             uniforms: {
                 translation: {
                     vtype: "4fv",
@@ -233,8 +243,7 @@ describe('testing feedWebGL', () => {
                 },
             },
         };
-        var program = context.program(options);
-        var run = program.runner(1000000);
+        var run = program.runner(roptions);
         run.install_uniforms();
         var uniforms = run.uniforms;
         var t = uniforms.translation;
@@ -250,6 +259,10 @@ describe('testing feedWebGL', () => {
         var shader = "bogus shader for smoke-testing only";
         var options = {
             vertex_shader: shader,
+        };
+        var program = context.program(options);
+        var roptions = {
+            num_instances: 1000000,
             inputs: {
                 "location": {
                     num_components: 3,
@@ -261,8 +274,7 @@ describe('testing feedWebGL', () => {
                 },
             },
         };
-        var program = context.program(options);
-        var runr = program.runner(1000000);
+        var runr = program.runner(roptions);
         var inputs = runr.inputs;
         var l = inputs.location;
         var s = inputs.scale;
@@ -282,6 +294,10 @@ describe('testing feedWebGL', () => {
         var shader = "bogus shader for smoke-testing only";
         var options = {
             vertex_shader: shader,
+        };
+        var program = context.program(options);
+        var roptions = {
+            num_instances: 1000000,
             inputs: {
                 "location": {
                     num_components: 3,
@@ -293,8 +309,7 @@ describe('testing feedWebGL', () => {
                 },
             },
         };
-        var program = context.program(options);
-        var runr = program.runner(1000000);
+        var runr = program.runner(roptions);
         var inputs = runr.inputs;
         var l = inputs.location;
         var s = inputs.scale;
@@ -329,6 +344,11 @@ describe('testing feedWebGL', () => {
         var shader = "bogus shader for smoke-testing only";
         var options = {
             vertex_shader: shader,
+        };
+        var program = context.program(options);
+
+        var roptions = {
+            num_instances: 1000000,
             inputs: {
                 "location": {
                     bytes_per_element: 4,
@@ -352,8 +372,7 @@ describe('testing feedWebGL', () => {
                 },
             },
         };
-        var program = context.program(options);
-        var runr = program.runner(1000000);
+        var runr = program.runner(roptions);
         var inputs = runr.inputs;
         var l = inputs.location;
         var s = inputs.scale;
@@ -386,6 +405,15 @@ describe('testing feedWebGL', () => {
         var shader = "bogus shader for smoke-testing only";
         var options = {
             vertex_shader: shader,
+            feedbacks: {
+                feedback_A: {num_components: 3},
+                feedback_B: {bytes_per_component: 4, num_components: 2},
+            },
+        };
+        var program = context.program(options);
+        var roptions = {
+            num_instances: 10, 
+            vertices_per_instance: 7,
             uniforms: {
                 translation: {
                     vtype: "4fv",
@@ -419,13 +447,8 @@ describe('testing feedWebGL', () => {
                     }
                 },
             },
-            feedbacks: {
-                feedback_A: {num_components: 3},
-                feedback_B: {bytes_per_component: 4, num_components: 2},
-            },
         };
-        var program = context.program(options);
-        var runr = program.runner(10, 7);
+        var runr = program.runner(roptions);
         runr.run();
         expect(runr.run_count).toEqual(1);
     });
