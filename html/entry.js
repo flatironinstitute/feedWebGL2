@@ -10,9 +10,10 @@ var runr, d;  // keep context
 jQuery(function(){
   debugger;
   var $ = jQuery;
-  d = $("#container");
-  //runr = jQuery.fn.feedWebGL2.trivial_example(d);
-  runr = jQuery.fn.feedWebGL2.example(d);
+  var d = $("#container");
+  //var runr = jQuery.fn.feedWebGL2.trivial_example(d);
+  //var runr = jQuery.fn.feedWebGL2.example(d);
+  var contour = jQuery.fn.webGL2contours2d.simple_example(d);
 });
 
 /*

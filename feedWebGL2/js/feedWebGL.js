@@ -274,6 +274,8 @@ data loading convenience interfaces on runner.
                 gl.useProgram(program.gl_program);
                 if (!this.allocated_feedbacks) {
                     this.allocate_feedback_buffers();
+                } else {
+                    this.bind_feedbacks();
                 }
                 if (!this.uniforms_installed) {
                     this.install_uniforms();
@@ -308,6 +310,14 @@ data loading convenience interfaces on runner.
                 }
                 this.uniforms_installed = true;
             };
+            change_uniform(name, value) {
+                var uniform = this.uniforms[name];
+                var program = this.program;
+                var gl = program.context.gl;
+                gl.useProgram(program.gl_program);
+                uniform.value = value;
+                uniform.install();
+            }
             allocate_feedback_buffers() {
                 // should deallocate if already allocated???
                 this.allocated_feedbacks = {};
@@ -322,6 +332,13 @@ data loading convenience interfaces on runner.
                     var feedback = feedback_order[i];
                     var allocated = feedback.allocate_buffer(i, this, number_of_outputs);
                     this.allocated_feedbacks[feedback.name] = allocated;
+                }
+            };
+            bind_feedbacks() {
+                var gl = this.program.context.gl;
+                gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, this.transformFeedback);
+                for (var name in this.allocated_feedbacks) {
+                    this.allocated_feedbacks[name].bindBuffer();
                 }
             };
             feedback_array(name, optionalPreAllocatedArrBuffer) {
@@ -401,6 +418,11 @@ data loading convenience interfaces on runner.
                 this.feedback_buffer = context.buffer(context.fresh_name("feedbackBuffer"), this.bytes_per_element);
                 this.feedback_buffer.allocate_size(this.output_components);
                 gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, feedback_index, this.feedback_buffer.buffer);
+                gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, null);
+            };
+            bindBuffer() {
+                var gl = this.feedback_variable.program.context.gl;
+                gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, this.feedback_index, this.feedback_buffer.buffer);
             };
             copy_into_buffer(feedbackBuffer, start_at_component_index) {
                 // copy entire contents of feedback output into segment of feedback buffer
@@ -416,6 +438,8 @@ data loading convenience interfaces on runner.
                 gl.bindBuffer(readTarget, this.feedback_buffer.buffer);
                 gl.bindBuffer(writeTarget, feedbackBuffer.buffer);
                 gl.copyBufferSubData(readTarget, writeTarget, readOffset, writeOffset, size);
+                gl.bindBuffer(readTarget, null);
+                gl.bindBuffer(writeTarget, null);
             };
             get_array(arrBuffer) {
                 if (!arrBuffer) {
@@ -426,6 +450,8 @@ data loading convenience interfaces on runner.
                 gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, null);
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.feedback_buffer.buffer);
                 gl.getBufferSubData(gl.ARRAY_BUFFER, 0, arrBuffer);
+                gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, null);
+                gl.bindBuffer(gl.ARRAY_BUFFER, null);
                 return arrBuffer;
             };
             get_vectors() {
@@ -515,6 +541,7 @@ data loading convenience interfaces on runner.
                 // https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext/vertexAttribIPointer
                 gl.vertexAttribPointer(this.position, this.num_components,
                     gl.FLOAT, false, this.byte_stride, this.byte_offset);
+                gl.bindBuffer(gl.ARRAY_BUFFER, null);
                 this.bound = true;
             };
             define_divisor(gl) {
@@ -536,9 +563,7 @@ data loading convenience interfaces on runner.
         return new FeedbackContext(options);
     };
 
-    $.fn.feedWebGL2.trivial_example = function (container) {
-        // example: switch first and second component of location
-
+    $.fn.feedWebGL2.setup_gl_for_example = function (container) {
         var init_html = `<canvas id="glcanvas" width="600" height="600">
                             Oh no! Your browser doesn't support canvas!
                         </canvas>`;
@@ -553,6 +578,14 @@ data loading convenience interfaces on runner.
         gl.viewport(0, 0, glCanvas.width, glCanvas.height);
         gl.clearColor(0.8, 0.9, 1.0, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT);
+
+        return gl;
+    };
+
+    $.fn.feedWebGL2.trivial_example = function (container) {
+        // example: switch first and second component of location
+
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
 
         var switch_vertex_shader = `#version 300 es
             // per mesh input
