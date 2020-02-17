@@ -146,8 +146,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.runner.change_uniform("uValue", [value]);
                 //this.runner.run();
             };
-            get_positions() {
-                return this.runner.feedback_array("vPosition");
+            get_positions(optionalPreAllocatedArrBuffer) {
+                return this.runner.feedback_array(
+                    "vPosition",
+                    optionalPreAllocatedArrBuffer);
             };
         };
         var contour_vertex_shader = `#version 300 es
