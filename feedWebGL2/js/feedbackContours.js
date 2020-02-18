@@ -32,6 +32,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     rasterize: false,
                     threshold: 0,  // value at contour
                     invalid_coordinate: -100000,  // invalidity marker for positions
+                    after_run_callback: null,   // call this after each run.
                 }, options);
                 var s = this.settings;
                 this.feedbackContext = s.feedbackContext;
@@ -140,6 +141,24 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // may not always need to do re-install uniforms?
                 this.runner.install_uniforms();
                 this.runner.run();
+                var after_run_callback = this.settings.after_run_callback;
+                if (after_run_callback) {
+                    after_run_callback(this);
+                }
+            };
+            linked_three_geometry (THREE) {
+                // create a three.js geometry linked to the current positions feedback array.
+                // xxxx only one geometry may be linked at a time.
+                var positions = this.get_positions();
+                var geometry = new THREE.BufferGeometry();
+                geometry.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
+                var after_run = function(that) {
+                    // update the geometry positions array in place and mark for update
+                    geometry.attributes.position.array = that.get_positions(geometry.attributes.position.array);
+                    geometry.attributes.position.needsUpdate = true;
+                }
+                this.settings.after_run_callback = after_run;
+                return geometry;
             };
             set_threshhold(value) {
                 //this.runner.uniforms.uValue.value = [value];
