@@ -479,11 +479,25 @@ describe('testing feedWebGL', () => {
         expect(runr.run_count).toEqual(1);
     });
 
+    it('runs the trivial example in mocking mode', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var runr = jQuery.fn.feedWebGL2.trivial_example(d);
+        expect(runr.run_count).toEqual(1);
+    });
+
     it('runs the example in mocking mode', () => {
         mockCanvas(window);
         var d = jQuery("<div/>");
         var runr = jQuery.fn.feedWebGL2.trivial_example(d);
         expect(runr.run_count).toEqual(1);
+    });
+
+    it('runs the 2d contour example in mocking mode', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var contours = jQuery.fn.webGL2contours2d.simple_example(d);
+        expect(contours.runner.run_count).toEqual(1);
     });
 
   });
