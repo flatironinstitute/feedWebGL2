@@ -13,7 +13,7 @@ jQuery(function(){
   var d = $("#container");
   //var runr = jQuery.fn.feedWebGL2.trivial_example(d);
   //var runr = jQuery.fn.feedWebGL2.example(d);
-  var contour = jQuery.fn.webGL2contours2d.simple_example(d);
+  var contour = jQuery.fn.webGL2surfaces3d.simple_example(d);
 });
 
 /*

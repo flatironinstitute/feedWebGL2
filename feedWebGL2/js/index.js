@@ -6,8 +6,8 @@ if (!global.jQuery) {
 
 // The plugins install themselves into the global jQuery object
 require("./feedWebGL");
-
 require("./feedbackContours");
+require("./feedbackSurfaces");
 
 function feedWebGL_is_loaded() {
   return true;
