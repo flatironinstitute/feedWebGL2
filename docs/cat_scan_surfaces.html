@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Cat scan array contours demo</title>
+    <meta charset="utf-8" />
+    <link
+      href="https://fonts.googleapis.com/css?family=Open+Sans"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./css/normalize.css" />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <link rel="stylesheet" href="./css/jquery-ui.css" />
+  </head>
+
+  <body class="container">
+    <div class="container__header">
+      <h2>Cat scan array contours demo</h2>
+      <p class="intro-text">
+        Please mousedown and drag on the left to rotate both views. Adjust the
+        slider to change the expression level contour.
+      </p>
+    </div>
+    <div class="container__viz">
+      <div class="column">
+        <h4>Clustered Protein Patterns</h4>
+        <div id="container" class="viz"></div>
+        <div class="caption">
+          <p><b>Patterns:</b></p>
+          <div class="checkbox-col" id="checkboxes"></div>
+        </div>
+      </div>
+      <div class="column">
+        <h4>Protein Image Data</h4>
+        <div id="container2" class="viz"></div>
+        <div class="caption">
+          <div class="caption-top-row">
+            <p><b>Threshold:</b></p>
+            <div id="proteins"></div>
+          </div>
+          <div class="caption-row">
+            <label for="amount">Level</label>
+            <input type="text" id="amount" readonly class="protein-level" />
+            <div id="slider" class="protein-slider"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="container__footer">
+      This visualization pairs a display of protein expression levels on the
+      right with clustered protein expression patterns on the left. Please view
+      the source to examine the embedding mechanics.
+    </div>
+
+    <script src="./js/three.min.js"></script>
+    <script src="./js/OrbitControls.js"></script>
+    <script src="./js/jquery.min.js"></script>
+    <script src="./js/jquery-ui.js"></script>
+    <script src="./js/feedWebGL.js"></script>
+    <script src="./js/feedbackSurfaces.js"></script>
+
+    <script>
+
+    debugger;
+    // feedWebGL objects
+    var valuesArray, surfaces, gl, container, context;
+    // shared positions array
+    var positions = null;
+
+    // three.js objects
+    var scene_initialized = false;
+    var renderer, scene, canvas, geometry, orbitControls, clock;
+
+    $(function () {
+        var s = $("#status");
+        var container = $("#container");
+        
+        var do_plot = function(json_data) {
+            s.html("Loaded " + json_data.length);
+            valuesArray = new Float32Array(json_data);
+
+            //gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+            var init_html = `<canvas id="glcanvas">
+                                Oh no! Your browser doesn't support canvas!
+                            </canvas>`;
+
+            container.empty();
+            var $canvas = $(init_html).appendTo(container);
+            $canvas.width(container.width());
+            $canvas.height(container.height());
+            var glCanvas = $canvas[0];
+
+            // **** webgl2!
+            var gl = glCanvas.getContext("webgl2");
+            // set up and clear the viewport
+            gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+            gl.clearColor(0.8, 0.9, 1.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+
+            context = container.feedWebGL2({
+                gl: gl,
+            });
+
+            var dim = 60;
+            var h = 1.5 / dim;
+            var ddz = h * 0.1;
+            var tr = 0.8
+            surfaces = container.webGL2surfaces3d(
+                {
+                    feedbackContext: context,
+                    valuesArray: valuesArray,
+                    num_rows: 64,
+                    num_cols: 64,
+                    num_layers: 64,
+                    dx: [0, 0, h],
+                    dy: [-h, 0, 0],
+                    dz: [0, -h, 0],
+                    translation: [tr, tr, -tr],
+                    color: [1, 0, 0],
+                    rasterize: true,
+                    threshold: 150,
+                }
+            );
+            var update = (function () {
+                var threshold = + slider.slider("option", "value");
+                gl.clearColor(0.8, 0.9, 1.0, 1.0);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+                surfaces.set_threshhold(threshold);
+                surfaces.run();
+                
+                if (scene_initialized) {
+                    update_scene();
+                } else {
+                    initialize_scene();
+                    scene_initialized = true;
+                }
+            });
+            //input.change(update);
+            //var slider = $("<div/>").appendTo(container);
+            var slider = $(document.getElementById( 'slider' ));
+            slider.slider({
+                min: 1,
+                max: 1000,
+                value: 130,
+                step: 0.5,
+                slide: update,
+                change: update,
+            })
+            update();
+        };
+        var on_load_failure = function() {
+            alert("Could not load local JSON data.\n" +
+                    "You may need to run a web server to avoid cross origin restrictions.")
+        };
+
+        var initialize_scene = function() {
+            //return;  // for testing
+            // set up three.js scene using positions array
+            container = document.getElementById( 'container2' );
+            var $container = $(container);
+            $container.empty();
+            var canvas = document.createElement( 'canvas' ); 
+            var context = canvas.getContext( 'webgl2', { alpha: false } ); 
+            renderer = new THREE.WebGLRenderer( { canvas: canvas, context: context } );
+            //renderer = new THREE.WebGLRenderer();
+            renderer.setPixelRatio( window.devicePixelRatio );
+            renderer.setSize( $container.width(), $container.height() );
+            //renderer.setSize( window.innerWidth, window.innerHeight );
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            container.appendChild( renderer.domElement );
+
+            scene = new THREE.Scene();
+
+            scene.add( new THREE.AmbientLight( 0x444444 ) );
+
+            camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 10000 );
+            camera.position.set( 0, 0, 3 );
+            geometry = surfaces.linked_three_geometry(THREE);
+            geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0,0,0), 1.0);
+            // material
+            var material = new THREE.MeshNormalMaterial( {  } );
+
+            // mesh
+            mesh = new THREE.Mesh( geometry,  material );
+            scene.add( mesh );
+
+            orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+            orbitControls.userZoom = false;
+            clock = new THREE.Clock();
+
+            update_scene();
+            positions = geometry.attributes.position.array;
+            animate();
+        };
+        var update_scene = function () {
+            // update is automatic...
+            //geometry.attributes.position.needsUpdate = true;
+        };
+        var animate = function () {
+            surfaces.check_update_link();
+            var delta = clock.getDelta();
+            orbitControls.update(delta);
+            renderer.render( scene, camera );
+            requestAnimationFrame( animate );
+        };
+        $.getJSON("data/array64.json", do_plot).fail(on_load_failure);
+      });
+    </script>
+  </body>
+</html>
