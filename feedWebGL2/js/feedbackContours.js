@@ -61,10 +61,16 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var y_offset = s.num_cols;
                 //var z_offset = s.num_cols * s.num_rows;
                 var num_instances = nvalues - (x_offset + y_offset);
+                var vertices_per_instance = 4; // 2 endpoints each for 2 triangles.
+                // add vertex count bogus input for Firefox
+                var vertexNumArray = new Float32Array(Array.from(Array(vertices_per_instance).keys()));
+                this.vertex_num_buffer = this.feedbackContext.buffer()
+                this.vertex_num_buffer.initialize_from_array(vertexNumArray);
+
                 this.runner = this.program.runner({
                     run_type: "LINES",
                     num_instances: num_instances,
-                    vertices_per_instance: 4,  // 2 endpoints each for 2 triangles.
+                    vertices_per_instance: vertices_per_instance,
                     rasterize: s.rasterize,
                     uniforms: {
                         uRowSize: {
@@ -134,6 +140,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                                 skip_elements: x_offset + y_offset,
                             },
                         },
+                        aVertexCount: {   // bogus attribute required by Firefox
+                            per_vertex: true,
+                            num_components: 1,
+                            from_buffer: {
+                                name: this.vertex_num_buffer.name,
+                            }
+                        }
                     }
                 });
             };
@@ -149,15 +162,28 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             linked_three_geometry (THREE) {
                 // create a three.js geometry linked to the current positions feedback array.
                 // xxxx only one geometry may be linked at a time.
+                var that = this;
                 var positions = this.get_positions();
                 var geometry = new THREE.BufferGeometry();
                 geometry.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
+                that.link_needs_update = false;
                 var after_run = function(that) {
-                    // update the geometry positions array in place and mark for update
+                    debugger;
+                    that.link_needs_update = true;
+                }
+                var check_update_link = function() {
+                    // update the geometry positions array in place and mark for update in geometry
+                    if (! that.link_needs_update) {
+                        // only update upon request and only if needed
+                        that.link_needs_update = false;
+                        return;
+                    }
                     geometry.attributes.position.array = that.get_positions(geometry.attributes.position.array);
                     geometry.attributes.position.needsUpdate = true;
+                    that.link_needs_update = false;
                 }
                 this.settings.after_run_callback = after_run;
+                this.check_update_link = check_update_link;
                 return geometry;
             };
             set_threshhold(value) {
@@ -210,7 +236,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             in float aLL, aLR, aUL, aUR;
 
             // per vertex -- which vertex? 0,1 on first triangle or 2,3 on second
-            //in float aVertexCount;  not needed?
+            in float aVertexCount;  // bogus attribute needed by Firefox
 
             // feedbacks out
             out vec3 vColor, vPosition;
@@ -242,7 +268,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // initially set output point to invalid
                 gl_Position = vec4(uInvalid, uInvalid, uInvalid, uInvalid);
                 vPosition = gl_Position.xyz;
-                vColor = vec3(0.0, 0.0, 0.0);
+                vColor = vec3(aVertexCount * 0.1, 0.0, 0.0);
 
                 // size of layer of rows and columns in 3d grid
                 int layer_size = uRowSize * uColSize;

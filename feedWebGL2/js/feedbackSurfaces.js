@@ -65,13 +65,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var z_offset = s.num_cols * s.num_rows;
                 var num_instances = nvalues - (x_offset + y_offset + z_offset);
 
-                var corner_inputs = {};
+                var inputs = {};
                 var add_input = function (ix, iy, iz) {
                     var name = (("a" + ix) + iy) + iz;
                     var dx = [0, x_offset][ix];
                     var dy = [0, y_offset][iy];
                     var dz = [0, z_offset][iz];
-                    corner_inputs[name] = {
+                    inputs[name] = {
                         per_vertex: false,
                         num_components: 1,
                         from_buffer: {
@@ -92,11 +92,23 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 const N_TETRAHEDRA = 6;
                 const N_TRIANGLES = 2;  
                 const N_VERTICES = 3;
+                var vertices_per_instance = N_TETRAHEDRA * N_TRIANGLES * N_VERTICES;
+                // add vertex count bogus input for Firefox
+                var vertexNumArray = new Float32Array(Array.from(Array(vertices_per_instance).keys()));
+                this.vertex_num_buffer = this.feedbackContext.buffer()
+                this.vertex_num_buffer.initialize_from_array(vertexNumArray);
+                inputs["aVertexCount"] = {
+                    per_vertex: true,
+                    num_components: 1,
+                    from_buffer: {
+                        name: this.vertex_num_buffer.name,
+                    }
+                }
 
                 this.runner = this.program.runner({
                     run_type: "TRIANGLES",
                     num_instances: num_instances,
-                    vertices_per_instance: N_TETRAHEDRA * N_TRIANGLES * N_VERTICES,
+                    vertices_per_instance: vertices_per_instance,
                     rasterize: s.rasterize,
                     uniforms: {
                         uRowSize: {
@@ -132,7 +144,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             default_value: [s.invalid_coordinate],
                         },
                     },
-                    inputs: corner_inputs,
+                    inputs: inputs,
                 });
             };
             run() {
@@ -232,7 +244,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         const int N_VERTICES = 3;   // vertices per triangle
         const int N_CORNERS = 8;    // number of cube corners
         const int N_T_VERTICES = 4; // number of vertices in a tetrahedron
-        //in float aVertexCount;
+
+        // bogus vertex attribute required by Firefox (but not Chrome)
+        in float aVertexCount;
 
         // Crossing index is binary integer of form
         //   (triangle_num << 4) || ((fA > v) << 3 || ((fA > v) << 2 || ((fA > v) << 1 || ((fA > v)
@@ -285,8 +299,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         void main() {
             // initially set output point to invalid
             gl_Position = vec4(uInvalid, uInvalid, uInvalid, uInvalid);
-            //float grey = aVertexCount / float(N_TETRAHEDRA * N_TRIANGLES * N_VERTICES);
-            vColor = vec3(float(gl_VertexID) * 0.01, 1.0, 0.0);  // temp value for debugging
+            // use the bogus vertexCount parameter so it is not erased by the optimizer
+            float grey = aVertexCount / float(N_TETRAHEDRA * N_TRIANGLES * N_VERTICES);
+            vColor = vec3(float(gl_VertexID) * 0.01, grey, 0.0);  // temp value for debugging
             vNormal = vec3(0.0, 0.0, 1.0);    // arbitrary initial value
 
             // size of layer of rows and columns in 3d grid
