@@ -45,8 +45,6 @@
             <p><b>Slide to change intensity cut-off:</b></p>
           </div>
           <div class="caption-row">
-            <label for="amount">Level</label>
-            <input type="text" id="amount" readonly class="protein-level" />
             <div id="slider" class="protein-slider"></div>
           </div>
         </div>
@@ -54,8 +52,9 @@
     </div>
     <div class="container__footer">
       The transform/feedback mechanism converts a dense array of 
-      intensity values to triangles approximating the iso-surfaces 
-      where the intensities acheive the specified slider value.
+      intensity values to line segments approximating the contours
+      where the intensities acheive the specified slider value
+      on each layer.
     </div>
 
 
@@ -68,11 +67,10 @@
     <script src="./js/jquery.min.js"></script>
     <script src="./js/jquery-ui.js"></script>
     <script src="./js/feedWebGL.js"></script>
-    <script src="./js/feedbackSurfaces.js"></script>
+    <script src="./js/feedbackContours.js"></script>
 
     <script>
 
-    debugger;
     // feedWebGL objects
     var valuesArray, surfaces, gl, container, context;
     // shared positions array
@@ -90,8 +88,6 @@
             s.html("Loaded " + json_data.length);
             valuesArray = new Float32Array(json_data);
 
-            //gl = $.fn.feedWebGL2.setup_gl_for_example(container);
-
             var init_html = `<canvas id="glcanvas">
                                 Oh no! Your browser doesn't support canvas!
                             </canvas>`;
@@ -101,14 +97,7 @@
             $canvas.width(container.width());
             $canvas.height(container.height());
             var glCanvas = $canvas[0];
-
-            // **** webgl2!
             var gl = glCanvas.getContext("webgl2");
-            // set up and clear the viewport
-            gl.viewport(0, 0, glCanvas.width, glCanvas.height);
-            gl.clearColor(0.8, 0.9, 1.0, 1.0);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-
 
             context = container.feedWebGL2({
                 gl: gl,
@@ -118,16 +107,16 @@
             var h = 1.5 / dim;
             var ddz = h * 0.1;
             var tr = 0.8
-            surfaces = container.webGL2surfaces3d(
+            surfaces = container.webGL2contours2d(
                 {
                     feedbackContext: context,
                     valuesArray: valuesArray,
                     num_rows: 64,
                     num_cols: 64,
                     num_layers: 64,
-                    dx: [0, 0, h],
+                    dz: [0, 0, h],
                     dy: [-h, 0, 0],
-                    dz: [0, -h, 0],
+                    dx: [0, -h, 0],
                     translation: [tr, tr, -tr],
                     color: [1, 0, 0],
                     rasterize: true,
@@ -149,7 +138,6 @@
                 }
             });
             //input.change(update);
-            //var slider = $("<div/>").appendTo(container);
             var slider = $(document.getElementById( 'slider' ));
             slider.slider({
                 min: 1,
@@ -167,7 +155,6 @@
         };
 
         var initialize_scene = function() {
-            //return;  // for testing
             // set up three.js scene using positions array
             container = document.getElementById( 'container2' );
             var $container = $(container);
@@ -178,23 +165,24 @@
             //renderer = new THREE.WebGLRenderer();
             renderer.setPixelRatio( window.devicePixelRatio );
             renderer.setSize( $container.width(), $container.height() );
-            //renderer.setSize( window.innerWidth, window.innerHeight );
             renderer.outputEncoding = THREE.sRGBEncoding;
             container.appendChild( renderer.domElement );
 
             scene = new THREE.Scene();
-
-            scene.add( new THREE.AmbientLight( 0x444444 ) );
-
             camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 10000 );
             camera.position.set( 0, 0, 3 );
+            //geometry = new THREE.BufferGeometry();
+            //geometry.addAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
             geometry = surfaces.linked_three_geometry(THREE);
             geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0,0,0), 1.0);
             // material
-            var material = new THREE.MeshNormalMaterial( {  } );
-
-            // mesh
-            mesh = new THREE.Mesh( geometry,  material );
+            var material = new THREE.LineBasicMaterial( {
+                color: 0xffffff,
+                linewidth: 2,
+                linecap: 'round', //ignored by WebGLRenderer
+                linejoin:  'round' //ignored by WebGLRenderer
+            } );
+            mesh = new THREE.LineSegments( geometry,  material );
             scene.add( mesh );
 
             orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -217,7 +205,7 @@
             requestAnimationFrame( animate );
         };
         $.getJSON("data/array64.json", do_plot).fail(on_load_failure);
-      });
+    })
     </script>
   </body>
 </html>
