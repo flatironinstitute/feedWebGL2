@@ -41,7 +41,7 @@ describe('testing feedWebGL', () => {
         var context = d.feedWebGL2();
         var sentinel = [-1,1,1,-1];
         var from_buffer = [1,2, 3,4, 5,6, 7,8];
-        var to_buffer = [0,0,0,0]
+        var to_buffer = [0,0,0,0];
         var num_components = 2;
         to_buffer = context.filter_degenerate_entries(
             sentinel, from_buffer, to_buffer, num_components
@@ -55,12 +55,27 @@ describe('testing feedWebGL', () => {
         var context = d.feedWebGL2();
         var sentinel = [-1,1,1,-1];
         var from_buffer = [1,2, 3,4, 5,6, 7,8];
-        var to_buffer = [0,0]
+        var to_buffer = [0,0];
         var num_components = 2;
         to_buffer = context.filter_degenerate_entries(
             sentinel, from_buffer, to_buffer, num_components
         );
         expect(to_buffer).toEqual([3,4])
+    });
+
+    it('fills degenerate entries', () => {
+        mockCanvas(window);
+        var d = jQuery("<div/>");
+        var context = d.feedWebGL2();
+        var sentinel = [-1,-1,1,-1];
+        var from_buffer = [1,2, 3,4, 5,6, 7,8];
+        var to_buffer = [0,0,0,0];
+        var fill = -1;
+        var num_components = 2;
+        to_buffer = context.filter_degenerate_entries(
+            sentinel, from_buffer, to_buffer, num_components, fill
+        );
+        expect(to_buffer).toEqual([5,6,-1,-1])
     });
 
     it('initializes a buffer from an array', () => {

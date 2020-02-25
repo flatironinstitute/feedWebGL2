@@ -76,10 +76,11 @@ data loading convenience interfaces on runner.
                 this.programs[prog.name] = prog;
                 return prog;
             };
-            filter_degenerate_entries(sentinel, from_buffer, to_buffer, num_components){
+            filter_degenerate_entries(sentinel, from_buffer, to_buffer, num_components, fill){
                 // where the sentinel is negative the from_buffer is degenerate
                 // pack non-degenerate entries into to_buffer
                 // KISS implementation for now (no sub-buffer copies)
+                fill = fill || 0;
                 var limit = to_buffer.length;
                 var to_index = 0;
                 var from_index = 0;
@@ -99,6 +100,10 @@ data loading convenience interfaces on runner.
                     if (to_index >= limit) {
                         break;  // buffer may not be large enough for all valid values.
                     }
+                }
+                while (to_index < limit) {
+                    to_buffer[to_index] = fill;
+                    to_index ++;
                 }
                 return to_buffer;
             }
