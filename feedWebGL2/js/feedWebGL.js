@@ -76,6 +76,32 @@ data loading convenience interfaces on runner.
                 this.programs[prog.name] = prog;
                 return prog;
             };
+            filter_degenerate_entries(sentinel, from_buffer, to_buffer, num_components){
+                // where the sentinel is negative the from_buffer is degenerate
+                // pack non-degenerate entries into to_buffer
+                // KISS implementation for now (no sub-buffer copies)
+                var limit = to_buffer.length;
+                var to_index = 0;
+                var from_index = 0;
+                var nsentinel = sentinel.length;
+                for (var i=0; i<nsentinel; i++) {
+                    if (sentinel[i] < 0) {
+                        // skip
+                        from_index += num_components;
+                    } else {
+                        // copy
+                        for (var j=0; j<num_components; j++) {
+                            to_buffer[to_index] = from_buffer[from_index];
+                            from_index ++;
+                            to_index ++;
+                        }
+                    }
+                    if (to_index >= limit) {
+                        break;  // buffer may not be large enough for all valid values.
+                    }
+                }
+                return to_buffer;
+            }
         };
 
         var noop_fragment_shader = `#version 300 es
