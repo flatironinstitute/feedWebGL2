@@ -117,7 +117,9 @@ data loading convenience interfaces on runner.
                 this.runners = {};
                 for (var name in this.settings.feedbacks) {
                     var feedback_desc = this.settings.feedbacks[name];
-                    var feedback = new FeedbackVariable(this, name, feedback_desc.num_components, feedback_desc.bytes_per_component);
+                    var feedback = new FeedbackVariable(this, name, 
+                        feedback_desc.num_components, feedback_desc.bytes_per_component,
+                        feedback_desc.type);
                     this.feedbacks_by_name[name] = feedback;
                     this.feedback_order.push(feedback);
                     feedback.index = this.feedback_order.length - 1;
@@ -237,11 +239,13 @@ data loading convenience interfaces on runner.
                 var input_descriptions = this.settings.inputs;
                 for (var name in input_descriptions) {
                     var desc = input_descriptions[name];
+                    var nc = desc.num_components;
+                    var ty = desc.type;
                     var input = null;
                     if (desc.per_vertex) {
-                        input = new VertexInput(this, name, desc.num_components);
+                        input = new VertexInput(this, name, nc, ty);
                     } else {
-                        input = new MeshInput(this, name, desc.num_components);
+                        input = new MeshInput(this, name, nc, ty);
                     }
                     var from_buffer = desc.from_buffer;
                     if (from_buffer) {
@@ -393,7 +397,8 @@ data loading convenience interfaces on runner.
         };
 
         class FeedbackVariable {
-            constructor(program, name, num_components, bytes_per_component) {
+            constructor(program, name, num_components, bytes_per_component, typ) {
+                this.type = typ || "float";
                 this.program = program;
                 this.name = name;
                 this.num_components = num_components || 1;
@@ -443,7 +448,11 @@ data loading convenience interfaces on runner.
             };
             get_array(arrBuffer) {
                 if (!arrBuffer) {
-                    arrBuffer = new Float32Array(this.output_components);
+                    var arraytype = Float32Array;
+                    if (this.feedback_variable.type == "int") {
+                        arraytype = Int32Array;
+                    }
+                    arrBuffer = new arraytype(this.output_components);
                 }
                 var gl = this.feedback_variable.program.context.gl;
                 gl.flush();   // make sure processing has completed (???)
@@ -516,9 +525,10 @@ data loading convenience interfaces on runner.
         };
 
         class MeshInput {
-            constructor (runner, name, num_components) {
+            constructor (runner, name, num_components, typ) {
                 this.runner = runner;
                 this.name = name;
+                this.type = typ || "float",
                 this.num_components = num_components || 1;
                 this.position = null;
                 this.bound = false;
@@ -539,8 +549,15 @@ data loading convenience interfaces on runner.
                 this.byte_stride = element_stride * this.num_components * tf_buffer.bytes_per_element;
                 // xxxxx need to support, eg, integers too:
                 // https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext/vertexAttribIPointer
-                gl.vertexAttribPointer(this.position, this.num_components,
-                    gl.FLOAT, false, this.byte_stride, this.byte_offset);
+                if (this.type == "float") {
+                    gl.vertexAttribPointer(this.position, this.num_components,
+                        gl.FLOAT, false, this.byte_stride, this.byte_offset);
+                } else if (this.type == "int") {
+                    gl.vertexAttribIPointer(this.position, this.num_components,
+                        gl.INT, false, this.byte_stride, this.byte_offset);
+                } else {
+                    throw new Error("only int and float types are supported for attributes.");
+                }
                 gl.bindBuffer(gl.ARRAY_BUFFER, null);
                 this.bound = true;
             };
@@ -683,6 +700,91 @@ data loading convenience interfaces on runner.
             $("<span> " + tf(location_array[i]) + "<span>").appendTo(container);
         }
         return runr;
+    };
+
+    $.fn.feedWebGL2.integer_example = function (container) {
+        // illustration of writing integer attributes
+        // can capturing integer feedbacks
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        var add_ints_vertex_shader = `#version 300 es
+            // per mesh input
+            in int aInt1, aInt2;
+
+            // feedbacks out
+            flat out int feedback_add, feedback_diff;
+
+            void main() {
+                feedback_add = aInt1 + aInt2;
+                feedback_diff = aInt1 - aInt2;
+            }
+        `;
+
+        var per_vertex =  new Int32Array([2,3,4]);
+        var per_mesh = new Int32Array([3,4,5,6]);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+            buffers: {
+                "per_vertex_buffer": {
+                    array: per_vertex,
+                    //type: "int", not needed?
+                },
+                "per_mesh_buffer": {
+                    // implicitly one component
+                    array: per_mesh,
+                    //type: "int"
+                },
+            },
+        });
+        var program = context.program({
+            vertex_shader: add_ints_vertex_shader,
+            feedbacks: {
+                feedback_add: {num_components: 1, type: "int"},
+                feedback_diff: {num_components: 1, type: "int"},
+            },
+        });
+
+        // 4 instances with 3 vertices per instance
+        var roptions = {
+            name: "integer example",
+            num_instances: per_mesh.length, 
+            vertices_per_instance: per_vertex.length,
+            rasterize: false,  // don't display the result
+            uniforms: {},
+            inputs: {
+                aInt1:  {
+                    per_vertex: true,
+                    type: "int",
+                    from_buffer: {
+                        name: "per_vertex_buffer",
+                    }
+                },
+                aInt2:  {
+                    per_vertex: false,
+                    type: "int",
+                    from_buffer: {
+                        name: "per_mesh_buffer",
+                        type: "int",
+                    }
+                },
+            },
+        };
+        var runr = program.runner(roptions);
+
+        runr.run()
+
+        var adds = runr.feedback_array("feedback_add");
+        var diffs = runr.feedback_array("feedback_diff");
+        var index = 0;
+        for (var i=0; i<per_mesh.length; i++) {
+            $("<br/>").appendTo(container);
+            for (var j=0; j<per_vertex.length; j++) {
+                var L = [per_mesh[i], per_vertex[j], adds[index], diffs[index]];
+                $("<span> (" + L + ") </span>").appendTo(container);
+                index ++;
+            }
+        }
     };
 
     $.fn.feedWebGL2.example = function (container) {
