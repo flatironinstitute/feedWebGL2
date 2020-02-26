@@ -87,7 +87,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         }
                         if ((m <= uValue) && (M > uValue)) {
                             // the pixel crosses the threshold
-                            index = gl_InstanceID;
+                            index = gl_VertexID;
                         }
                     }
                 }
@@ -194,6 +194,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 );
                 return {indices: this.compact_indices, corners: this.compact_corners};
             };
+            set_threshhold(value) {
+                //this.runner.uniforms.uValue.value = [value];
+                this.runner.change_uniform("uValue", [value]);
+                //this.runner.run();
+            };
         };
         return new WebGL2CrossingPixels(options);
     };
@@ -229,7 +234,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         var compacted = crossing.get_compacted_feedbacks();
         var indices = compacted.indices;
         var corners = compacted.corners;
-        var ci = 0
+        var ci = 0;
         for (var i=0; i<indices.length; i++) {
             $("<br/>").appendTo(container);
             $("<span> " + indices[i] + " </span>").appendTo(container);
@@ -244,11 +249,277 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         class WebGL2SegmentPixels {
             constructor(options) { 
                 this.settings = $.extend({
-                    feedbackContext: feedbackContext,
+                    feedbackContext: null,
+                    // array of indices (from crossing pixels)
+                    indices: null,
+                    // array of corners (from crossing pixels)
+                    corners: null,
+                    num_rows: null,
+                    num_cols: null,
+                    dx: [1, 0, 0],
+                    dy: [0, 1, 0],
+                    dz: [0, 0, 1],
+                    translation: [-1, -1, 0],
+                    color: [1, 1, 1],
+                    rasterize: false,
+                    threshold: 0,  // value at contour
+                    invalid_coordinate: -100000,  // invalidity marker for positions
+                    after_run_callback: null,   // call this after each run.
                 }, options);
+                var s = this.settings;
+                this.feedbackContext = s.feedbackContext;
+                
+                // allocate and load buffers with a fresh name
+                this.index_buffer = this.feedbackContext.buffer()
+                this.index_buffer.initialize_from_array(s.indices);
+                this.corner_buffer = this.feedbackContext.buffer()
+                this.corner_buffer.initialize_from_array(s.corners);
+                // add vertex count bogus input for Firefox
+                var vertexNumArray = new Float32Array([0,1,2,3])
+                this.vertex_num_buffer = this.feedbackContext.buffer()
+                this.vertex_num_buffer.initialize_from_array(vertexNumArray);
+
+                this.program = this.feedbackContext.program({
+                    vertex_shader: segments_vertex_shader,
+                    feedbacks: {
+                        vPosition: {num_components: 3},
+                    },
+                });
+
+                this.runner = this.program.runner({
+                    run_type: "LINES",
+                    num_instances: s.indices.length,
+                    vertices_per_instance: 4,
+                    rasterize: s.rasterize,
+                    uniforms: {
+                        uRowSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_cols],
+                        },
+                        uColSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_rows],
+                        },
+                        uValue: {
+                            vtype: "1fv",
+                            default_value: [s.threshold],
+                        },
+                        dx: {
+                            vtype: "3fv",
+                            default_value: s.dx,
+                        },
+                        dy: {
+                            vtype: "3fv",
+                            default_value: s.dy,
+                        },
+                        dz: {
+                            vtype: "3fv",
+                            default_value: s.dz,
+                        },
+                        translation: {
+                            vtype: "3fv",
+                            default_value: s.translation,
+                        },
+                        uInvalid: {
+                            vtype: "1fv",
+                            default_value: [s.invalid_coordinate],
+                        },
+                    },
+                    inputs: {
+                        index: {
+                            per_vertex: false,
+                            num_components: 1,
+                            type: "int",
+                            from_buffer: {
+                                name: this.index_buffer.name,
+                            },
+                        },
+                        corners: {
+                            per_vertex: false,
+                            num_components: 4,
+                            from_buffer: {
+                                name: this.corner_buffer.name,
+                            },
+                        },
+                        aVertexCount: {   // bogus attribute required by Firefox
+                            per_vertex: true,
+                            num_components: 1,
+                            from_buffer: {
+                                name: this.vertex_num_buffer.name,
+                            }
+                        }
+                    }
+                });
+            };
+            run() {
+                this.runner.install_uniforms();
+                this.runner.run();
+            };
+            set_threshhold(value) {
+                this.runner.change_uniform("uValue", [value]);
+            };
+            get_positions(optionalPreAllocatedArrBuffer) {
+                return this.runner.feedback_array(
+                    "vPosition",
+                    optionalPreAllocatedArrBuffer);
             };
         };
+        var segments_vertex_shader = `#version 300 es
+
+        // global length of rows
+        uniform int uRowSize;
+
+        // global number of columnss
+        uniform int uColSize;
+        
+        // global contour threshhold
+        uniform float uValue;
+
+        // xxxxx add divisor for multiple contours...
+        
+        // uniform offsets in x,y,z directions, translation, line color
+        uniform vec3 dx, dy, dz, translation, color;
+
+        // invalid value marker
+        uniform float uInvalid;
+
+        // per mesh pixel index
+        in int index;
+
+        // per mesh corner values
+        in vec4 corners;
+
+        // per vertex -- which vertex? 0,1 on first triangle or 2,3 on second
+        in float aVertexCount;  // bogus attribute needed by Firefox
+
+        // feedback output position of vertex (or degenerate)
+        out vec3 vPosition;
+        // square corner offsets
+        const vec2 offsets[4] = vec2[](
+            vec2(0.0,0.0),
+            vec2(1.0,0.0),
+            vec2(0.0,1.0),
+            vec2(1.0,1.0)
+        );
+
+        // crossing index to segment endpoint indices
+        //                            000 001 010 011 100 101 110 111
+        const int Seg1Left[8] = int[]( -1,  1,  0,  2,  2,  0,  1, -1);
+        const int Seg1Right[8]= int[]( -1,  2,  1,  0,  0,  1,  2, -1);
+        const int Seg2Left[8] = int[]( -1,  2,  1,  0,  0,  1,  2, -1);
+        const int Seg2Right[8]= int[]( -1,  0,  2,  1,  1,  2,  0, -1);
+
+        void main() {
+            // fake use of aVertexCount to prevent optimizer from eliminating it.
+            vPosition[2] = aVertexCount; 
+            gl_Position = vec4(uInvalid, uInvalid, uInvalid, uInvalid);
+            vPosition = gl_Position.xyz;
+
+            // size of layer of rows and columns in 3d grid
+            int layer_size = uRowSize * uColSize;
+            // instance depth of this layer
+            int i_depth_num = index / layer_size;
+            // ravelled index in layer
+            int i_layer_index = index - (i_depth_num * layer_size);
+
+            int i_row_num = i_layer_index/ uRowSize;
+            int i_col_num = i_layer_index - (i_row_num * uRowSize);
+
+            // Dont tile last column which wraps around rows
+            if ((index>=0) && (i_col_num < (uRowSize - 1)) && (i_row_num < (uColSize - 1))) {
+                float row_num = float(i_row_num);
+                float col_num = float(i_col_num);
+                float depth_num = float(i_depth_num);
+                // determine which vertex in which triangle to interpolate
+                int iVertexCount = gl_VertexID;
+                int iTriangleNumber = iVertexCount / 2;
+                int iVertexNumber = iVertexCount - (iTriangleNumber * 2);
+                int iT1 = iTriangleNumber + 1;
+                vec2 triangle_offsets[3] = vec2[](
+                    offsets[0],
+                    offsets[iT1],
+                    offsets[3]
+                );
+                float triangle_wts[3] = float[](
+                    corners[0],
+                    corners[iT1],
+                    corners[3]
+                );
+                // crossing index
+                int ci = 0;
+                for (int i=0; i<3; i++) {
+                    ci = ci << 1;
+                    if (triangle_wts[i] > uValue) {
+                        ci += 1;
+                    }
+                }
+                if (Seg1Left[ci] >= 0) {
+                    int SegLs[2] = int[](Seg1Left[ci], Seg2Left[ci]);
+                    int SegRs[2] = int[](Seg1Right[ci], Seg2Right[ci]);
+                    int SegL = SegLs[iVertexNumber];
+                    int SegR = SegRs[iVertexNumber];
+                    vec2 offsetL = triangle_offsets[SegL];
+                    vec2 offsetR = triangle_offsets[SegR];
+                    float wtL = triangle_wts[SegL];
+                    float wtR = triangle_wts[SegR];
+                    // check denominator is not too small? xxxx
+                    float delta = (wtL - uValue) / (wtL - wtR);
+                    vec2 combined_offset = ((1.0 - delta) * offsetL) + (delta * offsetR);
+                    //combined_offset = offsetL;
+                    vec2 vertex = combined_offset + vec2(col_num, row_num);
+                    vPosition = 
+                        dx * vertex[0] + 
+                        dy * vertex[1] + 
+                        dz * depth_num + 
+                        translation;
+                    gl_Position.xyz = vPosition;
+                    //vColor = abs(normalize(vec3(vertex)));  // XXX FOR TESTING ONLY
+                    gl_Position[3] = 1.0;
+                }
+            }
+            //vPosition = gl_Position.xyz;
+        }
+        `;
         return new WebGL2SegmentPixels(options);
+    };
+
+    $.fn.webGL2SegmentPixels.example = function (container) {
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+        });
+        var cornersArray = new Float32Array([
+            0, 0, 0, 1,
+            0, 0, 1, 0,
+            0, 1, 0, 0,
+            1, 0, 0, 0,
+            -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1,
+        ]);
+        var indexArray = new Int32Array([
+            9, 10, 12, 13, -1, -1,
+        ]);
+        var segments = container.webGL2SegmentPixels({
+            feedbackContext: context,
+            indices: indexArray,
+            corners: cornersArray,
+            num_rows: 3,
+            num_cols: 3,
+            rasterize: true,
+            dx: [0.3, 0, 0],
+            dy: [0, 0.3, 0],
+            dz: [0, 0, 0.3],
+            threshold: 0.5,
+        });
+        segments.run();
+        var positions = segments.get_positions();
+        for (var i=0; i<positions.length; i++) {
+            if (i % 3 == 0) {
+                $("<br/>").appendTo(container);
+            }
+            $("<span> " + positions[i] + " </span>").appendTo(container);
+        }
     };
 
     $.fn.webGL2contours2d = function (options) {
@@ -295,7 +566,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     feedbacks: {
                         vPosition: {num_components: 3},
                     },
-                })
+                });
                 var x_offset = 1;
                 var y_offset = s.num_cols;
                 //var z_offset = s.num_cols * s.num_rows;
@@ -483,11 +754,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // debugging
             out float[4] vdump;
 
-            //const int iLL = 0; (unused?)
-            //const int iLR = 1;
-            //const int iUL = 2;
-            //const int iUR = 3;
-
             // square corner offsets
             const vec2 offsets[4] = vec2[](
                 vec2(0.0,0.0),
@@ -550,7 +816,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             ci += 1;
                         }
                     }
-                    //vColor = vec3(float(ci) * 0.1, float(iTriangleNumber), float(iVertexCount));
                     if (Seg1Left[ci] >= 0) {
                         int SegLs[2] = int[](Seg1Left[ci], Seg2Left[ci]);
                         int SegRs[2] = int[](Seg1Right[ci], Seg2Right[ci]);
