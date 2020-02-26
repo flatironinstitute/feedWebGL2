@@ -221,6 +221,7 @@ data loading convenience interfaces on runner.
                 this.settings = $.extend({
                     // default settings:
                     name: null,
+                    num_instances: 1, // default not instanced
                     run_type: "POINTS",   // run glsl program point by point (not triangles or lines, default)
                     uniforms: {
                         //"translation": {

@@ -12,6 +12,245 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
 (function($) {
 
+    $.fn.webGL2crossingPixels = function(options) {
+        class WebGL2CrossingPixels {
+            constructor(options) {
+                this.settings = $.extend({
+                    feedbackContext: null,    // the underlying FeedbackContext context to use
+                    valuesArray: null,   // the array buffer of values to contour
+                    num_rows: null,
+                    num_cols: null,
+                    num_layers: 1,  // default to "flat"
+                    rasterize: false,
+                    threshold: 0,  // value at contour
+                    // when getting compact arrays
+                    // shrink the array sizes by this factor.
+                    shrink_factor: 0.2,
+                }, options);
+                var s = this.settings;
+                this.feedbackContext = s.feedbackContext;
+                var nvalues = s.valuesArray.length;
+                var nvoxels = s.num_rows * s.num_cols * s.num_layers;
+                if (nvalues != nvoxels) {
+                    // for now strict checking
+                    throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
+                }
+                // allocate and load buffer with a fresh name
+                this.buffer = this.feedbackContext.buffer()
+                this.buffer.initialize_from_array(s.valuesArray);
+                var buffername = this.buffer.name;
+
+                var crossingPixelsVertexShader = `#version 300 es
+
+                // global length of rows
+                uniform int uRowSize;
+
+                // global number of columnss
+                uniform int uColSize;
+                
+                // global contour threshhold
+                uniform float uValue;
+
+                // per array values at pixel corners
+                in float aLL, aLR, aUL, aUR;
+
+                // corners feedback
+                out vec4 corners;
+
+                // index feedback
+                flat out int index;
+
+                void main() {
+                    // initially assume the pixed doesn't cross
+                    index = -1;
+                    corners = vec4(aLL, aLR, aUL, aUR);
+
+                    // size of layer of rows and columns in 3d grid
+                    int layer_size = uRowSize * uColSize;
+                    // instance depth of this layer
+                    int i_depth_num = gl_VertexID / layer_size;
+                    // ravelled index in layer
+                    int i_layer_index = gl_VertexID - (i_depth_num * layer_size);
+
+                    int i_row_num = i_layer_index/ uRowSize;
+                    int i_col_num = i_layer_index - (i_row_num * uRowSize);
+                    // Dont tile last column which wraps around rows
+                    //vdump = float[](float(uRowSize), col_num, row_num, float(gl_InstanceID));
+                    if ((i_col_num < (uRowSize - 1)) && (i_row_num < (uColSize - 1))) {
+                        // the pixel doesn't wrap around the edge
+                        float m = corners[0];
+                        float M = corners[0];
+                        for (int i=1; i<4; i++) {
+                            float c = corners[i];
+                            m = min(c, m);
+                            M = max(c, M);
+                        }
+                        if ((m <= uValue) && (M > uValue)) {
+                            // the pixel crosses the threshold
+                            index = gl_InstanceID;
+                        }
+                    }
+                }
+                `;
+                this.program = this.feedbackContext.program({
+                    vertex_shader: crossingPixelsVertexShader,
+                    fragment_shader: this.settings.fragment_shader,
+                    feedbacks: {
+                        index: {type: "int"},
+                        corners: {num_components:4},
+                    },
+                });
+
+                var x_offset = 1;
+                var y_offset = s.num_cols;
+                //var z_offset = s.num_cols * s.num_rows;
+                var num_pixels = nvalues - (x_offset + y_offset);
+
+                this.runner = this.program.runner({
+                    vertices_per_instance: num_pixels,
+                    uniforms: {
+                        uRowSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_cols],
+                        },
+                        uColSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_rows],
+                        },
+                        uValue: {
+                            vtype: "1fv",
+                            default_value: [s.threshold],
+                        },
+                    },
+                    inputs: {
+                        aLL: {
+                            per_vertex: true,
+                            num_components: 1,
+                            from_buffer: {
+                                name: buffername,
+                                skip_elements: 0,
+                                element_stride: 1,
+                            },
+                        },
+                        aLR: {
+                            per_vertex: true,
+                            num_components: 1,
+                            from_buffer: {
+                                name: buffername,
+                                skip_elements: x_offset,
+                            },
+                        },
+                        aUL: {
+                            per_vertex: true,
+                            num_components: 1,
+                            from_buffer: {
+                                name: buffername,
+                                skip_elements: y_offset,
+                            },
+                        },
+                        aUR: {
+                            per_vertex: true,
+                            num_components: 1,
+                            from_buffer: {
+                                name: buffername,
+                                skip_elements: x_offset + y_offset,
+                            },
+                        },
+                    }
+                });
+                this.corners_array = null;
+                this.index_array = null;
+                this.compact_length = null;
+            };
+            run() {
+                this.runner.install_uniforms();
+                this.runner.run();
+            };
+            get_compacted_feedbacks() {
+                this.run();
+                var rn = this.runner;
+                this.corners_array = rn.feedback_array(
+                    "corners",
+                    this.corners_array,
+                );
+                this.index_array = rn.feedback_array(
+                    "index",
+                    this.index_array,
+                );
+                if (this.compact_length === null) {
+                    // allocate arrays to size limit
+                    this.compact_length = Math.floor(
+                        this.settings.shrink_factor * this.index_array.length
+                    );
+                    this.compact_corners = new Float32Array(4 * this.compact_length);
+                    this.compact_indices = new Int32Array(this.compact_length);
+                }
+                // compact the arrays
+                this.compact_indices = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.index_array, this.compact_indices, 1, -1
+                );
+                this.compact_corners = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.corners_array, this.compact_corners, 4, -1
+                );
+                return {indices: this.compact_indices, corners: this.compact_corners};
+            };
+        };
+        return new WebGL2CrossingPixels(options);
+    };
+
+    $.fn.webGL2crossingPixels.example = function (container) {
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+        });
+        var valuesArray = new Float32Array([
+            0,0,0,
+            0,0,0,
+            0,0,0,
+
+            0,0,0,
+            0,1,0,
+            0,0,0,
+
+            0,0,0,
+            0,0,0,
+            0,0,0,
+        ]);
+        var crossing = container.webGL2crossingPixels({
+            feedbackContext: context,
+            valuesArray: valuesArray,
+            num_rows: 3,
+            num_cols: 3,
+            num_layers: 3,  // default to "flat"
+            threshhold: 0.5,
+            shrink_factor: 0.3,
+        });
+        var compacted = crossing.get_compacted_feedbacks();
+        var indices = compacted.indices;
+        var corners = compacted.corners;
+        var ci = 0
+        for (var i=0; i<indices.length; i++) {
+            $("<br/>").appendTo(container);
+            $("<span> " + indices[i] + " </span>").appendTo(container);
+            for (var j=0; j<4; j++) {
+                $("<span> " + corners[ci] + " </span>").appendTo(container);
+                ci ++;
+            }
+        }
+    };
+
+    $.fn.webGL2SegmentPixels = function (options) {
+        class WebGL2SegmentPixels {
+            constructor(options) { 
+                this.settings = $.extend({
+                    feedbackContext: feedbackContext,
+                }, options);
+            };
+        };
+        return new WebGL2SegmentPixels(options);
+    };
+
     $.fn.webGL2contours2d = function (options) {
         // from grid of sample points generate contour line segments
 
