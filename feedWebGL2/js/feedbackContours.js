@@ -599,6 +599,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 //var positions = segments.get_positions();
             };
             set_threshold(value) {
+                debugger;
                 this.crossing.set_threshold(value);
                 // xxxx must be after first run!
                 if (this.segments) {
@@ -1012,6 +1013,20 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     tf(positions[i+1])+ 
                     tf(positions[i+2])+ 
                     tf(positions[i+3])+ "</div>").appendTo(dump);
+                }
+            }
+            if (opt) {
+                var compacted = contours.crossing.get_compacted_feedbacks();
+                var indices = compacted.indices;
+                var corners = compacted.corners;
+                var ci = 0;
+                for (var ii=0; ii<indices.length; ii++) {
+                    $("<br/>").appendTo(dump);
+                    $("<span> " + indices[ii] + " </span>").appendTo(dump);
+                    for (var j=0; j<4; j++) {
+                        $("<span> " + corners[ci] + " </span>").appendTo(dump);
+                        ci ++;
+                    }
                 }
             }
         });

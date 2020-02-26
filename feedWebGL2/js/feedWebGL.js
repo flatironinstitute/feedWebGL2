@@ -295,6 +295,10 @@ data loading convenience interfaces on runner.
                 this.run_count = 0;
             };
             check_input_bindings() {
+                // xxx rebind all inputs?
+                for (var name in this.inputs) {
+                    this.inputs[name].bindBuffer();
+                }
                 var unbound = [];
                 for (var name in this.inputs) {
                     if (!this.inputs[name].bound) {
@@ -577,6 +581,14 @@ data loading convenience interfaces on runner.
                 return true;  // mainly for testing
             };
             bindBuffer(tf_buffer, skip_elements, element_stride) {
+                // xxx rebinding logic
+                tf_buffer = tf_buffer || this.tf_buffer;
+                skip_elements = skip_elements || this.skip_elements;
+                element_stride = element_stride || this.element_stride;
+                this.tf_buffer = tf_buffer;
+                this.skip_elements = skip_elements;
+                this.element_stride = element_stride;
+                // end of rebind logic
                 var gl = this.runner.program.context.gl;
                 var shaderProgram = this.runner.program.gl_program;
                 gl.bindBuffer(gl.ARRAY_BUFFER, tf_buffer.buffer);
