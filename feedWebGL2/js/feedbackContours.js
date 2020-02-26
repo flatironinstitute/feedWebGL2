@@ -48,7 +48,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // global number of columnss
                 uniform int uColSize;
                 
-                // global contour threshhold
+                // global contour threshold
                 uniform float uValue;
 
                 // per array values at pixel corners
@@ -194,10 +194,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 );
                 return {indices: this.compact_indices, corners: this.compact_corners};
             };
-            set_threshhold(value) {
-                //this.runner.uniforms.uValue.value = [value];
+            set_threshold(value) {
                 this.runner.change_uniform("uValue", [value]);
-                //this.runner.run();
             };
         };
         return new WebGL2CrossingPixels(options);
@@ -228,7 +226,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             num_rows: 3,
             num_cols: 3,
             num_layers: 3,  // default to "flat"
-            threshhold: 0.5,
+            threshold: 0.5,
             shrink_factor: 0.3,
         });
         var compacted = crossing.get_compacted_feedbacks();
@@ -355,7 +353,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.runner.install_uniforms();
                 this.runner.run();
             };
-            set_threshhold(value) {
+            set_threshold(value) {
                 this.runner.change_uniform("uValue", [value]);
             };
             get_positions(optionalPreAllocatedArrBuffer) {
@@ -372,7 +370,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         // global number of columnss
         uniform int uColSize;
         
-        // global contour threshhold
+        // global contour threshold
         uniform float uValue;
 
         // xxxxx add divisor for multiple contours...
@@ -520,6 +518,99 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
             $("<span> " + positions[i] + " </span>").appendTo(container);
         }
+    };
+
+    $.fn.webGL2contours2dopt = function (options) {
+        // "optimized contours" by truncating buffer sizes
+        // which may result in some data omission in dense cases.
+        class WebGL2Contour2d {
+            constructor(options) {
+                this.settings = $.extend({
+                    // default settings:
+                    shrink_factor: 0.1, // how much to shrink buffers
+                    feedbackContext: null,    // the underlying FeedbackContext context to use
+                    valuesArray: null,   // the array buffer of values to contour
+                    num_rows: null,
+                    num_cols: null,
+                    num_layers: 1,  // default to "flat"
+                    dx: [1, 0, 0],
+                    dy: [0, 1, 0],
+                    dz: [0, 0, 1],
+                    translation: [-1, -1, 0],
+                    color: [1, 1, 1],
+                    rasterize: false,
+                    threshold: 0,  // value at contour
+                    invalid_coordinate: -100000,  // invalidity marker for positions
+                    after_run_callback: null,   // call this after each run.
+                }, options);
+                var s = this.settings;
+                this.feedbackContext = s.feedbackContext;
+                var container = $(this.feedbackContext.canvas);
+                if (!this.feedbackContext) {
+                    throw new Error("Feedback context required.");
+                }
+                var nvalues = s.valuesArray.length;
+                var nvoxels = s.num_rows * s.num_cols * s.num_layers;
+                if (nvalues != nvoxels) {
+                    // for now strict checking
+                    throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
+                }
+                this.crossing = container.webGL2crossingPixels({
+                    feedbackContext: this.feedbackContext,
+                    valuesArray: s.valuesArray,
+                    num_rows: s.num_rows,
+                    num_cols: s.num_cols,
+                    num_layers: s.num_layers,  // default to "flat"
+                    threshold: s.threshold,
+                    shrink_factor: s.shrink_factor,
+                    // never rasterize the crossing pixels
+                });
+                // initialize segmenter upon first run.
+                this.segments = null; 
+            };
+            run () {
+                var s = this.settings;
+                var compacted = this.crossing.get_compacted_feedbacks();
+                if (!this.segments) {
+                    var container = $(this.feedbackContext.canvas);
+                    this.segments = container.webGL2SegmentPixels({
+                        feedbackContext: this.feedbackContext,
+                        indices: compacted.indices,
+                        corners: compacted.corners,
+                        num_rows: s.num_rows,
+                        num_cols: s.num_cols,
+                        rasterize: s.rasterize,
+                        dx: s.dx,
+                        dy: s.dy,
+                        dz: s.dz,
+                        translation: s.translation,
+                        threshold: s.threshold,
+                    });
+                } else {
+                    // reset buffer content
+                    this.segments.index_buffer.copy_from_array(
+                        compacted.indices
+                    );
+                    this.segments.corner_buffer.copy_from_array(
+                        compacted.corners
+                    );
+                }
+                this.segments.run();
+                //var positions = segments.get_positions();
+            };
+            set_threshold(value) {
+                this.crossing.set_threshold(value);
+                // xxxx must be after first run!
+                if (this.segments) {
+                    this.segments.set_threshold(value);
+                }
+            };
+            get_positions() {
+                return this.segments.get_positions();
+            }
+        };
+
+        return new WebGL2Contour2d(options);
     };
 
     $.fn.webGL2contours2d = function (options) {
@@ -696,10 +787,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.check_update_link = check_update_link;
                 return geometry;
             };
-            set_threshhold(value) {
-                //this.runner.uniforms.uValue.value = [value];
+            set_threshold(value) {
                 this.runner.change_uniform("uValue", [value]);
-                //this.runner.run();
             };
             get_positions(optionalPreAllocatedArrBuffer) {
                 return this.runner.feedback_array(
@@ -731,7 +820,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // global number of columnss
             uniform int uColSize;
             
-            // global contour threshhold
+            // global contour threshold
             uniform float uValue;
 
             // xxxxx add divisor for multiple contours...
@@ -859,28 +948,32 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         return new WebGL2Contour2d(options);
     };
 
-    $.fn.webGL2contours2d.simple_example = function (container) {
+    $.fn.webGL2contours2d.simple_example = function (container, opt) {
         var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
 
         var context = container.feedWebGL2({
             gl: gl,
         });
         var valuesArray = new Float32Array([
-            1,0,0,
-            0,1,0,
-            0,0,0,
-
             0,0,0,
             0,1,0,
             0,0,0,
 
             0,0,0,
-            0,1,0,
-            1,0,0,
+            0,2,0,
+            0,0,0,
+
+            0,0,0,
+            0,0,0,
+            0,0,0,
         ]);
-        var h = 0.5
-        var ddz = 0.1
-        var contours = container.webGL2contours2d(
+        var h = 0.5;
+        var ddz = 0.1;
+        var init = container.webGL2contours2d;
+        if (opt) {
+            init = container.webGL2contours2dopt;
+        }
+        var contours = init(
             {
                 feedbackContext: context,
                 valuesArray: valuesArray,
@@ -894,6 +987,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 color: [h, h, h],
                 rasterize: true,
                 threshold: 0.3,
+                // only for "optimized"
+                shrink_factor: 0.5,
             }
         );
         // attach an input to change the threshold
@@ -905,13 +1000,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var threshold = + input.val();
             gl.clearColor(0.8, 0.9, 1.0, 1.0);
             gl.clear(gl.COLOR_BUFFER_BIT);
-            contours.set_threshhold(threshold);
+            contours.set_threshold(threshold);
             contours.run();
             var tf = function(x) { return " " + x.toFixed(2)  + " "; };
             var positions = contours.get_positions();
             dump.empty();
             for (var i=0; i<positions.length; i+=4) {
-                if (positions[i] > -100) {
+                if (true || (positions[i] > -100)) {
                     $("<div>" + 
                     tf(positions[i])+ 
                     tf(positions[i+1])+ 

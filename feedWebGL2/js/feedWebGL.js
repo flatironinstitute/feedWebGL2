@@ -29,6 +29,8 @@ data loading convenience interfaces on runner.
                     // create a webgl context
                     var canvas = document.createElement( 'canvas' ); 
                     gl = canvas.getContext( 'webgl2', { alpha: false } ); 
+                } else {
+                    canvas = gl.canvas;
                 }
                 this.gl = gl;
                 this.canvas = canvas;
@@ -395,6 +397,12 @@ data loading convenience interfaces on runner.
                 this.buffer = context.gl.createBuffer();
                 this.byte_size = null;
                 this.num_elements = null;
+            };
+            copy_from_array(array) {
+                var gl = this.context.gl;
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+                gl.bufferSubData(gl.ARRAY_BUFFER, 0, array);
+                gl.bindBuffer(gl.ARRAY_BUFFER, null);
             };
             initialize_from_array(array) {
                 if (this.bytes_per_element != array.BYTES_PER_ELEMENT) {
