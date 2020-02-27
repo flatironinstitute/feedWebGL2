@@ -12,6 +12,254 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
 (function($) {
 
+    $.fn.webGL2crossingVoxels = function(options) {
+
+        class WebGL2CrossingVoxels {
+            constructor(options) {
+                this.settings = $.extend({
+                    feedbackContext: null,    // the underlying FeedbackContext context to use
+                    valuesArray: null,   // the array buffer of values to contour
+                    num_rows: null,
+                    num_cols: null,
+                    num_layers: 1,  // default to "flat"
+                    rasterize: false,
+                    threshold: 0,  // value at contour
+                    // when getting compact arrays
+                    // shrink the array sizes by this factor.
+                    shrink_factor: 0.2,
+                }, options);
+
+                var s = this.settings;
+                this.feedbackContext = s.feedbackContext;
+                var nvalues = s.valuesArray.length;
+                var nvoxels = s.num_rows * s.num_cols * s.num_layers;
+                if (nvalues != nvoxels) {
+                    // for now strict checking
+                    throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
+                }
+                // allocate and load buffer with a fresh name
+                this.buffer = this.feedbackContext.buffer()
+                this.buffer.initialize_from_array(s.valuesArray);
+                var buffername = this.buffer.name;
+
+                this.program = this.feedbackContext.program({
+                    vertex_shader: crossingVoxelsShader,
+                    fragment_shader: this.settings.fragment_shader,
+                    feedbacks: {
+                        index: {type: "int"},
+                        front_corners: {num_components: 4},
+                        back_corners: {num_components: 4},
+                    },
+                });
+
+                // set up input parameters
+                var x_offset = 1;
+                var y_offset = s.num_cols;
+                var z_offset = s.num_cols * s.num_rows;
+                var num_voxels = nvalues - (x_offset + y_offset + z_offset);
+
+                var inputs = {};
+                var add_input = function (ix, iy, iz) {
+                    var name = (("a" + ix) + iy) + iz;
+                    var dx = [0, x_offset][ix];
+                    var dy = [0, y_offset][iy];
+                    var dz = [0, z_offset][iz];
+                    inputs[name] = {
+                        per_vertex: true,
+                        num_components: 1,
+                        from_buffer: {
+                            name: buffername,
+                            skip_elements: dx + dy + dz,
+                        }
+                    }
+                };
+                add_input(0,0,0);
+                add_input(0,0,1);
+                add_input(0,1,0);
+                add_input(0,1,1);
+                add_input(1,0,0);
+                add_input(1,0,1);
+                add_input(1,1,0);
+                add_input(1,1,1);
+
+                this.runner = this.program.runner({
+                    num_instances: 1,
+                    vertices_per_instance: num_voxels,
+                    rasterize: s.rasterize,
+                    uniforms: {
+                        uRowSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_cols],
+                        },
+                        uColSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_rows],
+                        },
+                        uValue: {
+                            vtype: "1fv",
+                            default_value: [s.threshold],
+                        },
+                    },
+                    inputs: inputs,
+                });
+                this.front_corners_array = null;
+                this.back_corners_array = null;
+                this.index_array = null;
+                this.compact_length = null;
+            };
+            run() {
+                this.runner.install_uniforms();
+                this.runner.run();
+            };
+            get_compacted_feedbacks() {
+                this.run();
+                var rn = this.runner;
+                this.front_corners_array = rn.feedback_array(
+                    "front_corners",
+                    this.front_corners_array,
+                );
+                this.back_corners_array = rn.feedback_array(
+                    "back_corners",
+                    this.back_corners_array,
+                );
+                this.index_array = rn.feedback_array(
+                    "index",
+                    this.index_array,
+                );
+                if (this.compact_length === null) {
+                    // allocate arrays to size limit
+                    this.compact_length = Math.floor(
+                        this.settings.shrink_factor * this.index_array.length
+                    );
+                    this.compact_front_corners = new Float32Array(4 * this.compact_length);
+                    this.compact_back_corners = new Float32Array(4 * this.compact_length);
+                    this.compact_indices = new Int32Array(this.compact_length);
+                }
+                // compact the arrays
+                this.compact_indices = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.index_array, this.compact_indices, 1, -1
+                );
+                this.compact_front_corners = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.front_corners_array, this.compact_front_corners, 4, -1
+                );
+                this.compact_back_corners = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.back_corners_array, this.compact_back_corners, 4, -1
+                );
+                return {
+                    indices: this.compact_indices, 
+                    front_corners: this.compact_front_corners,
+                    back_corners: this.compact_back_corners,
+                };
+            };
+            set_threshold(value) {
+                this.runner.change_uniform("uValue", [value]);
+            };
+        };
+
+        var crossingVoxelsShader = `#version 300 es
+
+        // global length of rows
+        uniform int uRowSize;
+
+        // global number of columnss
+        uniform int uColSize;
+        
+        // global contour threshold
+        uniform float uValue;
+
+        // per mesh function values at voxel corners
+        in float a000, a001, a010, a011, a100, a101, a110, a111;
+
+        // corners feedbacks
+        out vec4 front_corners, back_corners;
+
+        // index feedback
+        flat out int index;
+
+        void main() {
+            // default to invalid index indicating the voxel does not cross the value.
+            index = -1;
+            front_corners = vec4(a000, a001, a010, a011);
+            back_corners = vec4(a100, a101, a110, a111);
+
+
+            // size of layer of rows and columns in 3d grid
+            int layer_size = uRowSize * uColSize;
+            // instance depth of this layer
+            int i_depth_num = gl_VertexID / layer_size;
+            // ravelled index in layer
+            int i_layer_index = gl_VertexID - (i_depth_num * layer_size);
+
+            int i_row_num = i_layer_index/ uRowSize;
+            int i_col_num = i_layer_index - (i_row_num * uRowSize);
+
+            // Dont tile last column which wraps around rows
+            if ((i_col_num < (uRowSize - 1)) && (i_row_num < (uColSize - 1))) {
+                float m = front_corners[0];
+                float M = front_corners[0];
+                vec4 corners = front_corners;
+                for (int j=0; j<2; j++) {
+                    for (int i=0; i<4; i++) {
+                        float c = corners[i];
+                        m = min(c, m);
+                        M = max(c, M);
+                    }
+                    corners = back_corners;
+                }
+                if ((m <= uValue) && (M > uValue)) {
+                    // the pixel crosses the threshold
+                    index = gl_VertexID;
+                }
+            }
+        }
+        `;
+        return new WebGL2CrossingVoxels(options);
+    };
+
+    $.fn.webGL2crossingVoxels.example = function (container) {
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+        });
+        var valuesArray = new Float32Array([
+            0,0,0,
+            0,0,0,
+            0,0,0,
+
+            0,0,0,
+            0,1,0,
+            0,0,0,
+
+            0,0,0,
+            0,0,0,
+            0,0,0,
+        ]);
+        var crossing = container.webGL2crossingVoxels({
+            feedbackContext: context,
+            valuesArray: valuesArray,
+            num_rows: 3,
+            num_cols: 3,
+            num_layers: 3,  // default to "flat"
+            threshold: 0.5,
+            shrink_factor: 0.8,
+        });
+        var compacted = crossing.get_compacted_feedbacks();
+        var indices = compacted.indices;
+        var front_corners = compacted.front_corners;
+        var back_corners = compacted.back_corners;
+        var ci = 0;
+        for (var i=0; i<indices.length; i++) {
+            $("<br/>").appendTo(container);
+            $("<span> " + indices[i] + " </span>").appendTo(container);
+            for (var j=0; j<4; j++) {
+                $("<span> " + front_corners[ci] + " " + back_corners[ci] + " </span>").appendTo(container);
+                ci ++;
+            }
+        }
+    };
+
+
     $.fn.webGL2surfaces3d = function (options) {
         // from grid of sample points generate contour line segments
 
@@ -60,6 +308,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     },
                 })
 
+                // set up input parameters
                 var x_offset = 1;
                 var y_offset = s.num_cols;
                 var z_offset = s.num_cols * s.num_rows;
