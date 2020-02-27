@@ -389,7 +389,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.runner.install_uniforms();
                 this.runner.run();
             };
-            set_threshhold(value) {
+            set_threshold(value) {
                 //this.runner.uniforms.uValue.value = [value];
                 this.runner.change_uniform("uValue", [value]);
                 //this.runner.run();
@@ -417,7 +417,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         uniform int uRowSize;
         uniform int uColSize;
         
-        // global contour threshhold input
+        // global contour threshold input
         uniform float uValue;
         
         // uniform offsets in xyz directions
@@ -682,10 +682,145 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
     };
 
+    $.fn.webGL2surfaces3dopt = function (options) {
+        // "optimized surfaces" by truncating buffer sizes
+        // which may result in some data omission in dense cases.
+        class WebGL2Surfaces3dOpt {
+            constructor(options) {
+                this.settings = $.extend({
+                    // default settings:
+                    shrink_factor: 0.1, // how much to shrink buffers
+                    feedbackContext: null,    // the underlying FeedbackContext context to use
+                    valuesArray: null,   // the array buffer of values to contour
+                    num_rows: null,
+                    num_cols: null,
+                    num_layers: 1,  // default to "flat"
+                    dx: [1, 0, 0],
+                    dy: [0, 1, 0],
+                    dz: [0, 0, 1],
+                    translation: [-1, -1, 0],
+                    color: [1, 1, 1],
+                    rasterize: false,
+                    threshold: 0,  // value at contour
+                    invalid_coordinate: -100000,  // invalidity marker for positions
+                    after_run_callback: null,   // call this after each run.
+                }, options);
+                var s = this.settings;
+                this.feedbackContext = s.feedbackContext;
+                var container = $(this.feedbackContext.canvas);
+                if (!this.feedbackContext) {
+                    throw new Error("Feedback context required.");
+                }
+                var nvalues = s.valuesArray.length;
+                var nvoxels = s.num_rows * s.num_cols * s.num_layers;
+                if (nvalues != nvoxels) {
+                    // for now strict checking
+                    throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
+                }
+                this.crossing = container.webGL2crossingVoxels({
+                    feedbackContext: this.feedbackContext,
+                    valuesArray: s.valuesArray,
+                    num_rows: s.num_rows,
+                    num_cols: s.num_cols,
+                    num_layers: s.num_layers,  // default to "flat"
+                    threshold: s.threshold,
+                    shrink_factor: s.shrink_factor,
+                    // never rasterize the crossing pixels
+                });
+                // initialize segmenter upon first run.
+                this.segments = null; 
+            };
+            run () {
+                var s = this.settings;
+                var compacted = this.crossing.get_compacted_feedbacks();
+                if (!this.segments) {
+                    var container = $(this.feedbackContext.canvas);
+                    this.segments = container.webGL2TriangulateVoxels({
+                        feedbackContext: this.feedbackContext,
+                        indices: compacted.indices,
+                        front_corners: compacted.front_corners,
+                        back_corners: compacted.back_corners,
+                        num_rows: s.num_rows,
+                        num_cols: s.num_cols,
+                        rasterize: s.rasterize,
+                        dx: s.dx,
+                        dy: s.dy,
+                        dz: s.dz,
+                        translation: s.translation,
+                        threshold: s.threshold,
+                        invalid_coordinate: s.invalid_coordinate,
+                    });
+                } else {
+                    // reset buffer content
+                    this.segments.index_buffer.copy_from_array(
+                        compacted.indices
+                    );
+                    this.segments.front_corner_buffer.copy_from_array(
+                        compacted.front_corners
+                    );
+                    this.segments.back_corner_buffer.copy_from_array(
+                        compacted.back_corners
+                    );
+                }
+                this.segments.run();
+                //var positions = segments.get_positions();
+            };
+            linked_three_geometry (THREE) {
+                // create a three.js geometry linked to the current positions feedback array.
+                // xxxx only one geometry may be linked at a time.
+                // this is a bit convoluted in an attempt to only update attributes when needed.
+                var that = this;
+                var positions = this.get_positions();
+                var normals = this.get_normals();
+                var colors = this.get_colors();
+                var geometry = new THREE.BufferGeometry();
+                geometry.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
+                geometry.setAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
+                geometry.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
+                that.link_needs_update = false;
+                var after_run = function(that) {
+                    debugger;
+                    that.link_needs_update = true;
+                }
+                var check_update_link = function() {
+                    // update the geometry positions array in place and mark for update in geometry
+                    if (! that.link_needs_update) {
+                        // only update upon request and only if needed
+                        that.link_needs_update = false;
+                        return;
+                    }
+                    geometry.attributes.position.array = that.get_positions(geometry.attributes.position.array);
+                    geometry.attributes.position.needsUpdate = true;
+                    geometry.attributes.normal.array = that.get_normals(geometry.attributes.normal.array);
+                    geometry.attributes.normal.needsUpdate = true;
+                    geometry.attributes.color.array = that.get_colors(geometry.attributes.color.array);
+                    geometry.attributes.normal.needsUpdate = true;
+                    that.link_needs_update = false;
+                }
+                this.settings.after_run_callback = after_run;
+                this.check_update_link = check_update_link;
+                return geometry;
+            };
+            set_threshold(value) {
+                debugger;
+                this.crossing.set_threshold(value);
+                // xxxx must be after first run!
+                if (this.segments) {
+                    this.segments.set_threshold(value);
+                }
+            };
+            get_positions() {
+                return this.segments.get_positions();
+            }
+        };
+
+        return new WebGL2Surfaces3dOpt(options);
+    };
+
     $.fn.webGL2surfaces3d = function (options) {
         // from grid of sample points generate contour line segments
 
-        class WebGL2Contour2d {
+        class WebGL2Surfaces3d {
             constructor(options) {
                 this.settings = $.extend({
                     // default settings:
@@ -863,7 +998,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.check_update_link = check_update_link;
                 return geometry;
             };
-            set_threshhold(value) {
+            set_threshold(value) {
                 //this.runner.uniforms.uValue.value = [value];
                 this.runner.change_uniform("uValue", [value]);
                 //this.runner.run();
@@ -894,7 +1029,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         uniform int uRowSize;
         uniform int uColSize;
         
-        // global contour threshhold
+        // global contour threshold
         uniform float uValue;
         
         // uniform offsets in xyz directions
@@ -1079,10 +1214,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
             `;
         
-        return new WebGL2Contour2d(options);
+        return new WebGL2Surfaces3d(options);
     };
 
-    $.fn.webGL2surfaces3d.simple_example = function (container) {
+    $.fn.webGL2surfaces3d.simple_example = function (container, opt) {
         var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
 
         var context = container.feedWebGL2({
@@ -1103,7 +1238,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         ]);
         var h = 0.5
         var ddz = 0.1
-        var contours = container.webGL2surfaces3d(
+        var init = container.webGL2surfaces3d;
+        if (opt) {
+            init = container.webGL2surfaces3dopt;
+        }
+        var contours = init(
             {
                 feedbackContext: context,
                 valuesArray: valuesArray,
@@ -1117,6 +1256,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 color: [h, h, h],
                 rasterize: true,
                 threshold: 0.3,
+                // only for "optimized"
+                shrink_factor: 0.8,
             }
         );
         // attach an input to change the threshold
@@ -1128,7 +1269,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var threshold = + input.val();
             gl.clearColor(0.8, 0.9, 1.0, 1.0);
             gl.clear(gl.COLOR_BUFFER_BIT);
-            contours.set_threshhold(threshold);
+            contours.set_threshold(threshold);
             contours.run();
             var tf = function(x) { return " " + x.toFixed(2)  + " "; };
             var positions = contours.get_positions();
