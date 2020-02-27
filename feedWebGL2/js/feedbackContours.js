@@ -598,6 +598,33 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.segments.run();
                 //var positions = segments.get_positions();
             };
+            linked_three_geometry (THREE) {
+                // create a three.js geometry linked to the current positions feedback array.
+                // xxxx only one geometry may be linked at a time.
+                var that = this;
+                var positions = this.get_positions();
+                var geometry = new THREE.BufferGeometry();
+                geometry.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
+                that.link_needs_update = false;
+                var after_run = function(that) {
+                    debugger;
+                    that.link_needs_update = true;
+                }
+                var check_update_link = function() {
+                    // update the geometry positions array in place and mark for update in geometry
+                    if (! that.link_needs_update) {
+                        // only update upon request and only if needed
+                        that.link_needs_update = false;
+                        return;
+                    }
+                    geometry.attributes.position.array = that.get_positions(geometry.attributes.position.array);
+                    geometry.attributes.position.needsUpdate = true;
+                    that.link_needs_update = false;
+                }
+                this.settings.after_run_callback = after_run;
+                this.check_update_link = check_update_link;
+                return geometry;
+            };
             set_threshold(value) {
                 debugger;
                 this.crossing.set_threshold(value);
