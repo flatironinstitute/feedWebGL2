@@ -240,7 +240,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             valuesArray: valuesArray,
             num_rows: 3,
             num_cols: 3,
-            num_layers: 3,  // default to "flat"
+            num_layers: 3, 
             threshold: 0.5,
             shrink_factor: 0.8,
         });
@@ -259,6 +259,428 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
     };
 
+    $.fn.webGL2TriangulateVoxels = function (options) {
+        class WebGL2TriangulateVoxels {
+
+            constructor(options) { 
+                this.settings = $.extend({
+                    feedbackContext: null,
+                    // array of indices (from crossing voxels)
+                    indices: null,
+                    // array of corners (from crossing voxels)
+                    front_corners: null,
+                    back_corners: null,
+                    // volume dimensions
+                    num_rows: null,
+                    num_cols: null,
+                    dx: [1, 0, 0],
+                    dy: [0, 1, 0],
+                    dz: [0, 0, 1],
+                    translation: [-1, -1, 0],
+                    color: [1, 1, 1],
+                    rasterize: false,
+                    threshold: 0,  // value at contour
+                    invalid_coordinate: -100000,  // invalidity marker for positions
+                    after_run_callback: null,   // call this after each run.
+                }, options);
+                var s = this.settings;
+                this.feedbackContext = s.feedbackContext;
+
+                // allocate and load buffers with a fresh name
+                this.index_buffer = this.feedbackContext.buffer()
+                this.index_buffer.initialize_from_array(s.indices);
+                this.front_corner_buffer = this.feedbackContext.buffer()
+                this.front_corner_buffer.initialize_from_array(s.front_corners);
+                this.back_corner_buffer = this.feedbackContext.buffer()
+                this.back_corner_buffer.initialize_from_array(s.back_corners);
+                // add vertex count bogus input for Firefox
+                const N_TETRAHEDRA = 6;
+                const N_TRIANGLES = 2;  
+                const N_VERTICES = 3;
+                var vertices_per_instance = N_TETRAHEDRA * N_TRIANGLES * N_VERTICES;
+                // add vertex count bogus input for Firefox
+                var vertexNumArray = new Float32Array(Array.from(Array(vertices_per_instance).keys()));
+                this.vertex_num_buffer = this.feedbackContext.buffer()
+                this.vertex_num_buffer.initialize_from_array(vertexNumArray);
+
+                this.program = this.feedbackContext.program({
+                    vertex_shader: triangulate_vertex_shader,
+                    fragment_shader: tetrahedra_fragment_shader,
+                    feedbacks: {
+                        vPosition: {num_components: 3},
+                        vNormal: {num_components: 3},
+                        vColor: {num_components: 3},
+                    },
+                })
+
+                this.runner = this.program.runner({
+                    run_type: "TRIANGLES",
+                    num_instances: s.indices.length,
+                    vertices_per_instance: vertices_per_instance,
+                    rasterize: s.rasterize,
+                    uniforms: {
+                        uRowSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_cols],
+                        },
+                        uColSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_rows],
+                        },
+                        uValue: {
+                            vtype: "1fv",
+                            default_value: [s.threshold],
+                        },
+                        dx: {
+                            vtype: "3fv",
+                            default_value: s.dx,
+                        },
+                        dy: {
+                            vtype: "3fv",
+                            default_value: s.dy,
+                        },
+                        dz: {
+                            vtype: "3fv",
+                            default_value: s.dz,
+                        },
+                        translation: {
+                            vtype: "3fv",
+                            default_value: s.translation,
+                        },
+                        uInvalid: {
+                            vtype: "1fv",
+                            default_value: [s.invalid_coordinate],
+                        },
+                    },
+                    inputs: {
+                        index: {
+                            per_vertex: false,
+                            num_components: 1,
+                            type: "int",
+                            from_buffer: {
+                                name: this.index_buffer.name,
+                            },
+                        },
+                        front_corners: {
+                            per_vertex: false,
+                            num_components: 4,
+                            from_buffer: {
+                                name: this.front_corner_buffer.name,
+                            },
+                        },
+                        back_corners: {
+                            per_vertex: false,
+                            num_components: 4,
+                            from_buffer: {
+                                name: this.back_corner_buffer.name,
+                            },
+                        },
+                        aVertexCount: {   // bogus attribute required by Firefox
+                            per_vertex: true,
+                            num_components: 1,
+                            from_buffer: {
+                                name: this.vertex_num_buffer.name,
+                            },
+                        },
+                    },
+                });
+            };
+            run() {
+                this.runner.install_uniforms();
+                this.runner.run();
+            };
+            set_threshhold(value) {
+                //this.runner.uniforms.uValue.value = [value];
+                this.runner.change_uniform("uValue", [value]);
+                //this.runner.run();
+            };
+            get_positions(optionalPreAllocatedArrBuffer) {
+                return this.runner.feedback_array(
+                    "vPosition",
+                    optionalPreAllocatedArrBuffer);
+            };
+            get_normals(optionalPreAllocatedArrBuffer) {
+                return this.runner.feedback_array(
+                    "vNormal",
+                    optionalPreAllocatedArrBuffer);
+            };
+            get_colors(optionalPreAllocatedArrBuffer) {
+                return this.runner.feedback_array(
+                    "vColor",
+                    optionalPreAllocatedArrBuffer);
+            };
+        };
+
+        var triangulate_vertex_shader = `#version 300 es
+
+        // global length of rows, cols inputs
+        uniform int uRowSize;
+        uniform int uColSize;
+        
+        // global contour threshhold input
+        uniform float uValue;
+        
+        // uniform offsets in xyz directions
+        uniform vec3 dx, dy, dz, translation;
+        
+        // invalid value marker
+        uniform float uInvalid;
+
+        // per mesh corner values
+        in vec4 front_corners, back_corners;
+
+        // per mesh ravelled voxel index
+        in int index;
+
+        // bogus vertex attribute required by Firefox (but not Chrome)
+        in float aVertexCount;
+
+        // feedbacks out
+        out vec3 vColor, vPosition, vNormal;
+
+        // Which vertex in which triangle on which tetrahedron?
+        //   gl_VertexID encodes tetrahedron_number 0..4, triangle_number 0..1, vertex number 0..2
+        //   for a total of 6 * 2 * 3 = 36 vertices per "mesh instance".
+        //   aVertexCount = tetrahedron_number * 10 + triangle_number * 3 + vertex_number;
+        const int N_TETRAHEDRA = 6; // tetrahedra per cube
+        const int N_TRIANGLES = 2;  // triangles per tetrahedron
+        const int N_VERTICES = 3;   // vertices per triangle
+        const int N_CORNERS = 8;    // number of cube corners
+        const int N_T_VERTICES = 4; // number of vertices in a tetrahedron
+
+        // Crossing index is binary integer associated with each tetrahedron of form
+        //   (triangle_num << 4) || ((fA > v) << 3 || ((fB > v) << 2 || ((fC > v) << 1 || ((fD > v)
+        const int N_CROSSING_INDEX = 32;  // 2 ** 5
+
+        // corner offsets
+        const vec3 offsets[N_CORNERS] = vec3[] (
+            vec3(0.0, 0.0, 0.0),
+            vec3(0.0, 0.0, 1.0),
+            vec3(0.0, 1.0, 0.0),
+            vec3(0.0, 1.0, 1.0),
+            vec3(1.0, 0.0, 0.0),
+            vec3(1.0, 0.0, 1.0),
+            vec3(1.0, 1.0, 0.0),
+            vec3(1.0, 1.0, 1.0)
+        );
+
+        // vertex indices for tiling tetrahedra per tetrahedron number
+        const int A_INDEX = 0;
+        const int[N_TETRAHEDRA] B_index = int[] (4, 6, 2, 3, 1, 5) ;
+        const int[N_TETRAHEDRA] C_index = int[] (6, 2, 3, 1, 5, 4) ;
+        const int D_INDEX = 7;
+
+        // crossing index to triangle vertices endpoint indices
+        const int U_left[N_CROSSING_INDEX] = int[] (
+            -1, 3, 2, 0, 1, 0, 0, 0, 0, 1, 1, 1, 2, 2, 3,-1,
+            -1,-1,-1, 0,-1, 0, 0,-1,-1, 1, 1,-1, 2,-1,-1,-1);
+        const int U_right[N_CROSSING_INDEX] = int[] (
+            -1, 1, 1, 2, 2, 1, 1, 2, 2, 0, 0, 2, 0, 1, 1,-1,
+            -1,-1,-1, 3,-1, 3, 2,-1,-1, 3, 2,-1, 1,-1,-1,-1);
+        const int V_left[N_CROSSING_INDEX] = int[] (
+            -1, 3, 2, 1, 1, 0, 3, 0, 0, 2, 1, 1, 3, 2, 3,-1,
+            -1,-1,-1, 1,-1, 2, 3,-1,-1, 2, 3,-1, 3,-1,-1,-1);
+        const int V_right[N_CROSSING_INDEX] = int[] (
+            -1, 0, 3, 2, 0, 3, 1, 1, 3, 0, 2, 3, 0, 0, 2,-1,
+            -1,-1,-1, 2,-1, 3, 1,-1,-1, 0, 2,-1, 0,-1,-1,-1);
+        const int W_left[N_CROSSING_INDEX] = int[] (
+            -1, 3, 2, 0, 1, 2, 0, 0, 0, 1, 3, 1, 2, 2, 3,-1,
+            -1,-1,-1, 1,-1, 2, 3,-1,-1, 2, 3,-1, 3,-1,-1,-1);
+        const int W_right[N_CROSSING_INDEX] = int[] (
+            -1, 2, 0, 3, 3, 1, 2, 3, 1, 3, 0, 0, 1, 3, 0,-1,
+            -1,-1,-1, 3,-1, 1, 2,-1,-1, 3, 0,-1, 1,-1,-1,-1);
+
+        void main() {
+
+            // initially set output point to invalid
+            gl_Position = vec4(uInvalid, uInvalid, uInvalid, uInvalid);
+            vPosition = gl_Position.xyz;
+            // use the bogus vertexCount parameter so it is not erased by the optimizer
+            float grey = aVertexCount / float(N_TETRAHEDRA * N_TRIANGLES * N_VERTICES);
+            vColor = vec3(float(gl_VertexID) * 0.01, grey, 0.0);  // temp value for debugging
+            vNormal = vec3(0.0, 0.0, 1.0);    // arbitrary initial value
+
+            // size of layer of rows and columns in 3d grid
+            int layer_size = uRowSize * uColSize;
+            // instance depth of this layer
+            int i_depth_num = index / layer_size;
+            // ravelled index in layer
+            int i_layer_index = index - (i_depth_num * layer_size);
+            // instance row
+            int i_row_num = i_layer_index / uRowSize;
+            // instance column
+            int i_col_num = i_layer_index - (i_row_num * uRowSize);
+
+            // Dont tile last column which wraps around or last row
+            if ((index >= 0) && (i_col_num < (uRowSize - 1)) && (i_row_num < (uColSize - 1))) {
+                // float versions for calculations
+                float layer_num = float(i_depth_num);
+                float row_num = float(i_row_num);
+                float col_num = float(i_col_num);
+                // determine which vertex in which triangle in which tetrahedron to interpolate
+                int iVertexCount = gl_VertexID;
+                int iTetrahedronNumber = iVertexCount / (N_TRIANGLES * N_VERTICES);
+                int iTetIndex = iVertexCount - (N_TRIANGLES * N_VERTICES) * iTetrahedronNumber;
+                int iTriangleNumber = iTetIndex / N_VERTICES;
+                int iVertexNumber = iTetIndex - (iTriangleNumber * N_VERTICES);
+                // offsets of vertices for this tet number
+                vec3 t_offsets[N_T_VERTICES] = vec3[](
+                    offsets[A_INDEX],
+                    offsets[B_index[iTetrahedronNumber]],
+                    offsets[C_index[iTetrahedronNumber]],
+                    offsets[D_INDEX]
+                );
+                // weights as array
+                float wts[N_CORNERS] = float[](
+                    front_corners[0], front_corners[1], front_corners[2], front_corners[3], 
+                    back_corners[0], back_corners[1], back_corners[2], back_corners[3]);
+                    // a000, a001, a010, a011, a100, a101, a110, a111
+                // weights of vertices for this tet number
+                float t_wts[N_T_VERTICES] = float[](
+                    wts[A_INDEX],
+                    wts[B_index[iTetrahedronNumber]],
+                    wts[C_index[iTetrahedronNumber]],
+                    wts[D_INDEX]
+                );
+                // crossing index
+                int ci = iTriangleNumber << 1;
+                if (t_wts[0] > uValue) { ci = ci + 1; }
+                ci = ci << 1;
+                if (t_wts[1] > uValue) { ci = ci + 1; }
+                ci = ci << 1;
+                if (t_wts[2] > uValue) { ci = ci + 1; }
+                ci = ci << 1;
+                if (t_wts[3] > uValue) { ci = ci + 1; }
+
+                // If U_left[ci] for this corner is negative (invalid index) then there is no such triangle here.
+                if (U_left[ci] >= 0) {
+                    int SegLs[N_VERTICES] = int[](U_left[ci], V_left[ci], W_left[ci]);
+                    int SegRs[N_VERTICES] = int[](U_right[ci], V_right[ci], W_right[ci]);
+                    
+                    int SegL = SegLs[iVertexNumber];
+                    int SegR = SegRs[iVertexNumber];
+                    vec3 offsetL = t_offsets[SegL];
+                    vec3 offsetR = t_offsets[SegR];
+                    
+                    float wtL = t_wts[SegL];
+                    float wtR = t_wts[SegR];
+                    // check denominator is not too small? xxxx
+                    float delta = (wtL - uValue) / (wtL - wtR);
+                    vec3 combined_offset = ((1.0 - delta) * offsetL) + (delta * offsetR);
+                    vec3 vertex = combined_offset + vec3(col_num, row_num, layer_num);
+                    vPosition = dx * vertex[0] + dy * vertex[1] + dz * vertex[2] + translation;
+                    gl_Position.xyz = vPosition;
+                    gl_Position[3] = 1.0;
+                    //vdump = float[4](vertex[0], vertex[1], vertex[2], delta);
+
+                    // Compute normal for the whole tetrahedron
+                    vec3 center = (t_offsets[0] + t_offsets[1] + t_offsets[2] + t_offsets[3])/4.0;
+                    vec3 nm = ( 
+                        + (t_offsets[0] - center) * (t_wts[0] - uValue) 
+                        + (t_offsets[1] - center) * (t_wts[1] - uValue) 
+                        + (t_offsets[2] - center) * (t_wts[2] - uValue) 
+                        + (t_offsets[3] - center) * (t_wts[3] - uValue) 
+                        );
+                    float ln = length(nm);
+                    if (ln > 1e-12) {
+                        vNormal = nm / ln;
+                    }
+                    vColor = abs(vNormal);  // XXX FOR TESTING ONLY
+                }
+            }
+            //vPosition = gl_Position.xyz;
+        }
+        `;
+
+        var tetrahedra_fragment_shader = `#version 300 es
+        #ifdef GL_ES
+            precision highp float;
+        #endif
+        in vec3 vColor;
+        out vec4 color;
+
+        void main() {
+            color = vec4(vColor, 1.0);
+        }
+        `;
+
+        return new WebGL2TriangulateVoxels(options);
+    };
+
+    $.fn.webGL2TriangulateVoxels.example = function (container) {
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+        });
+        /*
+        Copied from data dump:
+
+        0 0 0 0 0 0 0 0 1
+        1 0 0 0 0 0 0 1 0
+        3 0 0 0 1 0 0 0 0
+        4 0 0 1 0 0 0 0 0
+        9 0 0 0 0 0 1 0 0
+        10 0 0 0 0 1 0 0 0
+        12 0 1 0 0 0 0 0 0
+        13 1 0 0 0 0 0 0 0
+        -1 -1 -1 -1 -1 -1 -1 -1 -1
+        -1 -1 -1 -1 -1 -1 -1 -1 -1
+        -1 -1 -1 -1 -1 -1 -1 -1 -1
+
+        First column is index, alternating columns are front/back corners after.
+        */
+        var front_cornersArray = new Float32Array([
+            0, 0, 0, 0,
+            0, 0, 0 ,1,
+            0, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 0,
+            1, 0, 0, 0,
+            -1.,-1,-1,-1, 
+            -1.,-1,-1,-1, 
+            -1.,-1,-1,-1, 
+        ]);
+        var back_cornersArray = new Float32Array([
+            0, 0, 0, 1,
+            0, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 0,
+            1, 0, 0, 0,
+            0, 0, 0, 0,
+            -1.,-1,-1,-1, 
+            -1.,-1,-1,-1, 
+            -1.,-1,-1,-1, 
+        ]);
+        var indexArray = new Int32Array([
+            0,1,3,4,9,10,12,13,-1,-1,-1
+        ]);
+        var segments = container.webGL2TriangulateVoxels({
+            feedbackContext: context,
+            indices: indexArray,
+            front_corners: front_cornersArray,
+            back_corners: back_cornersArray,
+            num_rows: 3,
+            num_cols: 3,
+            rasterize: true,
+            dx: [0.3, 0, 0],
+            dy: [0, 0.3, 0],
+            dz: [0, 0, 0.3],
+            threshold: 0.5,
+        });
+        segments.run();
+        var positions = segments.get_positions();
+        for (var i=0; i<positions.length; i++) {
+            if (i % 3 == 0) {
+                $("<br/>").appendTo(container);
+            }
+            $("<span> " + positions[i] + " </span>").appendTo(container);
+        }
+    };
 
     $.fn.webGL2surfaces3d = function (options) {
         // from grid of sample points generate contour line segments
@@ -498,7 +920,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         in float aVertexCount;
 
         // Crossing index is binary integer of form
-        //   (triangle_num << 4) || ((fA > v) << 3 || ((fA > v) << 2 || ((fA > v) << 1 || ((fA > v)
+        //   (triangle_num << 4) || ((fA > v) << 3 || ((fB > v) << 2 || ((fC> v) << 1 || ((fD > v)
         const int N_CROSSING_INDEX = 32;  // 2 ** 5
 
         // corner offsets
