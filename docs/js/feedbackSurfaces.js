@@ -812,9 +812,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     this.segments.set_threshold(value);
                 }
             };
-            get_positions() {
-                return this.segments.get_positions();
-            }
+            get_positions(a) {
+                return this.segments.get_positions(a);
+            };
+            get_normals(a) {
+                return this.segments.get_normals(a);
+            };
+            get_colors(a) {
+                return this.segments.get_colors(a);
+            };
         };
 
         return new WebGL2Surfaces3dOpt(options);

@@ -118,7 +118,7 @@
             var h = 1.5 / dim;
             var ddz = h * 0.1;
             var tr = 0.8
-            surfaces = container.webGL2surfaces3d(
+            surfaces = container.webGL2surfaces3dopt(
                 {
                     feedbackContext: context,
                     valuesArray: valuesArray,
@@ -132,13 +132,14 @@
                     color: [1, 0, 0],
                     rasterize: true,
                     threshold: 150,
+                    shrink_factor: 0.4,  // how much to shrink the arrays
                 }
             );
             var update = (function () {
                 var threshold = + slider.slider("option", "value");
                 gl.clearColor(0.8, 0.9, 1.0, 1.0);
                 gl.clear(gl.COLOR_BUFFER_BIT);
-                surfaces.set_threshhold(threshold);
+                surfaces.set_threshold(threshold);
                 surfaces.run();
                 
                 if (scene_initialized) {
