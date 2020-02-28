@@ -29,6 +29,8 @@ data loading convenience interfaces on runner.
                     // create a webgl context
                     var canvas = document.createElement( 'canvas' ); 
                     gl = canvas.getContext( 'webgl2', { alpha: false } ); 
+                } else {
+                    canvas = gl.canvas;
                 }
                 this.gl = gl;
                 this.canvas = canvas;
@@ -76,6 +78,37 @@ data loading convenience interfaces on runner.
                 this.programs[prog.name] = prog;
                 return prog;
             };
+            filter_degenerate_entries(sentinel, from_buffer, to_buffer, num_components, fill){
+                // where the sentinel is negative the from_buffer is degenerate
+                // pack non-degenerate entries into to_buffer
+                // KISS implementation for now (no sub-buffer copies)
+                fill = fill || 0;
+                var limit = to_buffer.length;
+                var to_index = 0;
+                var from_index = 0;
+                var nsentinel = sentinel.length;
+                for (var i=0; i<nsentinel; i++) {
+                    if (sentinel[i] < 0) {
+                        // skip
+                        from_index += num_components;
+                    } else {
+                        // copy
+                        for (var j=0; j<num_components; j++) {
+                            to_buffer[to_index] = from_buffer[from_index];
+                            from_index ++;
+                            to_index ++;
+                        }
+                    }
+                    if (to_index >= limit) {
+                        break;  // buffer may not be large enough for all valid values.
+                    }
+                }
+                while (to_index < limit) {
+                    to_buffer[to_index] = fill;
+                    to_index ++;
+                }
+                return to_buffer;
+            }
         };
 
         var noop_fragment_shader = `#version 300 es
@@ -190,6 +223,7 @@ data loading convenience interfaces on runner.
                 this.settings = $.extend({
                     // default settings:
                     name: null,
+                    num_instances: 1, // default not instanced
                     run_type: "POINTS",   // run glsl program point by point (not triangles or lines, default)
                     uniforms: {
                         //"translation": {
@@ -261,6 +295,10 @@ data loading convenience interfaces on runner.
                 this.run_count = 0;
             };
             check_input_bindings() {
+                // xxx rebind all inputs?
+                for (var name in this.inputs) {
+                    this.inputs[name].bindBuffer();
+                }
                 var unbound = [];
                 for (var name in this.inputs) {
                     if (!this.inputs[name].bound) {
@@ -363,6 +401,12 @@ data loading convenience interfaces on runner.
                 this.buffer = context.gl.createBuffer();
                 this.byte_size = null;
                 this.num_elements = null;
+            };
+            copy_from_array(array) {
+                var gl = this.context.gl;
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+                gl.bufferSubData(gl.ARRAY_BUFFER, 0, array);
+                gl.bindBuffer(gl.ARRAY_BUFFER, null);
             };
             initialize_from_array(array) {
                 if (this.bytes_per_element != array.BYTES_PER_ELEMENT) {
@@ -537,6 +581,14 @@ data loading convenience interfaces on runner.
                 return true;  // mainly for testing
             };
             bindBuffer(tf_buffer, skip_elements, element_stride) {
+                // xxx rebinding logic
+                tf_buffer = tf_buffer || this.tf_buffer;
+                skip_elements = skip_elements || this.skip_elements;
+                element_stride = element_stride || this.element_stride;
+                this.tf_buffer = tf_buffer;
+                this.skip_elements = skip_elements;
+                this.element_stride = element_stride;
+                // end of rebind logic
                 var gl = this.runner.program.context.gl;
                 var shaderProgram = this.runner.program.gl_program;
                 gl.bindBuffer(gl.ARRAY_BUFFER, tf_buffer.buffer);
