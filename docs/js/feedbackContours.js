@@ -262,7 +262,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     rasterize: false,
                     threshold: 0,  // value at contour
                     invalid_coordinate: -100000,  // invalidity marker for positions
-                    after_run_callback: null,   // call this after each run.
                 }, options);
                 var s = this.settings;
                 this.feedbackContext = s.feedbackContext;
@@ -596,6 +595,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     );
                 }
                 this.segments.run();
+                var after_run_callback = this.settings.after_run_callback;
+                if (after_run_callback) {
+                    after_run_callback(this);
+                }
                 //var positions = segments.get_positions();
             };
             linked_three_geometry (THREE) {
