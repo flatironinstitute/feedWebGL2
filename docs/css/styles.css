@@ -36,6 +36,30 @@ h4 {
   margin: 0 1rem 1rem 1rem;
 }
 
+.grid9 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: repeat(4, 30%);;
+  grid-column-gap: 10px;
+  grid-row-gap: 10px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  margin-left: 10px;
+  margin-right: 10px;
+  width:98vmax;
+  height:98vmax;
+}
+
+.grid9_item {
+  background-color: #999;
+}
+.grid9_explanation {
+  background-color: rgb(221, 221, 119);
+}
+.grid9_slider {
+  width: 25vmax;
+}
+
 .intro-text {
   max-width: 40rem;
   margin: 0 auto;
