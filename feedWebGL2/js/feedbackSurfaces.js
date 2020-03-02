@@ -694,16 +694,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     num_rows: null,
                     num_cols: null,
                     num_layers: 1,  // default to "flat"
-                    dx: [1, 0, 0],
-                    dy: [0, 1, 0],
-                    dz: [0, 0, 1],
-                    translation: [-1, -1, 0],
+                    //dx: [1, 0, 0],
+                    //dy: [0, 1, 0],
+                    //dz: [0, 0, 1],
+                    //translation: [-1, -1, 0],
                     color: [1, 1, 1],
                     rasterize: false,
                     threshold: 0,  // value at contour
                     invalid_coordinate: -100000,  // invalidity marker for positions
                     after_run_callback: null,   // call this after each run.
                 }, options);
+                this.check_geometry();
                 var s = this.settings;
                 this.feedbackContext = s.feedbackContext;
                 var container = $(this.feedbackContext.canvas);
@@ -729,6 +730,21 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // initialize segmenter upon first run.
                 this.segments = null; 
             };
+            check_geometry() {
+                // arrange the geometry parameters to fit in [-1:1] cube unless specified otherwise
+                var s = this.settings;
+                if (!s.dx) {
+                    // geometry needs specifying:
+                    var max_dimension = Math.max(s.num_rows, s.num_cols, s.num_layers);
+                    var dpixel = 2.0 / max_dimension;
+                    s.dx = [dpixel, 0, 0];
+                    s.dy = [0, dpixel, 0];
+                    s.dz = [0, 0, dpixel];
+                    if (!s.translation) {
+                        s.translation = [-0.5 * s.num_cols * dpixel, -0.5 * s.num_rows * dpixel, -0.5 * s.num_layers * dpixel]
+                    }
+                }
+            }
             run () {
                 var s = this.settings;
                 var compacted = this.crossing.get_compacted_feedbacks();
@@ -805,7 +821,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 return geometry;
             };
             set_threshold(value) {
-                debugger;
+                this.settings.threshold = value;
                 this.crossing.set_threshold(value);
                 // xxxx must be after first run!
                 if (this.segments) {

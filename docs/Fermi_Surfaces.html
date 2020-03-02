@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Fermi Surfaces 3d Visualizations</title>
+    <meta charset="utf-8" />
+    <link
+      href="https://fonts.googleapis.com/css?family=Open+Sans"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./css/normalize.css" />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <link rel="stylesheet" href="./css/jquery-ui.css" />
+  </head>
+
+  <body class="container">
+
+    <div class="grid9">
+      <div id="E_full_0" class="grid9_item"> E_full_0 </div>
+      <div id="E_full_1" class="grid9_item"> E_full_1 </div>
+      <div id="E_lowest" class="grid9_item"> E_lowest </div>
+      <div id="left_explanation" class="grid9_explanation"> 
+         Left explanation
+      </div>
+      <div id="wire_frame" class="grid9_item"> wire frame rotator </div>
+      <div id="right_explanation" class="grid9_explanation">
+        Right explanation 
+      </div>
+      <div id="V_full_0" class="grid9_item"> V_full_0 </div>
+      <div id="V_full_1" class="grid9_item"> V_full_1 </div>
+      <div id="V_lowest" class="grid9_item"> V_lowest </div>
+    </div>
+
+    <script src="./js/three.min.js"></script>
+    <script src="./js/OrbitControls.js"></script>
+    <script src="./js/jquery.min.js"></script>
+    <script src="./js/jquery-ui.js"></script>
+    <script src="./js/feedWebGL.js"></script>
+    <script src="./js/feedbackSurfaces.js"></script>
+
+    <script>
+      debugger;
+      var json_data, name_to_controller, wire_frame;
+
+      class SolidController {
+        constructor(options) {
+          var that = this;
+          this.settings = $.extend({}, options);
+          var s = this.settings;
+          this.container = $("#" + s.name);
+          //this.container.html("Loaded: " + s.name);
+          this.container.empty();
+          this.context = this.container.feedWebGL2({});
+          this.valuesArray = new Float32Array(s.values);
+          var middle = 0.5 * (s.min_value + s.max_value)
+          this.surfaces = this.container.webGL2surfaces3dopt(
+                {
+                    feedbackContext: this.context,
+                    valuesArray: this.valuesArray,
+                    num_rows: s.num_rows,
+                    num_cols: s.num_cols,
+                    num_layers: s.num_layers,
+                    rasterize: false,
+                    threshold: middle,
+                    shrink_factor: 0.2,  // how much to shrink the arrays
+                }
+            );
+            this.slider_readout = $('<div class="grid9_slider">readout</div>').appendTo(this.container)
+            this.slider = $("<div></div>").appendTo(this.container);
+            
+            var update = function () {
+                var threshold = + that.slider.slider("option", "value");
+                that.slider_readout.html(that.settings.name + ": " + threshold.toFixed(2))
+                that.surfaces.set_threshold(threshold);
+                that.surfaces.run();
+                
+                if (that.scene_initialized) {
+                    that.update_scene();
+                } else {
+                    that.initialize_scene();
+                }
+            };
+
+            this.slider.slider({
+                min: s.min_value,
+                max: s.max_value,
+                value: middle,
+                step: 0.01 * (s.max_value - s.min_value),
+                slide: update,
+                change: update,
+            })
+            this.scene_initialized = false;
+
+            update();
+        };
+
+        initialize_scene() {
+          var that = this;
+          var $container = this.container;
+          var container = $container[0];
+          var canvas = document.createElement( 'canvas' ); 
+          var context = canvas.getContext( 'webgl2', { alpha: false } ); 
+          this.renderer = new THREE.WebGLRenderer( { canvas: canvas, context: context } );
+          //renderer = new THREE.WebGLRenderer();
+          this.renderer.setPixelRatio( window.devicePixelRatio );
+          this.renderer.setSize( $container.width() * 0.99, $container.height()*0.8);
+          //renderer.setSize( window.innerWidth, window.innerHeight );
+          this.renderer.outputEncoding = THREE.sRGBEncoding;
+          container.appendChild( this.renderer.domElement );
+
+          this.scene = new THREE.Scene();
+
+          this.scene.add( new THREE.AmbientLight( 0x444444 ) );
+
+          this.camera = new THREE.PerspectiveCamera( 45, $container.width()/$container.height(), 1, 10000 );
+          this.camera.position.set( 0, 0, 4 );
+          this.geometry = this.surfaces.linked_three_geometry(THREE);
+          //geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0,0,0), 1.0);
+          // material
+          var material = new THREE.MeshNormalMaterial( {  } );
+          material.side = THREE.DoubleSide;
+
+          // mesh
+          this.mesh = new THREE.Mesh( this.geometry,  material );
+          this.scene.add( this.mesh );
+
+          //this.orbitControls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+          //this.orbitControls.userZoom = false;
+          //this.clock = new THREE.Clock();
+
+          this.update_scene();
+          this.positions = this.geometry.attributes.position.array;
+
+          /*
+          var animate = function () {
+              that.surfaces.check_update_link();
+              var delta = that.clock.getDelta();
+              that.orbitControls.update(delta);
+              that.renderer.render( that.scene, that.camera );
+              requestAnimationFrame( animate );
+          };
+
+          animate();
+          */
+
+          that.renderer.render( that.scene, that.camera );
+          this.scene_initialized = true;
+        };
+
+        update_scene() {
+          // update is not automagic because there is no animation loop
+          this.surfaces.check_update_link();
+          this.renderer.render( this.scene, this.camera );
+        };
+      };
+
+      var set_up = function(data) {
+        debugger;
+        json_data = data;
+        for (name in data) {
+          name_to_controller = new SolidController(data[name]);
+        }
+      };
+
+      var on_load_failure = function() {
+            alert("Could not load local JSON data.\n" +
+                    "You may need to run a web server to avoid cross origin restrictions.")
+        };
+
+      $.getJSON("data/Fermi_surface.json", set_up).fail(on_load_failure);
+
+    </script>
+  </body>
+</html>
