@@ -41,12 +41,114 @@
       debugger;
       var json_data, name_to_controller, wire_frame;
 
+      class WireFrameCombo {
+        constructor(identifier, name_to_controller) {
+          // construct only after the controllers have executed at least once.
+          var that = this;
+          this.name_to_controller = name_to_controller;
+          // assign offsets to esternal controllers and determine buffer length for vertices and colors
+          var total = 0;
+          for (var name in name_to_controller) {
+            var controller = name_to_controller[name];
+            controller.array_offset = total;
+            total += controller.positions.length;
+          }
+          // initialize vertex and color arrays
+          this.array_length = total;
+          this.colors_array = new Float32Array(total);
+          this.vertices_array = new Float32Array(total);
+          for (var name in name_to_controller) {
+            name_to_controller[name].update_wireframe(this, true);
+          }
+
+          // set up the three.js scene
+          this.$container = $("#" + identifier);
+          this.container = this.$container[0];
+          this.canvas = document.createElement( 'canvas' ); 
+          this.context = this.canvas.getContext( 'webgl2', { alpha: false } ); 
+          this.renderer = new THREE.WebGLRenderer( { canvas: this.canvas, context: this.context } );
+          this.renderer.setPixelRatio( window.devicePixelRatio );
+          this.renderer.setSize( this.$container.width() * 0.99, this.$container.height()*0.95);
+          //renderer.setSize( window.innerWidth, window.innerHeight );
+          this.renderer.outputEncoding = THREE.sRGBEncoding;
+          this.container.appendChild( this.renderer.domElement );
+
+          this.scene = new THREE.Scene();
+
+          this.scene.add( new THREE.AmbientLight( 0x444444 ) );
+
+          this.camera = new THREE.PerspectiveCamera( 45, this.$container.width()/this.$container.height(), 1, 10000 );
+          this.camera.position.set( 0, 0, 4 );
+
+
+          this.geometry = new THREE.BufferGeometry();
+          this.geometry.setAttribute( 'position', new THREE.BufferAttribute( this.vertices_array, 3 ) );
+          //geometry.setAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
+          this.geometry.setAttribute( 'color', new THREE.BufferAttribute( this.colors_array, 3 ) );
+
+          //this.material = new THREE.MeshStandardMaterial({ vertexColors: THREE.VertexColors });
+          this.material = new THREE.MeshBasicMaterial({ vertexColors: THREE.VertexColors });
+          this.material.wireframe = true;
+
+          this.mesh = new THREE.Mesh( this.geometry,  this.material );
+          this.scene.add( this.mesh );
+
+          this.orbitControls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+          this.orbitControls.userZoom = false;
+          this.clock = new THREE.Clock();
+
+          var animate = function () {
+              //that.surfaces.check_update_link();
+              var delta = that.clock.getDelta();
+              that.orbitControls.update(delta);
+              that.renderer.render( that.scene, that.camera );
+              for (var name in that.name_to_controller) {
+                var controller = that.name_to_controller[name];
+                controller.sync_camera(that.camera);
+                controller.update_scene();
+              }
+              requestAnimationFrame( animate );
+          };
+
+          animate();
+        };
+        reload() {
+          // reload the vertices and colors
+          var geometry = this.geometry;
+          geometry.attributes.position.array = this.vertices_array;
+          geometry.attributes.position.needsUpdate = true;
+          geometry.attributes.color.array = this.colors_array;
+          geometry.attributes.color.needsUpdate = true;
+        }
+      };
+
+      /*
+      var color_map = {
+        'E_full_0': [239, 98, 36],
+        'E_full_1': [0, 162, 121],
+        'E_lowest': [54, 80, 162],
+        'V_full_0': [0, 132, 197],
+        'V_full_1': [231, 230, 32],
+        'V_lowest': [85, 186, 70]
+      };
+      */
+      var color_map = {  // high contrast
+        'E_full_0': [255, 0, 0],
+        'E_full_1': [0, 255, 0],
+        'E_lowest': [255, 128, 0],
+        'V_full_0': [0, 256, 256],
+        'V_full_1': [256, 0, 256],
+        'V_lowest': [64, 128, 256]
+      };
+
       class SolidController {
         constructor(options) {
           var that = this;
           this.settings = $.extend({}, options);
           var s = this.settings;
           this.container = $("#" + s.name);
+          this.color = color_map[s.name].map(x => x/256.0);
+          //this.color = [255, 0, 0];
           //this.container.html("Loaded: " + s.name);
           this.container.empty();
           this.context = this.container.feedWebGL2({});
@@ -69,7 +171,7 @@
             
             var update = function () {
                 var threshold = + that.slider.slider("option", "value");
-                that.slider_readout.html(that.settings.name + ": " + threshold.toFixed(2))
+                that.slider_readout.html(that.settings.name + ": " + threshold.toFixed(4))
                 that.surfaces.set_threshold(threshold);
                 that.surfaces.run();
                 
@@ -91,7 +193,26 @@
             this.scene_initialized = false;
 
             update();
+            // external array offset is set internally
+            this.array_offset = null;
+            this.visible_in_wireframe = true;   // default
+            this.wireframe = null;  // cached later.
         };
+
+        update_wireframe(wireframe, with_colors) {
+          // after the controller has been run once or more and the wireframe is initialized
+          // cache wireframe
+          this.wireframe = wireframe;
+          var positions = this.positions;
+          if (!this.visible_in_wireframe) {
+            // degenerate positions
+            positions = this.colors;
+          }
+          wireframe.vertices_array.set(positions, this.array_offset);
+          if (with_colors) {
+            wireframe.colors_array.set(this.colors, this.array_offset);
+          }
+        }
 
         initialize_scene() {
           var that = this;
@@ -102,7 +223,7 @@
           this.renderer = new THREE.WebGLRenderer( { canvas: canvas, context: context } );
           //renderer = new THREE.WebGLRenderer();
           this.renderer.setPixelRatio( window.devicePixelRatio );
-          this.renderer.setSize( $container.width() * 0.99, $container.height()*0.8);
+          this.renderer.setSize( $container.width() * 0.99, $container.height()*0.95);
           //renderer.setSize( window.innerWidth, window.innerHeight );
           this.renderer.outputEncoding = THREE.sRGBEncoding;
           container.appendChild( this.renderer.domElement );
@@ -129,6 +250,13 @@
 
           this.update_scene();
           this.positions = this.geometry.attributes.position.array;
+          // allocate the colors array for wire frame, also used as degenerate positions
+          var colors = new Float32Array(this.positions.length);
+          var color = this.color;
+          for (var i=0; i<colors.length; i++) {
+            colors[i] = color[i%3];
+          }
+          this.colors = colors;
 
           /*
           var animate = function () {
@@ -146,19 +274,36 @@
           this.scene_initialized = true;
         };
 
+        sync_camera(other_camera) {
+          var camera = this.camera;
+          camera.position.x = other_camera.position.x;
+          camera.position.y = other_camera.position.y;
+          camera.position.z = other_camera.position.z;
+          camera.lookAt(new THREE.Vector3(0, 0, 0));
+        };
+
         update_scene() {
           // update is not automagic because there is no animation loop
+          var sync = this.surfaces.link_needs_update;
           this.surfaces.check_update_link();
           this.renderer.render( this.scene, this.camera );
+          if ((sync) && (this.wireframe)) {
+            this.update_wireframe(this.wireframe);
+            this.wireframe.reload();
+          }
         };
       };
 
       var set_up = function(data) {
         debugger;
         json_data = data;
-        for (name in data) {
-          name_to_controller = new SolidController(data[name]);
+        name_to_controller = {};
+        var controller;
+        for (var name in data) {
+          controller = new SolidController(data[name]);
+          name_to_controller[name] = controller;
         }
+        wire_frame = new WireFrameCombo("wire_frame", name_to_controller);
       };
 
       var on_load_failure = function() {
