@@ -54,7 +54,14 @@ h4 {
   background-color: #999;
 }
 .grid9_explanation {
-  background-color: rgb(221, 221, 119);
+  top: 50%;
+  left: 20px;
+  right: 20px;
+  background: black;
+  color: white;
+  padding: 20px;
+  resize: vertical;
+  overflow: auto;
 }
 .grid9_slider {
   width: 25vmax;
