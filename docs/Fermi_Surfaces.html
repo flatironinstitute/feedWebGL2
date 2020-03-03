@@ -148,6 +148,7 @@
           var s = this.settings;
           this.container = $("#" + s.name);
           this.color = color_map[s.name].map(x => x/256.0);
+          this.rgbcolor = "rgb("  + color_map[s.name] + ")";
           //this.color = [255, 0, 0];
           //this.container.html("Loaded: " + s.name);
           this.container.empty();
@@ -163,11 +164,26 @@
                     num_layers: s.num_layers,
                     rasterize: false,
                     threshold: middle,
-                    shrink_factor: 0.2,  // how much to shrink the arrays
+                    shrink_factor: 0.4,  // how much to shrink the arrays
                 }
             );
-            this.slider_readout = $('<div class="grid9_slider">readout</div>').appendTo(this.container)
-            this.slider = $("<div></div>").appendTo(this.container);
+            var top = $("<div></div>").appendTo(this.container);
+            top.css("background-color", this.rgbcolor);
+            this.checkbox = $('<input type="checkbox" checked>').appendTo(top);
+            this.checkbox.change(function () {
+              debugger;
+              if (that.checkbox[0].checked) {
+                that.visible_in_wireframe = true;
+              } else {
+                that.visible_in_wireframe = false;
+              }
+              if (that.wireframe) {
+                that.update_wireframe();
+                that.wireframe.reload();
+              }
+            })
+            this.slider_readout = $('<span>readout</span>').appendTo(top)
+            this.slider = $('<div class="grid9_slider"></div>').appendTo(this.container);
             
             var update = function () {
                 var threshold = + that.slider.slider("option", "value");
@@ -202,15 +218,17 @@
         update_wireframe(wireframe, with_colors) {
           // after the controller has been run once or more and the wireframe is initialized
           // cache wireframe
-          this.wireframe = wireframe;
+          if (wireframe) {
+            this.wireframe = wireframe;
+          }
           var positions = this.positions;
           if (!this.visible_in_wireframe) {
             // degenerate positions
             positions = this.colors;
           }
-          wireframe.vertices_array.set(positions, this.array_offset);
+          this.wireframe.vertices_array.set(positions, this.array_offset);
           if (with_colors) {
-            wireframe.colors_array.set(this.colors, this.array_offset);
+            this.wireframe.colors_array.set(this.colors, this.array_offset);
           }
         }
 
@@ -244,10 +262,6 @@
           this.mesh = new THREE.Mesh( this.geometry,  material );
           this.scene.add( this.mesh );
 
-          //this.orbitControls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-          //this.orbitControls.userZoom = false;
-          //this.clock = new THREE.Clock();
-
           this.update_scene();
           this.positions = this.geometry.attributes.position.array;
           // allocate the colors array for wire frame, also used as degenerate positions
@@ -257,18 +271,6 @@
             colors[i] = color[i%3];
           }
           this.colors = colors;
-
-          /*
-          var animate = function () {
-              that.surfaces.check_update_link();
-              var delta = that.clock.getDelta();
-              that.orbitControls.update(delta);
-              that.renderer.render( that.scene, that.camera );
-              requestAnimationFrame( animate );
-          };
-
-          animate();
-          */
 
           that.renderer.render( that.scene, that.camera );
           this.scene_initialized = true;
