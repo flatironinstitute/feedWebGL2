@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>CAT Scans Surfaces 3d Visualizations</title>
+    <meta charset="utf-8" />
+    <link
+      href="https://fonts.googleapis.com/css?family=Open+Sans"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./css/normalize.css" />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <link rel="stylesheet" href="./css/jquery-ui.css" />
+  </head>
+
+  <body class="container">
+
+    <script src="./js/three.min.js"></script>
+    <script src="./js/OrbitControls.js"></script>
+    <script src="./js/jquery.min.js"></script>
+    <script src="./js/jquery-ui.js"></script>
+    <script src="./js/feedWebGL.js"></script>
+    <script src="./js/feedbackSurfaces.js"></script>
+    <script src="./js/cat_scan2.js"></script>
+
+    
+  <body class="container">
+
+    <div class="volume_assembly" id="container">
+      <div id="value_slider">slider1</div>
+      <div id="columns_slider">slider2</div>
+      <div id="rows_slider">slider3</div>
+      <div id="layers_slider">slider4</div>
+      <div id="volume_container" class="volume_main">main volume area</div>
+    </div>
+
+  </body>
+
+    <script>
+
+      var controller, json_data;
+
+      var set_up = function(data) {
+        debugger;
+        json_data = data;
+        var controller;
+        controller = new SurfaceController(
+          data, 
+          "volume_container", 
+          "value_slider", 
+          "columns_slider", 
+          "rows_slider",
+          "layers_slider",
+          );
+      };
+
+      var on_load_failure = function() {
+            alert("Could not load local JSON data.\n" +
+                    "You may need to run a web server to avoid cross origin restrictions.")
+      };
+
+      $.getJSON("data/cat_scan2.json", set_up).fail(on_load_failure);
+
+    </script>
+  </body>
+</html>

@@ -14,6 +14,20 @@ html {
   box-sizing: border-box;
 }
 
+.volume_assembly {
+  width: 90vmin;
+  height: 90vmin;
+  display: grid;
+  grid-template-columns: 25% 25% 25% 25%;
+  grid-template-rows: 80px auto;
+  background-color: #999;
+}
+
+.volume_main {
+  grid-column-start: 1;
+  grid-column-end: 5;
+}
+
 /* For devices larger than 400px */
 @media (min-width: 400px) {
   .container {
@@ -34,6 +48,12 @@ h4 {
   letter-spacing: -0.08rem;
   text-align: center;
   margin: 0 1rem 1rem 1rem;
+}
+
+.surface {
+  width: 90vmin;
+  height: 90vmin;
+  background-color: #999;
 }
 
 .grid9 {

@@ -22,6 +22,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     num_rows: null,
                     num_cols: null,
                     num_layers: 1,  // default to "flat"
+                    grid_min: [0, 0, 0],
+                    grid_max: [-1, -1, -1],  // disabled grid coordinate filtering (invalid limits)
                     rasterize: false,
                     threshold: 0,  // value at contour
                     // when getting compact arrays
@@ -99,6 +101,14 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             vtype: "1fv",
                             default_value: [s.threshold],
                         },
+                        u_grid_min: {
+                            vtype: "3fv",
+                            default_value: s.grid_min,
+                        },
+                        u_grid_max: {
+                            vtype: "3fv",
+                            default_value: s.grid_max,
+                        },
                     },
                     inputs: inputs,
                 });
@@ -154,6 +164,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             set_threshold(value) {
                 this.runner.change_uniform("uValue", [value]);
             };
+            set_grid_limits(grid_mins, grid_maxes) {
+                this.runner.change_uniform("u_grid_min", grid_mins);
+                this.runner.change_uniform("u_grid_max", grid_maxes);
+            };
         };
 
         var crossingVoxelsShader = `#version 300 es
@@ -166,6 +180,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         
         // global contour threshold
         uniform float uValue;
+
+        // global grid thresholds
+        //  (I tried integers but it didn't work, couldn't debug...)
+        uniform vec3 u_grid_min, u_grid_max;
 
         // per mesh function values at voxel corners
         in float a000, a001, a010, a011, a100, a101, a110, a111;
@@ -182,7 +200,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             front_corners = vec4(a000, a001, a010, a011);
             back_corners = vec4(a100, a101, a110, a111);
 
-
             // size of layer of rows and columns in 3d grid
             int layer_size = uRowSize * uColSize;
             // instance depth of this layer
@@ -193,8 +210,21 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             int i_row_num = i_layer_index/ uRowSize;
             int i_col_num = i_layer_index - (i_row_num * uRowSize);
 
+            float f_col_num = float(i_col_num);
+            float f_row_num = float(i_row_num);
+            float f_depth_num = float(i_depth_num);
+
+            bool voxel_ok = true;
+            if (u_grid_min[0] < u_grid_max[0]) {
+                // voxel coordinate filtering is enabled
+                voxel_ok = ( 
+                    (u_grid_min[0] <= f_col_num) && (f_col_num < u_grid_max[0]) &&
+                    (u_grid_min[1] <= f_row_num) && (f_row_num < u_grid_max[1]) &&
+                    (u_grid_min[2] <= f_depth_num) && (f_depth_num < u_grid_max[2]) );
+            }
+
             // Dont tile last column which wraps around rows
-            if ((i_col_num < (uRowSize - 1)) && (i_row_num < (uColSize - 1))) {
+            if ((voxel_ok) && (i_col_num < (uRowSize - 1)) && (i_row_num < (uColSize - 1))) {
                 float m = front_corners[0];
                 float M = front_corners[0];
                 vec4 corners = front_corners;
@@ -702,6 +732,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     rasterize: false,
                     threshold: 0,  // value at contour
                     invalid_coordinate: -100000,  // invalidity marker for positions
+                    grid_min: [0, 0, 0],
+                    grid_max: [-1, -1, -1],  // disabled grid coordinate filtering (invalid limits)
                     after_run_callback: null,   // call this after each run.
                 }, options);
                 this.check_geometry();
@@ -725,6 +757,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     num_layers: s.num_layers,  // default to "flat"
                     threshold: s.threshold,
                     shrink_factor: s.shrink_factor,
+                    grid_min: s.grid_min,
+                    grid_max: s.grid_max,  // disabled grid coordinate filtering (invalid limits)
                     // never rasterize the crossing pixels
                 });
                 // initialize segmenter upon first run.
@@ -819,6 +853,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.settings.after_run_callback = after_run;
                 this.check_update_link = check_update_link;
                 return geometry;
+            };
+            set_grid_limits(grid_mins, grid_maxes) {
+                this.crossing.set_grid_limits(grid_mins, grid_maxes);
             };
             set_threshold(value) {
                 this.settings.threshold = value;
