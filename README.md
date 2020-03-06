@@ -20,7 +20,7 @@ including contour and iso-surface generation tools.
 Go to demos and additional information.
 </a>
 
-<img src="docs/images/Fermi.png" width="300px">
+<img src="docs/images/Fermi.png" width="600px">
 
 <a href="https://flatironinstitute.github.io/feedWebGL2/Fermi_Surfaces.html">
 Screen shot from the Fermi iso-surfaces example.
