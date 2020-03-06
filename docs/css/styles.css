@@ -66,8 +66,8 @@ h4 {
   margin-bottom: 10px;
   margin-left: 10px;
   margin-right: 10px;
-  width:98vmax;
-  height:98vmax;
+  width:98vmin;
+  height:98vmin;
 }
 
 .grid9_item {

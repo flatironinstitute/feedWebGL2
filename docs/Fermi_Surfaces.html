@@ -19,21 +19,24 @@
       <div id="E_full_1" class="grid9_item"> E_full_1 </div>
       <div id="E_lowest" class="grid9_item"> E_lowest </div>
       <div id="left_explanation" class="grid9_explanation"> 
-         <h2>Fermi Surfaces</h2>
+         <h4>Fermi Energy Iso-surfaces</h4>
          <p>
          This interactive visualization explores theoretical electron energy
-         levels in a crystal lattice.
+         levels and velocities in a crystal lattice.
          </p>
          <p>
-           The surfaces displayed approximates where the electron energy reaches an adjustable cut off value.
+           The surfaces displayed approximates where the electron energy or velocity reaches an adjustable cut off value.
          </p>
          <p>
-           It uses WebGL2 features which are not supported on all browser configurations.
+           The implementation runs in web pages and uses WebGL2 features which are not supported on all browser configurations.
          </p>
       </div>
       <div id="wire_frame" class="grid9_item"> wire frame rotator </div>
       <div id="right_explanation" class="grid9_explanation">
-        <h2>Interactive Controls</h2>
+        <h4>Interactive Controls</h4>
+        <div id="col_slider"></div>
+        <div id="row_slider"></div>
+        <div id="layer_slider"></div>
         <p>
           Rotate all figures by dragging the mouse over the central wireframe.
         </p>
@@ -67,10 +70,14 @@
       var json_data, name_to_controller, wire_frame;
 
       class WireFrameCombo {
-        constructor(identifier, name_to_controller) {
+        constructor(identifier, name_to_controller, example_settings) {
           // construct only after the controllers have executed at least once.
           var that = this;
           this.name_to_controller = name_to_controller;
+          // set grid parameters from example controller for grid coordinate filtering,
+          this.grid_dimensions = [example_settings.num_cols, example_settings.num_rows, example_settings.num_layers];
+          this.grid_maxes = [example_settings.num_cols+1, example_settings.num_rows+1, example_settings.num_layers+1];
+          this.grid_mins = [-1,-1,-1];
           // assign offsets to esternal controllers and determine buffer length for vertices and colors
           var total = 0;
           for (var name in name_to_controller) {
@@ -135,8 +142,61 @@
               requestAnimationFrame( animate );
           };
 
+          // set up grid range sliders
+          this.grid_sliders = {
+            columns: this.make_grid_slider({
+              container: "col_slider",
+              index: 0,
+            }),
+            rowss: this.make_grid_slider({
+              container: "row_slider",
+              index: 1,
+            }),
+            layers: this.make_grid_slider({
+              container: "layer_slider",
+              index: 2,
+            }),
+          }
+
           animate();
         };
+        make_grid_slider(options, update) {
+          var that = this;
+          var container = options.container;
+          var $container = $("#" + container);
+          var index = options.index;
+          $container.html(container);
+          var slider = $("<div/>").appendTo($container);
+          var dim = this.grid_dimensions[index];
+          var update = function () {
+            that.update_from_sliders();
+          };
+          slider.grid_index = index;
+          slider.slider({
+            range: true,
+            min: -1,
+            max: dim+1,
+            step: 0.01 * dim,
+            values: [0, dim],
+            slide: update,
+            change: update,
+          });
+          return slider;
+        };
+        update_from_sliders () {
+          // regenerate all surfaces using slider settings
+          for (var name in this.grid_sliders) {
+            var slider = this.grid_sliders[name];
+            var index = slider.grid_index;
+            var limits = slider.slider("option", "values");
+            this.grid_mins[index] = limits[0];
+            this.grid_maxes[index] = limits[1];
+          }
+          for (var name in this.name_to_controller) {
+            var controller = this.name_to_controller[name];
+            controller.run();
+          }
+        }
         reload() {
           // reload the vertices and colors
           var geometry = this.geometry;
@@ -211,16 +271,12 @@
             this.slider = $('<div class="grid9_slider"></div>').appendTo(this.container);
             
             var update = function () {
-                var threshold = + that.slider.slider("option", "value");
-                that.slider_readout.html(that.settings.name + ": " + threshold.toFixed(4))
-                that.surfaces.set_threshold(threshold);
-                that.surfaces.run();
-                
-                if (that.scene_initialized) {
-                    that.update_scene();
-                } else {
-                    that.initialize_scene();
-                }
+              that.run();
+              if (that.scene_initialized) {
+                  that.update_scene();
+              } else {
+                  that.initialize_scene();
+              }
             };
 
             this.slider.slider({
@@ -239,6 +295,18 @@
             this.visible_in_wireframe = true;   // default
             this.wireframe = null;  // cached later.
         };
+
+        run() {
+          var that = this;
+          var threshold = + that.slider.slider("option", "value");
+          that.slider_readout.html(that.settings.name + ": " + threshold.toFixed(4))
+          that.surfaces.set_threshold(threshold);
+          var w = that.wireframe;
+          if (w) {
+            that.surfaces.set_grid_limits(w.grid_mins, w.grid_maxes);
+          }
+          that.surfaces.run();
+        }
 
         update_wireframe(wireframe, with_colors) {
           // after the controller has been run once or more and the wireframe is initialized
@@ -330,7 +398,7 @@
           controller = new SolidController(data[name]);
           name_to_controller[name] = controller;
         }
-        wire_frame = new WireFrameCombo("wire_frame", name_to_controller);
+        wire_frame = new WireFrameCombo("wire_frame", name_to_controller, controller.settings);
       };
 
       var on_load_failure = function() {
