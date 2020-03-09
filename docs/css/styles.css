@@ -28,6 +28,12 @@ html {
   grid-column-end: 5;
 }
 
+.change_color {
+  color: white;
+  background-color: black;
+  float: right;
+}
+
 /* For devices larger than 400px */
 @media (min-width: 400px) {
   .container {

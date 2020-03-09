@@ -64,10 +64,12 @@
     <script src="./js/jquery-ui.js"></script>
     <script src="./js/feedWebGL.js"></script>
     <script src="./js/feedbackSurfaces.js"></script>
+    <script src="./js/canvas_2d_widget_helper.js"></script>
+    <script src="./js/dual_canvas_helper.js"></script>
 
     <script>
       debugger;
-      var json_data, name_to_controller, wire_frame;
+      var json_data, name_to_controller, wire_frame, colorizer, colorize_surface;
 
       class WireFrameCombo {
         constructor(identifier, name_to_controller, example_settings) {
@@ -227,8 +229,9 @@
       };
 
       class SolidController {
-        constructor(options) {
+        constructor(options, on_change_color) {
           var that = this;
+          this.on_change_color = on_change_color;
           this.settings = $.extend({}, options);
           var s = this.settings;
           this.container = $("#" + s.name);
@@ -253,6 +256,7 @@
                 }
             );
             var top = $("<div></div>").appendTo(this.container);
+            this.top = top;
             top.css("background-color", this.rgbcolor);
             this.checkbox = $('<input type="checkbox" checked>').appendTo(top);
             this.checkbox.change(function () {
@@ -266,8 +270,15 @@
                 that.update_wireframe();
                 that.wireframe.reload();
               }
-            })
+            });
+
             this.slider_readout = $('<span>readout</span>').appendTo(top)
+
+            var change = $('<span class="change_color">Color</span>').appendTo(top);
+            change.click(function() {
+              that.on_change_color(that);
+            });
+
             this.slider = $('<div class="grid9_slider"></div>').appendTo(this.container);
             
             var update = function () {
@@ -323,7 +334,18 @@
           if (with_colors) {
             this.wireframe.colors_array.set(this.colors, this.array_offset);
           }
-        }
+        };
+
+        set_color(color_array_256, rgb) {
+          this.top.css("background-color", rgb);
+          var color_array = color_array_256.map(x => x/256.0);
+          var colors = this.colors;
+          for (var i=0; i<colors.length; i++) {
+            colors[i] = color_array[i % 3];
+          }
+          this.wireframe.colors_array.set(this.colors, this.array_offset);
+          this.wireframe.reload();
+        };
 
         initialize_scene() {
           var that = this;
@@ -392,13 +414,41 @@
       var set_up = function(data) {
         debugger;
         json_data = data;
+        colorize_surface = null;
+        var on_change_color = function (surface) {
+          colorize_surface = surface;
+          colorizer.reset_color_choice();
+          colorizer.dialog("open");
+        };
         name_to_controller = {};
         var controller;
         for (var name in data) {
-          controller = new SolidController(data[name]);
+          controller = new SolidController(data[name], on_change_color);
           name_to_controller[name] = controller;
         }
         wire_frame = new WireFrameCombo("wire_frame", name_to_controller, controller.settings);
+
+        // set up the colorizer
+        colorizer = $("<div/>").appendTo($("#wire_frame"));
+
+        colorizer.dialog({
+                autoOpen: false,
+                resizable: true
+        });
+
+        var colorizer_callback = function (color_array, rgb) {
+          if (colorize_surface) {
+            colorize_surface.set_color(color_array, rgb);  // color array is 256 scale
+          }
+          colorizer.dialog("close");
+        }
+        
+        colorizer.dual_canvas_helper({width:100, height:100});
+        colorizer.color_chooser({
+            x: 0, y: 0, side:200, font: "normal 7px Arial",
+            callback: colorizer_callback,
+        });
+        colorizer.fit();
       };
 
       var on_load_failure = function() {
