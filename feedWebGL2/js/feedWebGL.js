@@ -736,7 +736,7 @@ data loading convenience interfaces on runner.
         };
         var runr = program.runner(roptions);
 
-        runr.run()
+        runr.run();
 
         var location_array = runr.feedback_array("output_vertex");
 
@@ -752,6 +752,86 @@ data loading convenience interfaces on runner.
             $("<span> " + tf(location_array[i]) + "<span>").appendTo(container);
         }
         return runr;
+    };
+
+    $.fn.feedWebGL2.reverse_example = function (container) {
+        // illustration: reverse a float array into a feedback buffer using a texture.
+
+        var reverse_vertex_shader = `#version 300 es
+
+        // per mesh input (not used, but at least one is required?)
+        in float dummy_input;
+
+        // the sampler -- only the red component contains the float data
+        uniform sampler2D tex1;
+
+        out float reversed_value;
+
+        void main() {
+            // foil the optimizer
+            gl_Position = vec4(dummy_input,dummy_input,dummy_input,dummy_input);
+            // get the sampler size
+            ivec2 tsize = textureSize(tex1);
+            int reversed_index = tsize[0] - gl_VertexID - 1;
+            ivec2 reversed_position = ivec2(reversed_index, 0);
+            // get the indexed color
+            vec4 redcolor = texelFetch(tex1, reversed_position, 0);
+            reversed_value = redcolor.r;
+        }
+        `;
+
+        var reverse_me = new Float32Array([2000,4000,6000,8000,-.9,-.7,-.5,-.3,-.1]);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+            buffers: {
+                "dummy_buffer": {
+                    array: reverse_me,
+                },
+            },
+            textures: {
+                "texture1": {
+                    type: "FLOAT",
+                    format: "RED",  // put the float in the red component
+                    internal_format: "R32F",
+                    width:  reverse_me.length,
+                    height: 1,
+                },
+            },
+        });
+        
+        var program = context.program({
+            vertex_shader: reverse_vertex_shader,
+            feedbacks: {
+                reversed_value: {num_components: 1},
+            },
+        });
+
+        var roptions = {
+            name: "reverse texture",
+            num_instances: 1, 
+            vertices_per_instance: reverse_me.length,
+            rasterize: false,  // don't display the result
+            uniforms: {},
+            inputs: {
+                dummy_input:  {
+                    per_vertex: true,
+                    num_components: 1,  // 3 vector
+                    from_buffer: {
+                        name: "dummy_buffer",
+                    },
+                },
+            },
+            samplers: {
+                "tex1": {
+                    type: "2D",
+                    from_texture: "texture1",
+                },
+            },
+        };
+        var runr = program.runner(roptions);
+
+        runr.run();
     };
 
     $.fn.feedWebGL2.integer_example = function (container) {
