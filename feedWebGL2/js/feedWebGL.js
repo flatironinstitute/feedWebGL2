@@ -756,7 +756,7 @@ data loading convenience interfaces on runner.
 
     $.fn.feedWebGL2.integer_example = function (container) {
         // illustration of writing integer attributes
-        // can capturing integer feedbacks
+        // and capturing integer feedbacks
         var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
 
         var add_ints_vertex_shader = `#version 300 es
