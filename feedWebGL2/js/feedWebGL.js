@@ -321,7 +321,6 @@ data loading convenience interfaces on runner.
                 this.sampler_count = 0;
                 for (var name in this.settings.samplers) {
                     var desc = this.settings.samplers[name];
-                    var index = this.samplers.length;
                     this.samplers[name] = new SamplerVariable(this, name, desc.dim, desc.from_texture, this.sampler_count);
                     this.sampler_count ++;
                 };
@@ -344,6 +343,11 @@ data loading convenience interfaces on runner.
                     throw new Error("No buffer bound to inputs in run: " + unbound);
                 }
             };
+            bind_samplers() {
+                for (var name in this.samplers) {
+                    this.samplers[name].bind();
+                }
+            }
             run() {
                 this.check_input_bindings();
                 var program = this.program;
@@ -357,6 +361,7 @@ data loading convenience interfaces on runner.
                 if (!this.uniforms_installed) {
                     this.install_uniforms();
                 }
+                this.bind_samplers();
                 var mode_name = this.settings.run_type || "POINTS";
                 var mode = gl[mode_name];
                 var rasterize = this.settings.rasterize;
@@ -636,7 +641,7 @@ data loading convenience interfaces on runner.
                 this.name = name;
                 this.index = index;
                 var context = runner.program.context;
-                this.from_texture = context.samplers[from_texture];
+                this.from_texture = context.textures[from_texture];
                 if (!this.from_texture) {
                     throw new Error("unknown sampler: " + from_texture);
                 }
@@ -861,7 +866,7 @@ data loading convenience interfaces on runner.
             // foil the optimizer
             gl_Position = vec4(dummy_input,dummy_input,dummy_input,dummy_input);
             // get the sampler size
-            ivec2 tsize = textureSize(tex1);
+            ivec2 tsize = textureSize(tex1, 0);
             int reversed_index = tsize[0] - gl_VertexID - 1;
             ivec2 reversed_position = ivec2(reversed_index, 0);
             // get the indexed color
@@ -869,6 +874,8 @@ data loading convenience interfaces on runner.
             reversed_value = redcolor.r;
         }
         `;
+
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
 
         var reverse_me = new Float32Array([2000,4000,6000,8000,-.9,-.7,-.5,-.3,-.1]);
 
