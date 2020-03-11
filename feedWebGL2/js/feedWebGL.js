@@ -55,6 +55,19 @@ data loading convenience interfaces on runner.
                         throw new Error("buffer descriptor must specify array or vector initial values.")
                     }
                 }
+                // allocate textures
+                this.textures = {};
+                for (var name in this.settings.textures) {
+                    var desc = this.settings.textures[name];
+                    var typ = desc.type || "FLOAT";
+                    var format = desc.format || "RED";
+                    var internal_format = desc.internal_format || "R32F";
+                    var texture = this.texture(name, typ, format, internal_format, desc.width, desc.height);
+                    var array = desc.array;
+                    if (array) {
+                        texture.load_array(array)
+                    }
+                }
             };
             fresh_name(prefix) {
                 this.counter += 1;
@@ -66,7 +79,13 @@ data loading convenience interfaces on runner.
                     throw new Error("no such buffer name " + name);
                 }
                 return result;
-            }
+            };
+            texture(name, typ, format, internal_format, width, height) {
+                name = name || this.fresh_name("texture");
+                var texture = new FeedbackTexture(this, name, typ, format, internal_format, width, height);
+                this.textures[name] = texture;
+                return texture;
+            };
             buffer(name, bytes_per_element) {
                 name = name || this.fresh_name("buffer");
                 var buffer = new FeedbackBuffer(this, name, bytes_per_element);
@@ -440,6 +459,18 @@ data loading convenience interfaces on runner.
             };
         };
 
+        class FeedbackTexture {
+            constructor(context, name, typ, format, internal_format, width, height) {
+                this.context = context;
+                this.name = name;
+                this.typ = typ;
+                this.format = format;
+                this.internal_format = internal_format;
+                this.width = width;
+                this.height = height;
+            };
+        };
+
         class FeedbackVariable {
             constructor(program, name, num_components, bytes_per_component, typ) {
                 this.type = typ || "float";
@@ -796,6 +827,7 @@ data loading convenience interfaces on runner.
                     internal_format: "R32F",
                     width:  reverse_me.length,
                     height: 1,
+                    array: reverse_me,
                 },
             },
         });
@@ -832,6 +864,13 @@ data loading convenience interfaces on runner.
         var runr = program.runner(roptions);
 
         runr.run();
+
+        var reversed = runr.feedback_array("reversed_value");
+
+        $("<h3>" + reversed.length + " reversed floats</h3>").appendTo(container);
+        for (var i=0; i<reversed.length; i++) {
+            $("<div>" + [reverse_me[i], reversed[i] +"</div>"]).appendTo(container);
+        }
     };
 
     $.fn.feedWebGL2.integer_example = function (container) {
