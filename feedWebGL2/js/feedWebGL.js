@@ -20,6 +20,7 @@ data loading convenience interfaces on runner.
                     // default settings:
                     gl: null,    // the underlying gl context to use
                     buffers: {},
+                    textures: {},
                 }, options);
 
                 // set up the context if needed.
@@ -267,6 +268,12 @@ data loading convenience interfaces on runner.
                     //        num_components: 3,
                     //    }
                     },
+                    samplers: {
+                        //"tex1": {
+                        //    type: "2D",
+                        //    from_texture: "texture1",
+                        //},
+                    },
                 }, options);
                 this.program = program;
                 var context = program.context;
@@ -309,6 +316,15 @@ data loading convenience interfaces on runner.
                     }
                     this.inputs[name] = input;
                 }
+                // set up samplers
+                this.samplers = {};
+                this.sampler_count = 0;
+                for (var name in this.settings.samplers) {
+                    var desc = this.settings.samplers[name];
+                    var index = this.samplers.length;
+                    this.samplers[name] = new SamplerVariable(this, name, desc.dim, desc.from_texture, this.sampler_count);
+                    this.sampler_count ++;
+                };
                 this.allocated_feedbacks = null;
                 this.uniforms_installed = false;
                 this.run_count = 0;
@@ -468,11 +484,11 @@ data loading convenience interfaces on runner.
                 this.internal_format = internal_format;
                 this.width = width;
                 this.height = height;
-                this.texture = context.gl.createTexture();
+                this.gl_texture = context.gl.createTexture();
             };
             load_array(array) {
                 var gl = this.context.gl;
-                gl.bindTexture(gl.TEXTURE_2D, this.texture);
+                gl.bindTexture(gl.TEXTURE_2D, this.gl_texture);
                 var level = 0;
                 var border = 0;
                 var gl_internal_format = gl[this.internal_format];
@@ -611,6 +627,34 @@ data loading convenience interfaces on runner.
             call_method(gl) {
                 var method = gl[this.method_name()];
                 method.call(gl, this.location, false, this.value);
+            };
+        };
+
+        class SamplerVariable {
+            constructor(runner, name, dim, from_texture, index) {
+                this.runner = runner;
+                this.name = name;
+                this.index = index;
+                var context = runner.program.context;
+                this.from_texture = context.samplers[from_texture];
+                if (!this.from_texture) {
+                    throw new Error("unknown sampler: " + from_texture);
+                }
+                if ((dim) && (dim!="2D")) {
+                    throw new Error("Only 2D sampler dimensions supported at this time.")
+                }
+                var program = runner.program;
+                var gl = program.context.gl;
+                var gl_program = program.gl_program;
+                this.location = gl.getUniformLocation(gl_program, this.name);
+            };
+            bind() {
+                // bind sampler variable to texture
+                // assumes gl.useProgram(this.runner.program.gl_program) has been called
+                var gl = this.runner.program.context.gl;
+                gl.uniform1i(this.location, this.index);
+                gl.activeTexture(gl.TEXTURE0 + this.index);
+                gl.bindTexture(gl.TEXTURE_2D, this.from_texture.gl_texture);
             };
         };
 
@@ -871,7 +915,7 @@ data loading convenience interfaces on runner.
             },
             samplers: {
                 "tex1": {
-                    type: "2D",
+                    dim: "2D",
                     from_texture: "texture1",
                 },
             },
