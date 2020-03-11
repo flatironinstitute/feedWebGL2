@@ -468,7 +468,22 @@ data loading convenience interfaces on runner.
                 this.internal_format = internal_format;
                 this.width = width;
                 this.height = height;
+                this.texture = context.gl.createTexture();
             };
+            load_array(array) {
+                var gl = this.context.gl;
+                gl.bindTexture(gl.TEXTURE_2D, this.texture);
+                var level = 0;
+                var border = 0;
+                var gl_internal_format = gl[this.internal_format];
+                var gl_format = gl[this.format];
+                var gl_type = gl[this.typ];
+                gl.texImage2D(gl.TEXTURE_2D, level, gl_internal_format, this.width, this.height, border,
+                              gl_format, gl_type, array);
+                // xxxxx is this needed?                
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            }
         };
 
         class FeedbackVariable {
