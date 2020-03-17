@@ -79,14 +79,16 @@
             ivec2 lsize = textureSize(LeftMatrix, 0);
             ivec2 rsize = textureSize(RightMatrix, 0);
             //int N = lsize[0];
-            int Klimit = lsize[1];
-            // assert Klimit == rsize[0]
+            int Klimit = lsize[0];
+            // assert Klimit == rsize[1]
             //int M = rsize[1];
             float elt_sum = 0.0;
             for (int k=0; k<Klimit; k++) {
                 // data in the red component only.
-                float l_value = texelFetch(LeftMatrix, ivec2(iRow, k), 0).r;
-                float r_value = texelFetch(RightMatrix, ivec2(k, iCol), 0).r;
+                //float l_value = texelFetch(LeftMatrix, ivec2(iRow, k), 0).r;
+                //float r_value = texelFetch(RightMatrix, ivec2(k, iCol), 0).r;
+                float l_value = texelFetch(LeftMatrix, ivec2(k, iRow), 0).r;
+                float r_value = texelFetch(RightMatrix, ivec2(iCol, k), 0).r;
                 elt_sum += l_value * r_value;
             }
             dot_product = elt_sum;
@@ -199,6 +201,14 @@
                 [1, 1, 1],
             ],
         });
+        /*
+        M2 = mcontext.matrix({
+            rows: [[4],[5],[6]],
+        });
+        M1 = mcontext.matrix({
+            rows: [[1,2,3]],
+        });
+        */
         var dump_matrix = function(M, name) {
             $("<h1>" + name +" matrix</h1>").appendTo(container);
             var t = $("<table border/>").appendTo(container);
