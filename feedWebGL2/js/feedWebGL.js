@@ -1,17 +1,9 @@
 
 // jQuery plugin for webGL feedback programs.
 
-/*
-todo:
-
-get feedback array
-runner.run
-data loading convenience interfaces on runner.
-*/
 
 (function($) {
     $.fn.feedWebGL2 = function (options) {
-        var jquery_object = this;
 
         class FeedbackContext {
             
@@ -83,6 +75,9 @@ data loading convenience interfaces on runner.
             };
             texture(name, typ, format, internal_format, width, height) {
                 name = name || this.fresh_name("texture");
+                var typ = typ || "FLOAT";
+                var format = format || "RED";
+                var internal_format = internal_format || "R32F";
                 var texture = new FeedbackTexture(this, name, typ, format, internal_format, width, height);
                 this.textures[name] = texture;
                 return texture;
@@ -445,7 +440,7 @@ data loading convenience interfaces on runner.
             copy_from_array(array) {
                 var gl = this.context.gl;
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-                gl.bufferSubData(gl.ARRAY_BUFFER, 0, array);
+                gl.bufferSubData(gl.ARRAY_BUFFER, 0, array, 0, this.num_elements);
                 gl.bindBuffer(gl.ARRAY_BUFFER, null);
             };
             initialize_from_array(array) {
@@ -491,7 +486,13 @@ data loading convenience interfaces on runner.
                 this.height = height;
                 this.gl_texture = context.gl.createTexture();
             };
-            load_array(array) {
+            load_array(array, width, height) {
+                if (width) {
+                    this.width = width;
+                };
+                if (height) {
+                    this.height = height;
+                }
                 var gl = this.context.gl;
                 gl.bindTexture(gl.TEXTURE_2D, this.gl_texture);
                 var level = 0;
