@@ -58,6 +58,93 @@
             }
         };
 
+        var gs_pivot_shader = `#version 300 es
+
+        // the column to pivot
+        uniform int iPivot;
+
+        // "too small to pivot" value
+        uniform float epsilon;
+
+        // rows are "per mesh"
+        in int aRow;
+        // columns are "per vertex"
+        in int aCol;
+
+        // sampler with matrix values in red component
+        uniform sampler2D Matrix;
+
+        // pivoted matrix value at this position
+        out float pivoted;
+
+        float MatrixValue(in int intx, in int inty) {
+            return texelFetch(Matrix, ivec2(intx, inty), 0).r;
+        }
+
+        void main() {
+            // foil the optimizer
+            gl_Position = vec4(aRow, aCol, aRow, aCol);
+            int ix = gl_VertexID;
+            int iy = gl_InstanceID;
+
+            ivec2 size = textureSize(Matrix, 0);
+            int maxy = size.y;
+            // look for abs largest entry in pivot column
+            int swapIndex = 0;
+            float maxValue = MatrixValue(iPivot, swapIndex);
+            float maxAbs = abs(maxValue);
+            for (var i=0; i<maxy; i++){
+                var v = MatrixValue(iPivot, i);
+                var a = abs(v);
+                if (a > maxAbs) {
+                    swapIndex = i;
+                    maxValue = v;
+                    maxAbs = a;
+                }
+            }
+            // default: no change to value at this position
+            var current_value = MatrixValue(ix, iy);
+            pivoted = current_value;
+            // If the maxAbs is large enough, execute the pivot.
+            if (maxAbs > epsilon) {
+                if (iy == iPivot) {
+                    // use swap row and normalize maxValue to 1
+                    current_value = MatrixValue(ix, swapIndex);
+                    pivoted = current_value / maxValue;
+                } else {
+                    float nullValue;
+                    float compareValue = MatrixValue(ix, swapIndex);
+                    if (iy == swapIndex) {
+                        // use pivot row
+                        current_value = MatrixValue(ix, iPivot);
+                        nullValue = MatrixValue(iPivot, iPivot)
+                    } else {
+                        nullValue = MatrixValue(iy, iPivot);
+                    }
+                    // normalize to null out the nullValue
+                    float factor = nullValue / maxValue;
+                    pivoted = current_value - factor * compareValue;
+                }
+            }
+        }
+        `
+        class FeedbackReducer {
+            constructor(mcontext, matrix) {
+                this.mcontext = mcontext;
+                this.matrix = matrix;
+                this.program = this.context.program({
+                    vertex_shader: gs_pivot_shader,
+                    feedbacks: {
+                        pivoted: {num_components: 1,},
+                    },
+                });
+                var nrows = matrix.num_rows;
+                var ncols = matrix.num_cols;
+                var dummy_array = new Float32Array(Math.max(nrows,ncols));
+                // should deallocate if exists?
+                this.dummyBuffer = this.context.buffer("multiplyDummyBuffer");
+            };
+        };
         var multiplier_shader = `#version 300 es
 
         // rows are "per mesh"
@@ -207,6 +294,24 @@
         });
         M1 = mcontext.matrix({
             rows: [[1,2,3]],
+        });
+        
+        var big = [];
+        var s = 1;
+        var c = 0
+        for (var i=0; i<100; i++) {
+            var bigrow = [];
+            for (var j=0; j<100; j++) {
+                s = -s;
+                bigrow.push(i + 2*j*s);
+            }
+            big.push(bigrow);
+        }
+        M2 = mcontext.matrix({
+            rows: big,
+        });
+        M1 = mcontext.matrix({
+            rows: big,
         });
         */
         var dump_matrix = function(M, name) {
