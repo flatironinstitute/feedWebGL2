@@ -1,6 +1,7 @@
 
 // jQuery plugin for webGL feedback programs.
 
+// xxxx should provide logic for releasing structures.
 
 (function($) {
     $.fn.feedWebGL2 = function (options) {
@@ -623,7 +624,6 @@
         };
 
         class MatrixUniform extends VectorUniform {
-            // xxxxx
             is_matrix() {
                 return true;  // mainly for testing
             };
