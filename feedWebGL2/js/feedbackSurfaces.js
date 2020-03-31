@@ -55,9 +55,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 });
 
                 // set up input parameters
-                var x_offset = 1;
+                //  indexing is [ix, iy, iz] -- z is fastest
+                //var x_offset = 1;
+                var z_offset = 1;
                 var y_offset = s.num_cols;
-                var z_offset = s.num_cols * s.num_rows;
+                //var z_offset = s.num_cols * s.num_rows;
+                var x_offset = s.num_cols * s.num_rows;
                 var num_voxels = nvalues - (x_offset + y_offset + z_offset);
 
                 var inputs = {};
@@ -597,7 +600,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // check denominator is not too small? xxxx
                     float delta = (wtL - uValue) / (wtL - wtR);
                     vec3 combined_offset = ((1.0 - delta) * offsetL) + (delta * offsetR);
-                    vec3 vertex = combined_offset + vec3(col_num, row_num, layer_num);
+                    //vec3 vertex = combined_offset + vec3(col_num, row_num, layer_num);
+                    vec3 vertex = combined_offset + vec3(layer_num, row_num, col_num);
                     vPosition = dx * vertex[0] + dy * vertex[1] + dz * vertex[2] + translation;
                     gl_Position.xyz = vPosition;
                     gl_Position[3] = 1.0;
