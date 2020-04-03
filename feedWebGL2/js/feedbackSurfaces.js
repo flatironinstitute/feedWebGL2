@@ -12,6 +12,45 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
 (function($) {
 
+    var get_sizes_macro = function(index_variable_name) {
+        return `
+        int voxel_index = ${index_variable_name};
+        
+        // size of layer of rows and columns in 3d grid block
+        int layer_voxels = uRowSize * uColSize;
+        int i_block_num;
+        int block_index;
+
+        if (uLayerSize > 1) {
+            // possibly multiple grids in blocks.
+            // size of block of rows/columns/layers
+            int block_voxels = layer_voxels * uLayerSize;
+
+            // block number for this voxel
+            i_block_num = voxel_index / block_voxels;
+            // ravelled index in block
+            block_index = voxel_index - (i_block_num * block_voxels);
+        } else {
+            // only one block
+            i_block_num = 0;
+            block_index = voxel_index;
+        }
+
+        // instance depth of this layer
+        int i_depth_num = block_index / layer_voxels;
+        // ravelled index in layer
+        int i_layer_index = block_index - (i_depth_num * layer_voxels);
+
+        int i_row_num = i_layer_index/ uRowSize;
+        int i_col_num = i_layer_index - (i_row_num * uRowSize);
+
+        float f_col_num = float(i_col_num);
+        float f_row_num = float(i_row_num);
+        float f_depth_num = float(i_depth_num);
+        //float f_block_num = float(i_block_num);  // not needed?
+        `;
+    }
+
     $.fn.webGL2crossingVoxels = function(options) {
 
         class WebGL2CrossingVoxels {
@@ -22,6 +61,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     num_rows: null,
                     num_cols: null,
                     num_layers: 1,  // default to "flat"
+                    num_blocks: 1,  // for physics simulations data may come in multiple blocks
                     grid_min: [0, 0, 0],
                     grid_max: [-1, -1, -1],  // disabled grid coordinate filtering (invalid limits)
                     rasterize: false,
@@ -34,7 +74,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var s = this.settings;
                 this.feedbackContext = s.feedbackContext;
                 var nvalues = s.valuesArray.length;
-                var nvoxels = s.num_rows * s.num_cols * s.num_layers;
+                var nvoxels = s.num_rows * s.num_cols * s.num_layers * s.num_blocks;
                 if (nvalues != nvoxels) {
                     // for now strict checking
                     throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
@@ -92,14 +132,22 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     vertices_per_instance: num_voxels,
                     rasterize: s.rasterize,
                     uniforms: {
+                        // number of rows
                         uRowSize: {
                             vtype: "1iv",
                             default_value: [s.num_cols],
                         },
+                        // numver of columns
                         uColSize: {
                             vtype: "1iv",
                             default_value: [s.num_rows],
                         },
+                        // number of layers
+                        uLayerSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_layers],
+                        },
+                        // threshold value
                         uValue: {
                             vtype: "1fv",
                             default_value: [s.threshold],
@@ -180,6 +228,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
         // global number of columnss
         uniform int uColSize;
+
+        // global number of layers (if values are in multiple blocks, else 0)
+        uniform int uLayerSize;
         
         // global contour threshold
         uniform float uValue;
@@ -203,19 +254,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             front_corners = vec4(a000, a001, a010, a011);
             back_corners = vec4(a100, a101, a110, a111);
 
-            // size of layer of rows and columns in 3d grid
-            int layer_size = uRowSize * uColSize;
-            // instance depth of this layer
-            int i_depth_num = gl_VertexID / layer_size;
-            // ravelled index in layer
-            int i_layer_index = gl_VertexID - (i_depth_num * layer_size);
-
-            int i_row_num = i_layer_index/ uRowSize;
-            int i_col_num = i_layer_index - (i_row_num * uRowSize);
-
-            float f_col_num = float(i_col_num);
-            float f_row_num = float(i_row_num);
-            float f_depth_num = float(i_depth_num);
+            ${get_sizes_macro("gl_VertexID")}
 
             bool voxel_ok = true;
             if (u_grid_min[0] < u_grid_max[0]) {
@@ -226,8 +265,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     (u_grid_min[2] <= f_depth_num) && (f_depth_num < u_grid_max[2]) );
             }
 
-            // Dont tile last column which wraps around rows
-            if ((voxel_ok) && (i_col_num < (uRowSize - 1)) && (i_row_num < (uColSize - 1))) {
+            // Dont tile last column/row/layer which wraps around
+            if ((voxel_ok) && 
+                (i_col_num < (uRowSize - 1)) && 
+                (i_row_num < (uColSize - 1)) &&
+                (i_depth_num < (uLayerSize - 1))) {
                 float m = front_corners[0];
                 float M = front_corners[0];
                 vec4 corners = front_corners;
@@ -306,6 +348,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // volume dimensions
                     num_rows: null,
                     num_cols: null,
+                    num_layers: 0,  // if >1 then indexing in multiple blocks
                     dx: [1, 0, 0],
                     dy: [0, 1, 0],
                     dz: [0, 0, 1],
@@ -359,6 +402,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         uColSize: {
                             vtype: "1iv",
                             default_value: [s.num_rows],
+                        },
+                        // number of layers
+                        uLayerSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_layers],
                         },
                         uValue: {
                             vtype: "1fv",
@@ -449,6 +497,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         // global length of rows, cols inputs
         uniform int uRowSize;
         uniform int uColSize;
+        // global number of layers (if values are in multiple blocks, else 0)
+        uniform int uLayerSize;
         
         // global contour threshold input
         uniform float uValue;
@@ -533,23 +583,14 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             vColor = vec3(float(gl_VertexID) * 0.01, grey, 0.0);  // temp value for debugging
             vNormal = vec3(0.0, 0.0, 1.0);    // arbitrary initial value
 
-            // size of layer of rows and columns in 3d grid
-            int layer_size = uRowSize * uColSize;
-            // instance depth of this layer
-            int i_depth_num = index / layer_size;
-            // ravelled index in layer
-            int i_layer_index = index - (i_depth_num * layer_size);
-            // instance row
-            int i_row_num = i_layer_index / uRowSize;
-            // instance column
-            int i_col_num = i_layer_index - (i_row_num * uRowSize);
+            ${get_sizes_macro("index")}
 
             // Dont tile last column which wraps around or last row
             if ((index >= 0) && (i_col_num < (uRowSize - 1)) && (i_row_num < (uColSize - 1))) {
                 // float versions for calculations
-                float layer_num = float(i_depth_num);
-                float row_num = float(i_row_num);
-                float col_num = float(i_col_num);
+                float layer_num = f_depth_num;
+                float row_num = f_row_num;
+                float col_num = f_col_num;
                 // determine which vertex in which triangle in which tetrahedron to interpolate
                 int iVertexCount = gl_VertexID;
                 int iTetrahedronNumber = iVertexCount / (N_TRIANGLES * N_VERTICES);
