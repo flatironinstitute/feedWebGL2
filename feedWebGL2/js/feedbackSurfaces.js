@@ -89,6 +89,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     fragment_shader: this.settings.fragment_shader,
                     feedbacks: {
                         index: {type: "int"},
+                        location: {num_components: 3},
                         front_corners: {num_components: 4},
                         back_corners: {num_components: 4},
                     },
@@ -172,17 +173,35 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.runner.install_uniforms();
                 this.runner.run();
             };
-            get_compacted_feedbacks() {
+            get_sphere_mesh(options) {
+                // must be run after get_compacted_feedbacks has run at least once.
+                var settings = $.extend({
+                    THREE: null,   // required THREE instance
+                    material: null, // material to use
+                    radius: 1,  // shared radius for spheres
+                    width_segments: 10,
+                    height_segments: 10,}, options);
+                settings.locations = this.compact_locations
+                return $.fn.webGL2crossingVoxels.spheresMesh(settings);
+            };
+            get_compacted_feedbacks(location_only) {
                 this.run();
                 var rn = this.runner;
-                this.front_corners_array = rn.feedback_array(
-                    "front_corners",
-                    this.front_corners_array,
-                );
-                this.back_corners_array = rn.feedback_array(
-                    "back_corners",
-                    this.back_corners_array,
-                );
+                if (!location_only) {
+                    this.front_corners_array = rn.feedback_array(
+                        "front_corners",
+                        this.front_corners_array,
+                    );
+                    this.back_corners_array = rn.feedback_array(
+                        "back_corners",
+                        this.back_corners_array,
+                    );
+                } else {
+                    this.location_array = rn.feedback_array(
+                        "location",
+                        this.location_array,
+                    );
+                }
                 this.index_array = rn.feedback_array(
                     "index",
                     this.index_array,
@@ -195,21 +214,29 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     this.compact_front_corners = new Float32Array(4 * this.compact_length);
                     this.compact_back_corners = new Float32Array(4 * this.compact_length);
                     this.compact_indices = new Int32Array(this.compact_length);
+                    this.compact_locations = new Float32Array(3 * this.compact_length);
                 }
                 // compact the arrays
                 this.compact_indices = this.feedbackContext.filter_degenerate_entries(
                     this.index_array, this.index_array, this.compact_indices, 1, -1
                 );
-                this.compact_front_corners = this.feedbackContext.filter_degenerate_entries(
-                    this.index_array, this.front_corners_array, this.compact_front_corners, 4, -1
-                );
-                this.compact_back_corners = this.feedbackContext.filter_degenerate_entries(
-                    this.index_array, this.back_corners_array, this.compact_back_corners, 4, -1
-                );
+                if (!location_only) {
+                    this.compact_front_corners = this.feedbackContext.filter_degenerate_entries(
+                        this.index_array, this.front_corners_array, this.compact_front_corners, 4, -1
+                    );
+                    this.compact_back_corners = this.feedbackContext.filter_degenerate_entries(
+                        this.index_array, this.back_corners_array, this.compact_back_corners, 4, -1
+                    );
+                } else {
+                    this.compact_locations = this.feedbackContext.filter_degenerate_entries(
+                        this.index_array, this.location_array, this.compact_locations, 3, -1
+                    );
+                }
                 return {
                     indices: this.compact_indices, 
                     front_corners: this.compact_front_corners,
                     back_corners: this.compact_back_corners,
+                    locations: this.compact_locations,
                 };
             };
             set_threshold(value) {
@@ -245,6 +272,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         // corners feedbacks
         out vec4 front_corners, back_corners;
 
+        // location feedback
+        out vec3 location;
+
         // index feedback
         flat out int index;
 
@@ -255,6 +285,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             back_corners = vec4(a100, a101, a110, a111);
 
             ${get_sizes_macro("gl_VertexID")}
+            location = vec3(f_depth_num, f_row_num, f_col_num);
 
             bool voxel_ok = true;
             if (u_grid_min[0] < u_grid_max[0]) {
@@ -289,6 +320,43 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
         `;
         return new WebGL2CrossingVoxels(options);
+    };
+
+    $.fn.webGL2crossingVoxels.spheresMesh = function (options) {
+        var settings = $.extend({
+            THREE: null,   // required THREE instance
+            material: null, // material to use
+            locations: null,  // inifial sphere locations
+            radius: 1,  // shared radius for spheres
+            width_segments: 10,
+            height_segments: 10,
+        }, options);
+        var THREE = settings.THREE;
+        var locations = settings.locations;
+        var geometry = new THREE.SphereBufferGeometry( settings.radius, settings.width_segments, settings.height_segments);
+        var count = Math.floor(locations.length/3);
+        var mesh = new THREE.InstancedMesh( geometry, settings.material, count );
+        mesh.update_sphere_locations = function(locations) {
+            var matrixArray = mesh.instanceMatrix.array;
+            var translation_offset = 12;
+            var matrix_size = 16;
+            for (var i=0; i<count; i++) {
+                var matrixStart = i * matrix_size + translation_offset;
+                var locationStart = i * 3;
+                // copy the translation portion of the matrix from the location.
+                for (var j=0; j<3; j++) {
+                    matrixArray[matrixStart + j] = locations[locationStart + j];
+                }
+            }
+            mesh.instanceMatrix.needsUpdate = true;
+        };
+        // set up all matrices
+        var M = new THREE.Matrix4();
+        for (var i=0; i<count; i++) {
+            mesh.setMatrixAt( i, M );
+        }
+        mesh.update_sphere_locations(locations);
+        return mesh;
     };
 
     $.fn.webGL2crossingVoxels.example = function (container) {
@@ -587,7 +655,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
             // Dont tile last column which wraps around or last row
             if ((index >= 0) && (i_col_num < (uRowSize - 1)) && (i_row_num < (uColSize - 1))) {
-                // float versions for calculations
+                // float versions for calculations (xxx remove extra variables...)
                 float layer_num = f_depth_num;
                 float row_num = f_row_num;
                 float col_num = f_col_num;
@@ -770,6 +838,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     num_rows: null,
                     num_cols: null,
                     num_layers: 1,  // default to "flat"
+                    num_blocks: 1,
                     //dx: [1, 0, 0],
                     //dy: [0, 1, 0],
                     //dz: [0, 0, 1],
@@ -790,7 +859,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     throw new Error("Feedback context required.");
                 }
                 var nvalues = s.valuesArray.length;
-                var nvoxels = s.num_rows * s.num_cols * s.num_layers;
+                var nvoxels = s.num_rows * s.num_cols * s.num_layers * s.num_blocks;
                 if (nvalues != nvoxels) {
                     // for now strict checking
                     throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
@@ -800,7 +869,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     valuesArray: s.valuesArray,
                     num_rows: s.num_rows,
                     num_cols: s.num_cols,
-                    num_layers: s.num_layers,  // default to "flat"
+                    num_layers: s.num_layers,
+                    num_blocks: s.num_blocks,
                     threshold: s.threshold,
                     shrink_factor: s.shrink_factor,
                     grid_min: s.grid_min,
@@ -837,6 +907,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         back_corners: compacted.back_corners,
                         num_rows: s.num_rows,
                         num_cols: s.num_cols,
+                        num_layers: s.num_layers,
+                        num_blocks: s.num_blocks,
                         rasterize: s.rasterize,
                         dx: s.dx,
                         dy: s.dy,
@@ -977,7 +1049,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     throw new Error("Feedback context required.");
                 }
                 var nvalues = s.valuesArray.length;
-                var nvoxels = s.num_rows * s.num_cols * s.num_layers;
+                var nvoxels = s.num_rows * s.num_cols * s.num_layers * s.num_blocks;
                 if (nvalues != nvoxels) {
                     // for now strict checking
                     throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
