@@ -12,13 +12,24 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
 (function($) {
 
+    var std_sizes_declarations = `
+    int voxel_index;
+    int i_block_num;
+    int i_depth_num;
+    int i_row_num;
+    int i_col_num;
+    float f_col_num;
+    float f_row_num;
+    float f_depth_num;
+    `;
+
     var get_sizes_macro = function(index_variable_name) {
         return `
-        int voxel_index = ${index_variable_name};
+        voxel_index = ${index_variable_name};
         
         // size of layer of rows and columns in 3d grid block
         int layer_voxels = uRowSize * uColSize;
-        int i_block_num;
+        //int i_block_num;
         int block_index;
 
         if (uLayerSize > 1) {
@@ -37,19 +48,19 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
 
         // instance depth of this layer
-        int i_depth_num = block_index / layer_voxels;
+        i_depth_num = block_index / layer_voxels;
         // ravelled index in layer
         int i_layer_index = block_index - (i_depth_num * layer_voxels);
 
-        int i_row_num = i_layer_index/ uRowSize;
-        int i_col_num = i_layer_index - (i_row_num * uRowSize);
+        i_row_num = i_layer_index/ uRowSize;
+        i_col_num = i_layer_index - (i_row_num * uRowSize);
 
-        float f_col_num = float(i_col_num);
-        float f_row_num = float(i_row_num);
-        float f_depth_num = float(i_depth_num);
+        f_col_num = float(i_col_num);
+        f_row_num = float(i_row_num);
+        f_depth_num = float(i_depth_num);
         //float f_block_num = float(i_block_num);  // not needed?
         `;
-    }
+    };
 
     $.fn.webGL2crossingVoxels = function(options) {
 
@@ -277,6 +288,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
         // index feedback
         flat out int index;
+
+        ${std_sizes_declarations}
 
         void main() {
             // default to invalid index indicating the voxel does not cross the value.
@@ -640,6 +653,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         const int W_right[N_CROSSING_INDEX] = int[] (
             -1, 2, 0, 3, 3, 1, 2, 3, 1, 3, 0, 0, 1, 3, 0,-1,
             -1,-1,-1, 3,-1, 1, 2,-1,-1, 3, 0,-1, 1,-1,-1,-1);
+
+        ${std_sizes_declarations}
 
         void main() {
 
@@ -1023,6 +1038,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     };
 
     $.fn.webGL2surfaces3d = function (options) {
+
+        // XXXX THIS IS HISTORICAL AND HAS NOT BEEN UPDATED FOR NEW CONVENTIONS XXXX
+        
         // from grid of sample points generate iso-surfacde triangulation.
         class WebGL2Surfaces3d {
             constructor(options) {
