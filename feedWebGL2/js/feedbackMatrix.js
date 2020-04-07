@@ -127,7 +127,8 @@
                 }
             }
         }
-        `
+        `;
+        
         class FeedbackReducer {
             constructor(mcontext, matrix) {
                 this.mcontext = mcontext;
@@ -145,6 +146,7 @@
                 this.dummyBuffer = this.context.buffer("multiplyDummyBuffer");
             };
         };
+
         var multiplier_shader = `#version 300 es
 
         // rows are "per mesh"
