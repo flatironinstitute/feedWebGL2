@@ -458,6 +458,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     rasterize: false,
                     threshold: 0,  // value at contour
                     invalid_coordinate: -100000,  // invalidity marker for positions
+                    location: "std",
                 }, options);
                 var s = this.settings;
                 this.feedbackContext = s.feedbackContext;
@@ -480,8 +481,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.vertex_num_buffer = this.feedbackContext.buffer()
                 this.vertex_num_buffer.initialize_from_array(vertexNumArray);
 
+                var vertex_shader;
+                if (s.location == "std") {
+                    vertex_shader = triangulate_vertex_shader(locate_std_decl);
+                } else {
+                    throw new Error("unknown grid location type: " + s.location);
+                }
+
                 this.program = this.feedbackContext.program({
-                    vertex_shader: triangulate_vertex_shader,
+                    vertex_shader: vertex_shader,
                     fragment_shader: tetrahedra_fragment_shader,
                     feedbacks: {
                         vPosition: {num_components: 3},
@@ -593,7 +601,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
         };
 
-        var triangulate_vertex_shader = `#version 300 es
+        var triangulate_vertex_shader = function(grid_location_declaration) {
+            return `#version 300 es
 
         // global length of rows, cols inputs
         uniform int uRowSize;
@@ -675,6 +684,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             -1,-1,-1, 3,-1, 1, 2,-1,-1, 3, 0,-1, 1,-1,-1,-1);
 
         ${std_sizes_declarations}
+        ${grid_location_declaration}
 
         void main() {
 
@@ -742,13 +752,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     vec3 combined_offset = ((1.0 - delta) * offsetL) + (delta * offsetR);
                     //vec3 vertex = combined_offset + vec3(col_num, row_num, layer_num);
                     //vec3 vertex = combined_offset + vec3(layer_num, row_num, col_num);
-                    vec3 vertex = combined_offset + location_offset;
+                    //vec3 vertex = combined_offset + location_offset;
+                    vec3 vertex = grid_location(combined_offset);
                     vPosition = dx * vertex[0] + dy * vertex[1] + dz * vertex[2] + translation;
                     gl_Position.xyz = vPosition;
                     gl_Position[3] = 1.0;
                     //vdump = float[4](vertex[0], vertex[1], vertex[2], delta);
 
-                    // Compute normal for the whole tetrahedron
                     vec3 center = (t_offsets[0] + t_offsets[1] + t_offsets[2] + t_offsets[3])/4.0;
                     vec3 nm = ( 
                         + (t_offsets[0] - center) * (t_wts[0] - uValue) 
@@ -756,16 +766,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         + (t_offsets[2] - center) * (t_wts[2] - uValue) 
                         + (t_offsets[3] - center) * (t_wts[3] - uValue) 
                         );
-                    float ln = length(nm);
+                    // convert norm to grid location (xxx may not work nicely if the grid is highly distorted???)
+                    vec3 grid_norm = grid_location(nm + center) - grid_location(center);
+                    float ln = length(grid_norm);
                     if (ln > 1e-12) {
-                        vNormal = nm / ln;
+                        vNormal = grid_norm / ln;
                     }
                     vColor = abs(vNormal);  // XXX FOR TESTING ONLY
                 }
             }
             //vPosition = gl_Position.xyz;
         }
-        `;
+        `;};
 
         var tetrahedra_fragment_shader = `#version 300 es
         #ifdef GL_ES
