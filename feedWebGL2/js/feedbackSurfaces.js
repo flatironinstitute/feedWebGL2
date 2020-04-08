@@ -72,7 +72,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     `;
 
     // xxxx the scaling and and polar conversion could be separated eventually if useful.
-    locate_polar_scaled_decl = `
+    var locate_polar_scaled_decl = `
 
     // all samplers hold value in R component only.
     // [block, row] --> row_scaled
@@ -85,8 +85,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     uniform sampler2D LayerScale;
 
     float rescale_f(in float offset, in int index, in sampler2D scaling) {
-        float x0 = texelFetch(scaling, ivec2(i_block_num, index), 0).r;
-        float x1 = texelFetch(scaling, ivec2(i_block_num, index+1), 0).r;
+        // note: indices are inverted from matrix notation matrix[y,x] === sampler(x,y) (???)
+        float x0 = texelFetch(scaling, ivec2(index, i_block_num), 0).r;
+        float x1 = texelFetch(scaling, ivec2(index+1, i_block_num), 0).r;
         return (x0 * (1.0 - offset)) + (x1 * offset);  // no clamping?
     }
 
@@ -124,6 +125,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // shrink the array sizes by this factor.
                     shrink_factor: 0.2,
                     location: "std",
+                    // samplers are prepared by caller if needed.  Descriptors provided by caller.
+                    samplers: {},
                 }, options);
 
                 var s = this.settings;
@@ -142,6 +145,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var vertex_shader;
                 if (s.location == "std") {
                     vertex_shader = crossingVoxelsShader(locate_std_decl);
+                } else if (s.location="polar_scaled") {
+                    vertex_shader = crossingVoxelsShader(locate_polar_scaled_decl);
                 } else {
                     throw new Error("unknown grid location type: " + s.location);
                 }
@@ -225,6 +230,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         },
                     },
                     inputs: inputs,
+                    samplers: s.samplers,
                 });
                 this.front_corners_array = null;
                 this.back_corners_array = null;
