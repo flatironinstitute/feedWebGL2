@@ -69,7 +69,41 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     vec3 grid_location(in vec3 offset) {
         return location_offset + offset;
     }
-    `
+    `;
+
+    // xxxx the scaling and and polar conversion could be separated eventually if useful.
+    locate_polar_scaled_decl = `
+
+    // all samplers hold value in R component only.
+    // [block, row] --> row_scaled
+    uniform sampler2D RowScale;
+
+    // [block, col] --> col_scaled
+    uniform sampler2D ColScale;
+
+    // [block, layer] --> layer_scaled
+    uniform sampler2D LayerScale;
+
+    float rescale_f(in float offset, in int index, in sampler2D scaling) {
+        float x0 = texelFetch(scaling, ivec2(i_block_num, index), 0).r;
+        float x1 = texelFetch(scaling, ivec2(i_block_num, index+1), 0).r;
+        return (x0 * (1.0 - offset)) + (x1 * offset);  // no clamping?
+    }
+
+    vec3 grid_location(in vec3 offset) {
+        float r = rescale_f(offset[0], i_depth_num, LayerScale);
+        float theta = rescale_f(offset[1], i_row_num, RowScale);
+        float phi = rescale_f(offset[2], i_col_num, ColScale);
+        float sint = sin(theta);
+        float cost = cos(theta);
+        float sinp = sin(phi);
+        float cosp = cos(phi);
+        float x = r * sinp * cost;
+        float y = r * sinp * sint;
+        float z = rho * cosp;
+        return vec3(x, y, z);
+    }
+    `;
 
     $.fn.webGL2crossingVoxels = function(options) {
 
