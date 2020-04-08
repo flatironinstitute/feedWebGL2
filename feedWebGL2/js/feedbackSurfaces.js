@@ -21,6 +21,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     float f_col_num;
     float f_row_num;
     float f_depth_num;
+    vec3 location_offset;
     `;
 
     var get_sizes_macro = function(index_variable_name) {
@@ -59,8 +60,16 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         f_row_num = float(i_row_num);
         f_depth_num = float(i_depth_num);
         //float f_block_num = float(i_block_num);  // not needed?
+        location_offset = vec3(f_depth_num, f_row_num, f_col_num);
         `;
     };
+
+    // function to compute (x,y,z) location of offset relative to voxel location.
+    var locate_std_decl = `
+    vec3 grid_location(in vec3 offset) {
+        return location_offset + offset;
+    }
+    `
 
     $.fn.webGL2crossingVoxels = function(options) {
 
@@ -80,6 +89,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // when getting compact arrays
                     // shrink the array sizes by this factor.
                     shrink_factor: 0.2,
+                    location: "std",
                 }, options);
 
                 var s = this.settings;
@@ -95,8 +105,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.buffer.initialize_from_array(s.valuesArray);
                 var buffername = this.buffer.name;
 
+                var vertex_shader;
+                if (s.location == "std") {
+                    vertex_shader = crossingVoxelsShader(locate_std_decl);
+                } else {
+                    throw new Error("unknown grid location type: " + s.location);
+                }
+
                 this.program = this.feedbackContext.program({
-                    vertex_shader: crossingVoxelsShader,
+                    vertex_shader: vertex_shader,
                     fragment_shader: this.settings.fragment_shader,
                     feedbacks: {
                         index: {type: "int"},
@@ -259,7 +276,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
         };
 
-        var crossingVoxelsShader = `#version 300 es
+        var crossingVoxelsShader = function(grid_location_declaration) {
+            return `#version 300 es
 
         // global length of rows
         uniform int uRowSize;
@@ -290,6 +308,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         flat out int index;
 
         ${std_sizes_declarations}
+        ${grid_location_declaration}
 
         void main() {
             // default to invalid index indicating the voxel does not cross the value.
@@ -298,7 +317,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             back_corners = vec4(a100, a101, a110, a111);
 
             ${get_sizes_macro("gl_VertexID")}
-            location = vec3(f_depth_num, f_row_num, f_col_num);
+            //location = location_offset;
+            location = grid_location(vec3(0,0,0));
 
             bool voxel_ok = true;
             if (u_grid_min[0] < u_grid_max[0]) {
@@ -331,7 +351,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
             }
         }
-        `;
+        `;};
         return new WebGL2CrossingVoxels(options);
     };
 
@@ -670,10 +690,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
             // Dont tile last column which wraps around or last row
             if ((index >= 0) && (i_col_num < (uRowSize - 1)) && (i_row_num < (uColSize - 1))) {
-                // float versions for calculations (xxx remove extra variables...)
-                float layer_num = f_depth_num;
-                float row_num = f_row_num;
-                float col_num = f_col_num;
                 // determine which vertex in which triangle in which tetrahedron to interpolate
                 int iVertexCount = gl_VertexID;
                 int iTetrahedronNumber = iVertexCount / (N_TRIANGLES * N_VERTICES);
@@ -725,7 +741,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     float delta = (wtL - uValue) / (wtL - wtR);
                     vec3 combined_offset = ((1.0 - delta) * offsetL) + (delta * offsetR);
                     //vec3 vertex = combined_offset + vec3(col_num, row_num, layer_num);
-                    vec3 vertex = combined_offset + vec3(layer_num, row_num, col_num);
+                    //vec3 vertex = combined_offset + vec3(layer_num, row_num, col_num);
+                    vec3 vertex = combined_offset + location_offset;
                     vPosition = dx * vertex[0] + dy * vertex[1] + dz * vertex[2] + translation;
                     gl_Position.xyz = vPosition;
                     gl_Position[3] = 1.0;
@@ -1040,7 +1057,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     $.fn.webGL2surfaces3d = function (options) {
 
         // XXXX THIS IS HISTORICAL AND HAS NOT BEEN UPDATED FOR NEW CONVENTIONS XXXX
-        
+
         // from grid of sample points generate iso-surfacde triangulation.
         class WebGL2Surfaces3d {
             constructor(options) {
