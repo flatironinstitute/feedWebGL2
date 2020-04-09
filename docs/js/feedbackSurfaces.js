@@ -12,13 +12,25 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
 (function($) {
 
+    var std_sizes_declarations = `
+    int voxel_index;
+    int i_block_num;
+    int i_depth_num;
+    int i_row_num;
+    int i_col_num;
+    float f_col_num;
+    float f_row_num;
+    float f_depth_num;
+    vec3 location_offset;
+    `;
+
     var get_sizes_macro = function(index_variable_name) {
         return `
-        int voxel_index = ${index_variable_name};
+        voxel_index = ${index_variable_name};
         
         // size of layer of rows and columns in 3d grid block
         int layer_voxels = uRowSize * uColSize;
-        int i_block_num;
+        //int i_block_num;
         int block_index;
 
         if (uLayerSize > 1) {
@@ -37,19 +49,62 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
 
         // instance depth of this layer
-        int i_depth_num = block_index / layer_voxels;
+        i_depth_num = block_index / layer_voxels;
         // ravelled index in layer
         int i_layer_index = block_index - (i_depth_num * layer_voxels);
 
-        int i_row_num = i_layer_index/ uRowSize;
-        int i_col_num = i_layer_index - (i_row_num * uRowSize);
+        i_row_num = i_layer_index/ uRowSize;
+        i_col_num = i_layer_index - (i_row_num * uRowSize);
 
-        float f_col_num = float(i_col_num);
-        float f_row_num = float(i_row_num);
-        float f_depth_num = float(i_depth_num);
+        f_col_num = float(i_col_num);
+        f_row_num = float(i_row_num);
+        f_depth_num = float(i_depth_num);
         //float f_block_num = float(i_block_num);  // not needed?
+        location_offset = vec3(f_depth_num, f_row_num, f_col_num);
         `;
+    };
+
+    // function to compute (x,y,z) location of offset relative to voxel location.
+    var locate_std_decl = `
+    vec3 grid_location(in vec3 offset) {
+        return location_offset + offset;
     }
+    `;
+
+    // xxxx the scaling and and polar conversion could be separated eventually if useful.
+    var locate_polar_scaled_decl = `
+
+    // all samplers hold value in R component only.
+    // [block, row] --> row_scaled
+    uniform sampler2D RowScale;
+
+    // [block, col] --> col_scaled
+    uniform sampler2D ColScale;
+
+    // [block, layer] --> layer_scaled
+    uniform sampler2D LayerScale;
+
+    float rescale_f(in float offset, in int index, in sampler2D scaling) {
+        // note: indices are inverted from matrix notation matrix[y,x] === sampler(x,y) (???)
+        float x0 = texelFetch(scaling, ivec2(index, i_block_num), 0).r;
+        float x1 = texelFetch(scaling, ivec2(index+1, i_block_num), 0).r;
+        return (x0 * (1.0 - offset)) + (x1 * offset);  // no clamping?
+    }
+
+    vec3 grid_location(in vec3 offset) {
+        float r = rescale_f(offset[0], i_depth_num, LayerScale);
+        float theta = rescale_f(offset[1], i_row_num, RowScale);
+        float phi = rescale_f(offset[2], i_col_num, ColScale);
+        float sint = sin(theta);
+        float cost = cos(theta);
+        float sinp = sin(phi);
+        float cosp = cos(phi);
+        float x = r * sinp * cost;
+        float y = r * sinp * sint;
+        float z = rho * cosp;
+        return vec3(x, y, z);
+    }
+    `;
 
     $.fn.webGL2crossingVoxels = function(options) {
 
@@ -69,6 +124,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // when getting compact arrays
                     // shrink the array sizes by this factor.
                     shrink_factor: 0.2,
+                    location: "std",
+                    // samplers are prepared by caller if needed.  Descriptors provided by caller.
+                    samplers: {},
+                    location_fill: -1e12,
                 }, options);
 
                 var s = this.settings;
@@ -84,8 +143,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.buffer.initialize_from_array(s.valuesArray);
                 var buffername = this.buffer.name;
 
+                var vertex_shader;
+                if (s.location == "std") {
+                    vertex_shader = crossingVoxelsShader(locate_std_decl);
+                } else if (s.location="polar_scaled") {
+                    vertex_shader = crossingVoxelsShader(locate_polar_scaled_decl);
+                } else {
+                    throw new Error("unknown grid location type: " + s.location);
+                }
+
                 this.program = this.feedbackContext.program({
-                    vertex_shader: crossingVoxelsShader,
+                    vertex_shader: vertex_shader,
                     fragment_shader: this.settings.fragment_shader,
                     feedbacks: {
                         index: {type: "int"},
@@ -163,6 +231,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         },
                     },
                     inputs: inputs,
+                    samplers: s.samplers,
                 });
                 this.front_corners_array = null;
                 this.back_corners_array = null;
@@ -186,6 +255,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
             get_compacted_feedbacks(location_only) {
                 this.run();
+                var location_fill = this.settings.location_fill;
                 var rn = this.runner;
                 if (!location_only) {
                     this.front_corners_array = rn.feedback_array(
@@ -195,6 +265,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     this.back_corners_array = rn.feedback_array(
                         "back_corners",
                         this.back_corners_array,
+                    );
+                    // xxxx locations are not always needed -- could optimize.
+                    this.location_array = rn.feedback_array(
+                        "location",
+                        this.location_array,
                     );
                 } else {
                     this.location_array = rn.feedback_array(
@@ -227,9 +302,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     this.compact_back_corners = this.feedbackContext.filter_degenerate_entries(
                         this.index_array, this.back_corners_array, this.compact_back_corners, 4, -1
                     );
+                    // xxxx locations are not always needed -- could optimize.
+                    this.compact_locations = this.feedbackContext.filter_degenerate_entries(
+                        this.index_array, this.location_array, this.compact_locations, 3, location_fill
+                    );
                 } else {
                     this.compact_locations = this.feedbackContext.filter_degenerate_entries(
-                        this.index_array, this.location_array, this.compact_locations, 3, -1
+                        this.index_array, this.location_array, this.compact_locations, 3, location_fill
                     );
                 }
                 return {
@@ -248,7 +327,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
         };
 
-        var crossingVoxelsShader = `#version 300 es
+        var crossingVoxelsShader = function(grid_location_declaration) {
+            return `#version 300 es
 
         // global length of rows
         uniform int uRowSize;
@@ -278,6 +358,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         // index feedback
         flat out int index;
 
+        ${std_sizes_declarations}
+        ${grid_location_declaration}
+
         void main() {
             // default to invalid index indicating the voxel does not cross the value.
             index = -1;
@@ -285,7 +368,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             back_corners = vec4(a100, a101, a110, a111);
 
             ${get_sizes_macro("gl_VertexID")}
-            location = vec3(f_depth_num, f_row_num, f_col_num);
+            //location = location_offset;
+            location = grid_location(vec3(0,0,0));
 
             bool voxel_ok = true;
             if (u_grid_min[0] < u_grid_max[0]) {
@@ -318,7 +402,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
             }
         }
-        `;
+        `;};
         return new WebGL2CrossingVoxels(options);
     };
 
@@ -425,6 +509,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     rasterize: false,
                     threshold: 0,  // value at contour
                     invalid_coordinate: -100000,  // invalidity marker for positions
+                    location: "std",
                 }, options);
                 var s = this.settings;
                 this.feedbackContext = s.feedbackContext;
@@ -447,8 +532,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.vertex_num_buffer = this.feedbackContext.buffer()
                 this.vertex_num_buffer.initialize_from_array(vertexNumArray);
 
+                var vertex_shader;
+                if (s.location == "std") {
+                    vertex_shader = triangulate_vertex_shader(locate_std_decl);
+                } else {
+                    throw new Error("unknown grid location type: " + s.location);
+                }
+
                 this.program = this.feedbackContext.program({
-                    vertex_shader: triangulate_vertex_shader,
+                    vertex_shader: vertex_shader,
                     fragment_shader: tetrahedra_fragment_shader,
                     feedbacks: {
                         vPosition: {num_components: 3},
@@ -560,7 +652,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
         };
 
-        var triangulate_vertex_shader = `#version 300 es
+        var triangulate_vertex_shader = function(grid_location_declaration) {
+            return `#version 300 es
 
         // global length of rows, cols inputs
         uniform int uRowSize;
@@ -641,6 +734,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             -1, 2, 0, 3, 3, 1, 2, 3, 1, 3, 0, 0, 1, 3, 0,-1,
             -1,-1,-1, 3,-1, 1, 2,-1,-1, 3, 0,-1, 1,-1,-1,-1);
 
+        ${std_sizes_declarations}
+        ${grid_location_declaration}
+
         void main() {
 
             // initially set output point to invalid
@@ -655,10 +751,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
             // Dont tile last column which wraps around or last row
             if ((index >= 0) && (i_col_num < (uRowSize - 1)) && (i_row_num < (uColSize - 1))) {
-                // float versions for calculations (xxx remove extra variables...)
-                float layer_num = f_depth_num;
-                float row_num = f_row_num;
-                float col_num = f_col_num;
                 // determine which vertex in which triangle in which tetrahedron to interpolate
                 int iVertexCount = gl_VertexID;
                 int iTetrahedronNumber = iVertexCount / (N_TRIANGLES * N_VERTICES);
@@ -710,13 +802,14 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     float delta = (wtL - uValue) / (wtL - wtR);
                     vec3 combined_offset = ((1.0 - delta) * offsetL) + (delta * offsetR);
                     //vec3 vertex = combined_offset + vec3(col_num, row_num, layer_num);
-                    vec3 vertex = combined_offset + vec3(layer_num, row_num, col_num);
+                    //vec3 vertex = combined_offset + vec3(layer_num, row_num, col_num);
+                    //vec3 vertex = combined_offset + location_offset;
+                    vec3 vertex = grid_location(combined_offset);
                     vPosition = dx * vertex[0] + dy * vertex[1] + dz * vertex[2] + translation;
                     gl_Position.xyz = vPosition;
                     gl_Position[3] = 1.0;
                     //vdump = float[4](vertex[0], vertex[1], vertex[2], delta);
 
-                    // Compute normal for the whole tetrahedron
                     vec3 center = (t_offsets[0] + t_offsets[1] + t_offsets[2] + t_offsets[3])/4.0;
                     vec3 nm = ( 
                         + (t_offsets[0] - center) * (t_wts[0] - uValue) 
@@ -724,16 +817,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         + (t_offsets[2] - center) * (t_wts[2] - uValue) 
                         + (t_offsets[3] - center) * (t_wts[3] - uValue) 
                         );
-                    float ln = length(nm);
+                    // convert norm to grid location (xxx may not work nicely if the grid is highly distorted???)
+                    vec3 grid_norm = grid_location(nm + center) - grid_location(center);
+                    float ln = length(grid_norm);
                     if (ln > 1e-12) {
-                        vNormal = nm / ln;
+                        vNormal = grid_norm / ln;
                     }
                     vColor = abs(vNormal);  // XXX FOR TESTING ONLY
                 }
             }
             //vPosition = gl_Position.xyz;
         }
-        `;
+        `;};
 
         var tetrahedra_fragment_shader = `#version 300 es
         #ifdef GL_ES
@@ -1023,6 +1118,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     };
 
     $.fn.webGL2surfaces3d = function (options) {
+
+        // XXXX THIS IS HISTORICAL AND HAS NOT BEEN UPDATED FOR NEW CONVENTIONS XXXX
+
         // from grid of sample points generate iso-surfacde triangulation.
         class WebGL2Surfaces3d {
             constructor(options) {
