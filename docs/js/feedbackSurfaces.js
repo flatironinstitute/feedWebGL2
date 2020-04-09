@@ -86,15 +86,35 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
     float rescale_f(in float offset, in int index, in sampler2D scaling) {
         // note: indices are inverted from matrix notation matrix[y,x] === sampler(x,y) (???)
+        //float x0 = texelFetch(scaling, ivec2(i_block_num, index), 0).r;
+        //float x1 = texelFetch(scaling, ivec2(i_block_num, index+1), 0).r;
         float x0 = texelFetch(scaling, ivec2(index, i_block_num), 0).r;
         float x1 = texelFetch(scaling, ivec2(index+1, i_block_num), 0).r;
         return (x0 * (1.0 - offset)) + (x1 * offset);  // no clamping?
     }
 
+
+    /*
     vec3 grid_location(in vec3 offset) {
+        // debug version
+        float x = offset[0];
+        int index = i_depth_num;
+        //sampler2D scaling = LayerScale;
+        //float x0 = texelFetch(LayerScale, ivec2(i_block_num, index), 0).r;
+        //float x1 = texelFetch(LayerScale, ivec2(i_block_num, index+1), 0).r;
+        float x0 = texelFetch(LayerScale, ivec2(index, i_block_num), 0).r;
+        float x1 = texelFetch(LayerScale, ivec2(index+1, i_block_num), 0).r;
+        return vec3(x, x0, x1);
+    }
+    */
+
+    vec3 grid_location(in vec3 offset) {
+        //return offset;
         float r = rescale_f(offset[0], i_depth_num, LayerScale);
         float theta = rescale_f(offset[1], i_row_num, RowScale);
         float phi = rescale_f(offset[2], i_col_num, ColumnScale);
+        //return vec3(r, theta, phi);
+        
         float sint = sin(theta);
         float cost = cos(theta);
         float sinp = sin(phi);
@@ -103,6 +123,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         float y = r * sinp * sint;
         float z = r * cosp;
         return vec3(x, y, z);
+        
     }
     `;
 
@@ -504,7 +525,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     dx: [1, 0, 0],
                     dy: [0, 1, 0],
                     dz: [0, 0, 1],
-                    translation: [-1, -1, 0],
+                    translation: [0, 0, 0],
                     color: [1, 1, 1],
                     rasterize: false,
                     threshold: 0,  // value at contour
@@ -982,9 +1003,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         that.textures[name] = texture;
                         that.samplers[name] = {dim: "2D", from_texture: name};
                     };
-                    set_up_sampler("RowScale", s.num_rows);
-                    set_up_sampler("ColumnScale", s.num_cols);
-                    set_up_sampler("LayerScale", s.num_layers);
+                    set_up_sampler("RowScale", s.num_rows+1);
+                    set_up_sampler("ColumnScale", s.num_cols+1);
+                    set_up_sampler("LayerScale", s.num_layers+1);
                 }
                 this.crossing = container.webGL2crossingVoxels({
                     feedbackContext: this.feedbackContext,
@@ -1007,6 +1028,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             check_geometry() {
                 // arrange the geometry parameters to fit in [-1:1] cube unless specified otherwise
                 var s = this.settings;
+                if (s.location != "std") {
+                    return;  // don't mess with non-standard geometry
+                }
                 if (!s.dx) {
                     // geometry needs specifying:
                     var max_dimension = Math.max(s.num_rows, s.num_cols, s.num_layers);
