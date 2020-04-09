@@ -79,7 +79,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     uniform sampler2D RowScale;
 
     // [block, col] --> col_scaled
-    uniform sampler2D ColScale;
+    uniform sampler2D ColumnScale;
 
     // [block, layer] --> layer_scaled
     uniform sampler2D LayerScale;
@@ -94,14 +94,14 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     vec3 grid_location(in vec3 offset) {
         float r = rescale_f(offset[0], i_depth_num, LayerScale);
         float theta = rescale_f(offset[1], i_row_num, RowScale);
-        float phi = rescale_f(offset[2], i_col_num, ColScale);
+        float phi = rescale_f(offset[2], i_col_num, ColumnScale);
         float sint = sin(theta);
         float cost = cos(theta);
         float sinp = sin(phi);
         float cosp = cos(phi);
         float x = r * sinp * cost;
         float y = r * sinp * sint;
-        float z = rho * cosp;
+        float z = r * cosp;
         return vec3(x, y, z);
     }
     `;
@@ -510,6 +510,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     threshold: 0,  // value at contour
                     invalid_coordinate: -100000,  // invalidity marker for positions
                     location: "std",
+                    // samplers are prepared by caller if needed.  Descriptors provided by caller.
+                    samplers: {},
                 }, options);
                 var s = this.settings;
                 this.feedbackContext = s.feedbackContext;
@@ -535,6 +537,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var vertex_shader;
                 if (s.location == "std") {
                     vertex_shader = triangulate_vertex_shader(locate_std_decl);
+                } else if (s.location="polar_scaled") {
+                    vertex_shader = triangulate_vertex_shader(locate_polar_scaled_decl);
+                    //vertex_shader = triangulate_vertex_shader(locate_std_decl);
                 } else {
                     throw new Error("unknown grid location type: " + s.location);
                 }
@@ -624,6 +629,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             },
                         },
                     },
+                    samplers: s.samplers,
                 });
             };
             run() {
@@ -925,6 +931,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         // which may result in some data omission in dense cases.
         class WebGL2Surfaces3dOpt {
             constructor(options) {
+                var that = this;
                 this.settings = $.extend({
                     // default settings:
                     shrink_factor: 0.1, // how much to shrink buffers
@@ -945,6 +952,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     grid_min: [0, 0, 0],
                     grid_max: [-1, -1, -1],  // disabled grid coordinate filtering (invalid limits)
                     after_run_callback: null,   // call this after each run.
+                    // method of conversion from grid coordinates to world coordinates
+                    location: "std", 
+                    // parameters needed by location method if any.
+                    location_parameters: null,
                 }, options);
                 this.check_geometry();
                 var s = this.settings;
@@ -959,6 +970,22 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // for now strict checking
                     throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
                 }
+                // samplers for location conversion, if any
+                this.samplers = {};
+                this.textures = {}
+                if (s.location == "polar_scaled") {
+                    // set up scaling textures
+                    this.samplers.RowScale = this.feedbackContext.texture("RowScale", "FLOAT", "RED", "R32F");
+                    var set_up_sampler = function(name, size) {
+                        var texture = that.feedbackContext.texture(name, "FLOAT", "RED", "R32F");
+                        texture.load_array(s.location_parameters[name], size, s.num_blocks)
+                        that.textures[name] = texture;
+                        that.samplers[name] = {dim: "2D", from_texture: name};
+                    };
+                    set_up_sampler("RowScale", s.num_rows);
+                    set_up_sampler("ColumnScale", s.num_cols);
+                    set_up_sampler("LayerScale", s.num_layers);
+                }
                 this.crossing = container.webGL2crossingVoxels({
                     feedbackContext: this.feedbackContext,
                     valuesArray: s.valuesArray,
@@ -970,6 +997,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     shrink_factor: s.shrink_factor,
                     grid_min: s.grid_min,
                     grid_max: s.grid_max,  // disabled grid coordinate filtering (invalid limits)
+                    location: s.location,
+                    samplers: this.samplers,
                     // never rasterize the crossing pixels
                 });
                 // initialize segmenter upon first run.
@@ -1011,6 +1040,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         translation: s.translation,
                         threshold: s.threshold,
                         invalid_coordinate: s.invalid_coordinate,
+                        location: s.location,
+                        samplers: this.samplers,
                     });
                 } else {
                     // reset buffer content
