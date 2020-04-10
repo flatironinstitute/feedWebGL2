@@ -969,7 +969,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     color: [1, 1, 1],
                     rasterize: false,
                     threshold: 0,  // value at contour
-                    invalid_coordinate: -100000,  // invalidity marker for positions
+                    invalid_coordinate: -100000,  // invalidity marker for positions, must be very negative
                     grid_min: [0, 0, 0],
                     grid_max: [-1, -1, -1],  // disabled grid coordinate filtering (invalid limits)
                     after_run_callback: null,   // call this after each run.
@@ -1111,14 +1111,21 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
                 return vertex_color_destination;
             };
-            linked_three_geometry (THREE) {
+            linked_three_geometry (THREE, clean, normal_binning) {
                 // create a three.js geometry linked to the current positions feedback array.
                 // xxxx only one geometry may be linked at a time.
                 // this is a bit convoluted in an attempt to only update attributes when needed.
                 var that = this;
-                var positions = this.get_positions();
-                var normals = this.get_normals();
-                var colors = this.get_colors();
+                var positions, normals;
+                if (clean) {
+                    var pn = this.clean_positions_and_normals(normal_binning);
+                    positions = pn.positions;
+                    normals = pn.normals;
+                } else {
+                    positions = this.get_positions();
+                    normals = this.get_normals();
+                }
+                var colors = this.get_colors();  // xxxx remove this? (debug only)
                 var geometry = new THREE.BufferGeometry();
                 geometry.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
                 geometry.setAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
@@ -1135,9 +1142,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         that.link_needs_update = false;
                         return;
                     }
-                    geometry.attributes.position.array = that.get_positions(geometry.attributes.position.array);
+                    var positions, normals;
+                    if (clean) {
+                        var pn = that.clean_positions_and_normals(normal_binning);
+                        positions = pn.positions;
+                        normals = pn.normals;
+                    } else {
+                        positions = that.get_positions(geometry.attributes.position.array);
+                        normals = that.get_normals(geometry.attributes.normal.array);
+                    }
+                    geometry.attributes.position.array = positions;
                     geometry.attributes.position.needsUpdate = true;
-                    geometry.attributes.normal.array = that.get_normals(geometry.attributes.normal.array);
+                    geometry.attributes.normal.array = normals;
                     geometry.attributes.normal.needsUpdate = true;
                     geometry.attributes.color.array = that.get_colors(geometry.attributes.color.array);
                     geometry.attributes.normal.needsUpdate = true;
@@ -1147,6 +1163,124 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.check_update_link = check_update_link;
                 return geometry;
             };
+            clean_positions_and_normals(normal_binning, truncate) {
+                var positions = this.get_positions();
+                var normals = this.get_normals();
+                var nfloats = positions.length;
+                var clean_positions = new Float32Array(nfloats);
+                var clean_normals = new Float32Array(nfloats);
+                var clean_length = 0;
+                var tetrahedron_indices = this.crossing.compact_indices;
+                var vertices_per_tetrahedron = this.segments.vertices_per_instance;
+                var too_small = this.settings.invalid_coordinate + 1;
+                var maxes = null;
+                var mins = null;
+                for (var i=0; i<tetrahedron_indices.length; i++) {
+                    if (tetrahedron_indices[i] < 0) {
+                        break;  // sentinel: end of valid tetrahedron indices
+                    }
+                    var tetrahedron_start = 3 * i * vertices_per_tetrahedron;
+                    for (var vj=0; vj<vertices_per_tetrahedron; vj++) {
+                        var vertex_start = 3 * vj + tetrahedron_start;
+                        if (positions[vertex_start] > too_small) {
+                            if (!maxes) {
+                                maxes = [];
+                                mins = [];
+                                for (var k=0; k<3; k++) {
+                                    var p = positions[vertex_start + k];
+                                    maxes.push(p);
+                                    mins.push(p);
+                                }
+                            }
+                            for (var k=0; k<3; k++) {
+                                var copy_index = vertex_start + k;
+                                var p = positions[copy_index];
+                                maxes[k] = Math.max(maxes[k], p);
+                                mins[k] = Math.min(mins[k], p)
+                                clean_positions[clean_length] = p;
+                                clean_normals[clean_length] = normals[copy_index];
+                                clean_length++;
+                            }
+                        }
+                    }
+                }
+                if (normal_binning && (clean_length > 0)) {
+                    debugger;
+                    // unify geometrically close normal values
+                    var key_to_normal = {};
+                    var denominators = [];
+                    for (var i=0; i<3; i++) {
+                        var d = maxes[i] - mins[i];
+                        if (d < 1e-17) {
+                            d = 1.0
+                        }
+                        denominators.push(d);
+                    }
+                    var position_bin_key = function (vertex_index) {
+                        var key = 0;
+                        var vertex_start = 3 * vertex_index;
+                        for (var k=0; k<3; k++) {
+                            key = normal_binning * key;
+                            var coordinate = clean_positions[vertex_start + k];
+                            var k_offset = Math.floor(normal_binning * (coordinate - mins[k])/denominators[k]);
+                            key += k_offset;
+                        }
+                        return key;
+                    };
+                    var n_vertices = clean_length / 3;
+                    var vertex_to_key = {};
+                    var key_to_normal_sum = {};
+                    for (var vi=0; vi<n_vertices; vi++) {
+                        var key = position_bin_key(vi);
+                        vertex_to_key[vi] = key;
+                        var ns = key_to_normal_sum[key];
+                        if (!ns) {
+                            ns = [0, 0, 0];
+                        }
+                        var vertex_start = vi * 3;
+                        for (var k=0; k<3; k++) {
+                            ns[k] += clean_normals[vertex_start + k];
+                        }
+                        key_to_normal_sum[key] = ns;
+                    }
+                    // renormalize
+                    for (var k in key_to_normal_sum) {
+                        var ns = key_to_normal_sum[k];
+                        var n = 0;
+                        for (var k=0; k<3; k++) {
+                            n += ns[k] * ns[k];
+                        }
+                        if (n < 1e-10) {
+                            n = 1.0;
+                        }
+                        n = Math.sqrt(n);
+                        for (var k=0; k<3; k++) {
+                            ns[k] = ns[k] / n;
+                        }
+                        key_to_normal_sum[k] = ns;
+                    }
+                    // apply unified normals
+                    for (var vi=0; vi<n_vertices; vi++) {
+                        var vertex_start = vi * 3;
+                        var key = vertex_to_key[vi];
+                        var ns = key_to_normal_sum[key];
+                        for (var k=0; k<3; k++) {
+                            clean_normals[vertex_start + k] = ns[k];
+                        }
+                    }
+                }
+                if (truncate) {
+                    clean_positions = clean_positions.subarray(0, clean_length);
+                    clean_normals = clean_normals.subarray(0, clean_length);
+                }
+                return {
+                    positions: clean_positions,
+                    normals: clean_normals,
+                    length: clean_length,
+                    maxes: maxes,
+                    mins: mins,
+                }
+            }
             set_grid_limits(grid_mins, grid_maxes) {
                 this.crossing.set_grid_limits(grid_mins, grid_maxes);
             };
