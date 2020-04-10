@@ -837,18 +837,25 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     gl_Position[3] = 1.0;
                     //vdump = float[4](vertex[0], vertex[1], vertex[2], delta);
 
-                    vec3 center = (t_offsets[0] + t_offsets[1] + t_offsets[2] + t_offsets[3])/4.0;
+                    // compute normal in terms of grid locations for tetrahedral vertices
+                    vec3[4] grid_locations = vec3[](
+                        grid_location(t_offsets[0]),
+                        grid_location(t_offsets[1]),
+                        grid_location(t_offsets[2]),
+                        grid_location(t_offsets[3])
+                    );
+
+                    vec3 center = (grid_locations[0] + grid_locations[1] + grid_locations[2] + grid_locations[3])/4.0;
                     vec3 nm = ( 
-                        + (t_offsets[0] - center) * (t_wts[0] - uValue) 
-                        + (t_offsets[1] - center) * (t_wts[1] - uValue) 
-                        + (t_offsets[2] - center) * (t_wts[2] - uValue) 
-                        + (t_offsets[3] - center) * (t_wts[3] - uValue) 
+                        + (grid_locations[0] - center) * (t_wts[0] - uValue) 
+                        + (grid_locations[1] - center) * (t_wts[1] - uValue) 
+                        + (grid_locations[2] - center) * (t_wts[2] - uValue) 
+                        + (grid_locations[3] - center) * (t_wts[3] - uValue) 
                         );
-                    // convert norm to grid location (xxx may not work nicely if the grid is highly distorted???)
-                    vec3 grid_norm = grid_location(nm + center) - grid_location(center);
-                    float ln = length(grid_norm);
+                    
+                    float ln = length(nm);
                     if (ln > 1e-12) {
-                        vNormal = grid_norm / ln;
+                        vNormal = nm / ln;
                     }
                     vColor = abs(vNormal);  // XXX FOR TESTING ONLY
                 }
