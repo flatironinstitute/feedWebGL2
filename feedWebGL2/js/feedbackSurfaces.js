@@ -332,13 +332,58 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         this.index_array, this.location_array, this.compact_locations, 3, location_fill
                     );
                 }
-                return {
+                var mins = null;
+                var maxes = null;
+                var locs = this.compact_locations;
+                var indices = this.compact_indices;
+                if ((indices.length>0) && (indices[0]>=0)) {
+                    mins = [locs[0], locs[1], locs[2]];
+                    maxes = [locs[0], locs[1], locs[2]];
+                    for (var i=0; i<indices.length; i++) {
+                        if (indices[i]<0) {
+                            break;
+                        }
+                        for (var k=0; k<3; k++) {
+                            var v = locs[i*3 + k];
+                            mins[k] = Math.min(mins[k], v);
+                            maxes[k] = Math.max(maxes[k], v);
+                        }
+                    }
+                }
+                var n2 = 0;
+                var mid = [];
+                if (mins) {
+                    for (var k=0; k<3; k++) {
+                        mid.push(0.5 * (mins[k] + maxes[k]));
+                        n2 += (mins[k] - maxes[k]) ** 2;
+                    }
+                }
+                this.compacted_feedbacks = {
+                    mid: mid,
+                    radius: 0.5 * Math.sqrt(n2),
+                    mins: mins,
+                    maxes: maxes,
                     indices: this.compact_indices, 
                     front_corners: this.compact_front_corners,
                     back_corners: this.compact_back_corners,
                     locations: this.compact_locations,
                 };
+                return this.compacted_feedbacks;
             };
+            reset_three_camera(camera, radius_multiple) {
+                // adjust three.js camera to look at current voxels
+                var cf = this.compacted_feedbacks;
+                if ((!cf) || (!cf.mins)) {
+                    // no points -- punt
+                    return;
+                }
+                radius_multiple = radius_multiple || 3;
+                camera.position.x = cf.mid[0];
+                camera.position.y = cf.mid[1];
+                camera.position.z = cf.mid[2] + radius_multiple * cf.radius;
+                camera.lookAt(cf.mid[0], cf.mid[1], cf.mid[2])
+                return camera;
+            }
             set_threshold(value) {
                 this.runner.change_uniform("uValue", [value]);
             };
