@@ -1,17 +1,10 @@
 
 // jQuery plugin for webGL feedback programs.
 
-/*
-todo:
-
-get feedback array
-runner.run
-data loading convenience interfaces on runner.
-*/
+// xxxx should provide logic for releasing structures.
 
 (function($) {
     $.fn.feedWebGL2 = function (options) {
-        var jquery_object = this;
 
         class FeedbackContext {
             
@@ -20,6 +13,7 @@ data loading convenience interfaces on runner.
                     // default settings:
                     gl: null,    // the underlying gl context to use
                     buffers: {},
+                    textures: {},
                 }, options);
 
                 // set up the context if needed.
@@ -55,6 +49,19 @@ data loading convenience interfaces on runner.
                         throw new Error("buffer descriptor must specify array or vector initial values.")
                     }
                 }
+                // allocate textures
+                this.textures = {};
+                for (var name in this.settings.textures) {
+                    var desc = this.settings.textures[name];
+                    var typ = desc.type || "FLOAT";
+                    var format = desc.format || "RED";
+                    var internal_format = desc.internal_format || "R32F";
+                    var texture = this.texture(name, typ, format, internal_format, desc.width, desc.height);
+                    var array = desc.array;
+                    if (array) {
+                        texture.load_array(array)
+                    }
+                }
             };
             fresh_name(prefix) {
                 this.counter += 1;
@@ -66,7 +73,16 @@ data loading convenience interfaces on runner.
                     throw new Error("no such buffer name " + name);
                 }
                 return result;
-            }
+            };
+            texture(name, typ, format, internal_format, width, height) {
+                name = name || this.fresh_name("texture");
+                var typ = typ || "FLOAT";
+                var format = format || "RED";
+                var internal_format = internal_format || "R32F";
+                var texture = new FeedbackTexture(this, name, typ, format, internal_format, width, height);
+                this.textures[name] = texture;
+                return texture;
+            };
             buffer(name, bytes_per_element) {
                 name = name || this.fresh_name("buffer");
                 var buffer = new FeedbackBuffer(this, name, bytes_per_element);
@@ -248,6 +264,12 @@ data loading convenience interfaces on runner.
                     //        num_components: 3,
                     //    }
                     },
+                    samplers: {
+                        //"tex1": {
+                        //    type: "2D",
+                        //    from_texture: "texture1",
+                        //},
+                    },
                 }, options);
                 this.program = program;
                 var context = program.context;
@@ -290,6 +312,14 @@ data loading convenience interfaces on runner.
                     }
                     this.inputs[name] = input;
                 }
+                // set up samplers
+                this.samplers = {};
+                this.sampler_count = 0;
+                for (var name in this.settings.samplers) {
+                    var desc = this.settings.samplers[name];
+                    this.samplers[name] = new SamplerVariable(this, name, desc.dim, desc.from_texture, this.sampler_count);
+                    this.sampler_count ++;
+                };
                 this.allocated_feedbacks = null;
                 this.uniforms_installed = false;
                 this.run_count = 0;
@@ -309,6 +339,11 @@ data loading convenience interfaces on runner.
                     throw new Error("No buffer bound to inputs in run: " + unbound);
                 }
             };
+            bind_samplers() {
+                for (var name in this.samplers) {
+                    this.samplers[name].bind();
+                }
+            }
             run() {
                 this.check_input_bindings();
                 var program = this.program;
@@ -322,6 +357,7 @@ data loading convenience interfaces on runner.
                 if (!this.uniforms_installed) {
                     this.install_uniforms();
                 }
+                this.bind_samplers();
                 var mode_name = this.settings.run_type || "POINTS";
                 var mode = gl[mode_name];
                 var rasterize = this.settings.rasterize;
@@ -405,7 +441,7 @@ data loading convenience interfaces on runner.
             copy_from_array(array) {
                 var gl = this.context.gl;
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-                gl.bufferSubData(gl.ARRAY_BUFFER, 0, array);
+                gl.bufferSubData(gl.ARRAY_BUFFER, 0, array, 0, this.num_elements);
                 gl.bindBuffer(gl.ARRAY_BUFFER, null);
             };
             initialize_from_array(array) {
@@ -438,6 +474,39 @@ data loading convenience interfaces on runner.
                 gl.bufferData(gl.ARRAY_BUFFER, this.byte_size, gl.DYNAMIC_COPY);  //  ?? dynamic copy??
                 gl.bindBuffer(gl.ARRAY_BUFFER, null);
             };
+        };
+
+        class FeedbackTexture {
+            constructor(context, name, typ, format, internal_format, width, height) {
+                this.context = context;
+                this.name = name;
+                this.typ = typ;
+                this.format = format;
+                this.internal_format = internal_format;
+                this.width = width;
+                this.height = height;
+                this.gl_texture = context.gl.createTexture();
+            };
+            load_array(array, width, height) {
+                if (width) {
+                    this.width = width;
+                };
+                if (height) {
+                    this.height = height;
+                }
+                var gl = this.context.gl;
+                gl.bindTexture(gl.TEXTURE_2D, this.gl_texture);
+                var level = 0;
+                var border = 0;
+                var gl_internal_format = gl[this.internal_format];
+                var gl_format = gl[this.format];
+                var gl_type = gl[this.typ];
+                gl.texImage2D(gl.TEXTURE_2D, level, gl_internal_format, this.width, this.height, border,
+                              gl_format, gl_type, array);
+                // xxxxx is this needed?                
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            }
         };
 
         class FeedbackVariable {
@@ -555,7 +624,6 @@ data loading convenience interfaces on runner.
         };
 
         class MatrixUniform extends VectorUniform {
-            // xxxxx
             is_matrix() {
                 return true;  // mainly for testing
             };
@@ -565,6 +633,34 @@ data loading convenience interfaces on runner.
             call_method(gl) {
                 var method = gl[this.method_name()];
                 method.call(gl, this.location, false, this.value);
+            };
+        };
+
+        class SamplerVariable {
+            constructor(runner, name, dim, from_texture, index) {
+                this.runner = runner;
+                this.name = name;
+                this.index = index;
+                var context = runner.program.context;
+                this.from_texture = context.textures[from_texture];
+                if (!this.from_texture) {
+                    throw new Error("unknown sampler: " + from_texture);
+                }
+                if ((dim) && (dim!="2D")) {
+                    throw new Error("Only 2D sampler dimensions supported at this time.")
+                }
+                var program = runner.program;
+                var gl = program.context.gl;
+                var gl_program = program.gl_program;
+                this.location = gl.getUniformLocation(gl_program, this.name);
+            };
+            bind() {
+                // bind sampler variable to texture
+                // assumes gl.useProgram(this.runner.program.gl_program) has been called
+                var gl = this.runner.program.context.gl;
+                gl.uniform1i(this.location, this.index);
+                gl.activeTexture(gl.TEXTURE0 + this.index);
+                gl.bindTexture(gl.TEXTURE_2D, this.from_texture.gl_texture);
             };
         };
 
@@ -736,7 +832,7 @@ data loading convenience interfaces on runner.
         };
         var runr = program.runner(roptions);
 
-        runr.run()
+        runr.run();
 
         var location_array = runr.feedback_array("output_vertex");
 
@@ -754,9 +850,99 @@ data loading convenience interfaces on runner.
         return runr;
     };
 
+    $.fn.feedWebGL2.reverse_example = function (container) {
+        // illustration: reverse a float array into a feedback buffer using a texture.
+
+        var reverse_vertex_shader = `#version 300 es
+
+        // per mesh input (not used, but at least one is required?)
+        in float dummy_input;
+
+        // the sampler -- only the red component contains the float data
+        uniform sampler2D tex1;
+
+        out float reversed_value;
+
+        void main() {
+            // foil the optimizer
+            gl_Position = vec4(dummy_input,dummy_input,dummy_input,dummy_input);
+            // get the sampler size
+            ivec2 tsize = textureSize(tex1, 0);
+            int reversed_index = tsize[0] - gl_VertexID - 1;
+            ivec2 reversed_position = ivec2(reversed_index, 0);
+            // get the indexed color
+            vec4 redcolor = texelFetch(tex1, reversed_position, 0);
+            reversed_value = redcolor.r;
+        }
+        `;
+
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        var reverse_me = new Float32Array([2000,4000,6000,8000,-.9,-.7,-.5,-.3,-.1]);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+            buffers: {
+                "dummy_buffer": {
+                    array: reverse_me,
+                },
+            },
+            textures: {
+                "texture1": {
+                    type: "FLOAT",
+                    format: "RED",  // put the float in the red component
+                    internal_format: "R32F",
+                    width:  reverse_me.length,
+                    height: 1,
+                    array: reverse_me,
+                },
+            },
+        });
+        
+        var program = context.program({
+            vertex_shader: reverse_vertex_shader,
+            feedbacks: {
+                reversed_value: {num_components: 1},
+            },
+        });
+
+        var roptions = {
+            name: "reverse texture",
+            num_instances: 1, 
+            vertices_per_instance: reverse_me.length,
+            rasterize: false,  // don't display the result
+            uniforms: {},
+            inputs: {
+                dummy_input:  {
+                    per_vertex: true,
+                    num_components: 1,  // 3 vector
+                    from_buffer: {
+                        name: "dummy_buffer",
+                    },
+                },
+            },
+            samplers: {
+                "tex1": {
+                    dim: "2D",
+                    from_texture: "texture1",
+                },
+            },
+        };
+        var runr = program.runner(roptions);
+
+        runr.run();
+
+        var reversed = runr.feedback_array("reversed_value");
+
+        $("<h3>" + reversed.length + " reversed floats</h3>").appendTo(container);
+        for (var i=0; i<reversed.length; i++) {
+            $("<div>" + [reverse_me[i], reversed[i] +"</div>"]).appendTo(container);
+        }
+    };
+
     $.fn.feedWebGL2.integer_example = function (container) {
         // illustration of writing integer attributes
-        // can capturing integer feedbacks
+        // and capturing integer feedbacks
         var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
 
         var add_ints_vertex_shader = `#version 300 es
