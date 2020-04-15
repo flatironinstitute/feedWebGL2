@@ -271,8 +271,36 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     radius: 1,  // shared radius for spheres
                     width_segments: 10,
                     height_segments: 10,}, options);
-                settings.locations = this.compact_locations
+                settings.locations = this.compact_locations;
                 return $.fn.webGL2crossingVoxels.spheresMesh(settings);
+            };
+            get_points_mesh(options) {
+                // must be run after get_compacted_feedbacks has run at least once.
+                var that = this;
+                var settings = $.extend({
+                    THREE: null,   // required THREE instance
+                    size: null,
+                    colorize: false,
+                }, options);
+                settings.locations = this.compact_locations;
+                settings.center = this.compacted_feedbacks.mid;
+                settings.radius = this.compacted_feedbacks.radius;
+                if (settings.colorize) {
+                    settings.colors = this.get_location_colors();
+                }
+                var result = $.fn.webGL2crossingVoxels.pointsMesh(settings);
+                result.update_sphere_locations = function(locations, colors) {
+                    locations = locations || that.compact_locations;
+                    var geometry = result.geometry;
+                    geometry.attributes.position.array = locations;
+                    geometry.attributes.position.needsUpdate = true;
+                    if (settings.colorize) {
+                        colors = colors || that.get_location_colors();
+                        geometry.attributes.color.array = colors;
+                        geometry.attributes.color.needsUpdate = true;
+                    }
+                };
+                return result;
             };
             get_compacted_feedbacks(location_only) {
                 this.run();
@@ -369,6 +397,37 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     locations: this.compact_locations,
                 };
                 return this.compacted_feedbacks;
+            };
+            get_location_colors() {
+                var indices = this.compact_indices;
+                var locations = this.compact_locations;
+                var feedbacks = this.compacted_feedbacks;
+                var mins = feedbacks.mins;
+                var maxes = feedbacks.maxes;
+                var diffs = [];
+                var base_intensity = 0.2;
+                for (var j=0; j<3; j++) {
+                    var d = maxes[j] - mins[j];
+                    if (d < 1e-9) {
+                        d = 1.0;
+                    }
+                    diffs.push(d / (1 - base_intensity));
+                }
+                var colors = this.compact_colors;
+                if (!colors) {
+                    colors = new Float32Array(locations.length);
+                    this.compact_colors = colors;
+                }
+                for (var i=0; i<indices.length; i++) {
+                    if (indices[i]<0) {
+                        break;
+                    }
+                    for (var j=0; j<3; j++) {
+                        var ij = i * 3 + j;
+                        colors[ij] = base_intensity + (locations[ij] - mins[j])/diffs[j];
+                    }
+                }
+                return colors;
             };
             reset_three_camera(camera, radius_multiple) {
                 // adjust three.js camera to look at current voxels
@@ -470,6 +529,36 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
         `;};
         return new WebGL2CrossingVoxels(options);
+    };
+
+    $.fn.webGL2crossingVoxels.pointsMesh = function (options) {
+        var settings = $.extend({
+            THREE: null,   // required THREE instance
+            locations: null,  // inifial points locations, required
+            colors: null, // optional
+            radius: 1.0,  // radius of bounding sphere
+            center: [0, 0, 0],  // center of bounding sphere
+            size: null,
+        }, options);
+        var THREE = settings.THREE;
+        var locations = settings.locations;
+        var c = settings.center;
+        var size = settings.size || settings.radius * 0.01;
+        var geometry = new THREE.BufferGeometry();
+        geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( locations, 3 ) );
+        geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(c[0], c[1], c[2]), settings.radius);
+        var vertex_colors = false;
+        if (settings.colors) {
+            geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( settings.colors, 3 ) );
+            vertex_colors = true;
+        }
+        var material = new THREE.PointsMaterial( { size: size, vertexColors: vertex_colors } );
+        var points = new THREE.Points( geometry, material );
+        points.update_sphere_locations = function(locations) {
+            geometry.attributes.position.array = locations;
+            geometry.attributes.position.needsUpdate = true;
+        };
+        return points;
     };
 
     $.fn.webGL2crossingVoxels.spheresMesh = function (options) {
