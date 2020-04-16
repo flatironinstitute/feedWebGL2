@@ -404,6 +404,14 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var feedbacks = this.compacted_feedbacks;
                 var mins = feedbacks.mins;
                 var maxes = feedbacks.maxes;
+                var colors = this.compact_colors;
+                if (!colors) {
+                    colors = new Float32Array(locations.length);
+                    this.compact_colors = colors;
+                }
+                if ((!indices) || (indices[0] < 0)) {
+                    return colors;  // no points: do nothing
+                }
                 var diffs = [];
                 var base_intensity = 0.2;
                 for (var j=0; j<3; j++) {
@@ -412,11 +420,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         d = 1.0;
                     }
                     diffs.push(d / (1 - base_intensity));
-                }
-                var colors = this.compact_colors;
-                if (!colors) {
-                    colors = new Float32Array(locations.length);
-                    this.compact_colors = colors;
                 }
                 for (var i=0; i<indices.length; i++) {
                     if (indices[i]<0) {
