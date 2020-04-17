@@ -109,10 +109,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     */
 
     vec3 grid_location(in vec3 offset) {
+        // spherical coordinates using the "3rd major convention"
+        // https://en.wikipedia.org/wiki/Spherical_coordinate_system#Conventions
         //return offset;
         float r = rescale_f(offset[0], i_depth_num, LayerScale);
-        float theta = rescale_f(offset[1], i_row_num, RowScale);
-        float phi = rescale_f(offset[2], i_col_num, ColumnScale);
+        // swapping phi and theta.
+        float phi = rescale_f(offset[1], i_row_num, RowScale);
+        float theta = rescale_f(offset[2], i_col_num, ColumnScale);
         //return vec3(r, theta, phi);
         
         float sint = sin(theta);
@@ -123,7 +126,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         float y = r * sinp * sint;
         float z = r * cosp;
         return vec3(x, y, z);
-        
     }
     `;
 
@@ -432,18 +434,26 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
                 return colors;
             };
-            reset_three_camera(camera, radius_multiple) {
+            reset_three_camera(camera, radius_multiple, orbit_control) {
                 // adjust three.js camera to look at current voxels
                 var cf = this.compacted_feedbacks;
                 if ((!cf) || (!cf.mins)) {
                     // no points -- punt
                     return;
                 }
+                var cx = cf.mid[0];
+                var cy = cf.mid[1];
+                var cz = cf.mid[2];
                 radius_multiple = radius_multiple || 3;
-                camera.position.x = cf.mid[0];
-                camera.position.y = cf.mid[1];
-                camera.position.z = cf.mid[2] + radius_multiple * cf.radius;
-                camera.lookAt(cf.mid[0], cf.mid[1], cf.mid[2])
+                camera.position.x = cx;
+                camera.position.y = cy;
+                camera.position.z = cz + radius_multiple * cf.radius;
+                camera.lookAt(cf.mid[0], cf.mid[1], cf.mid[2]);
+                if (orbit_control) {
+                    orbit_control.center.x = cx;
+                    orbit_control.center.y = cy;
+                    orbit_control.center.z = cz;
+                }
                 return camera;
             }
             set_threshold(value) {
