@@ -64,11 +64,25 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         `;
     };
 
-    // function to compute (x,y,z) location of offset relative to voxel location.
-    var locate_std_decl = `
+    // functions to compute (x,y,z) location of offset relative to voxel location.
+    var grid_location_decl = `
     vec3 grid_location(in vec3 offset) {
+        vec3 rescaled = rescale_offset(offset);
+        return grid_xyz(rescaled);
+    }
+    `;
+
+    var locate_std_decl = `
+    vec3 rescale_offset(in vec3 offset) {
+        // convert voxel offset to block grid
         return location_offset + offset;
     }
+
+    vec3 grid_xyz(in vec3 offset) {
+        // convert block grid coords to xyz (trivial here)
+        return offset;
+    }
+    ${grid_location_decl}
     `;
 
     // xxxx the scaling and and polar conversion could be separated eventually if useful.
@@ -93,29 +107,23 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         return (x0 * (1.0 - offset)) + (x1 * offset);  // no clamping?
     }
 
-
-    /*
-    vec3 grid_location(in vec3 offset) {
-        // debug version
-        float x = offset[0];
-        int index = i_depth_num;
-        //sampler2D scaling = LayerScale;
-        //float x0 = texelFetch(LayerScale, ivec2(i_block_num, index), 0).r;
-        //float x1 = texelFetch(LayerScale, ivec2(i_block_num, index+1), 0).r;
-        float x0 = texelFetch(LayerScale, ivec2(index, i_block_num), 0).r;
-        float x1 = texelFetch(LayerScale, ivec2(index+1, i_block_num), 0).r;
-        return vec3(x, x0, x1);
-    }
-    */
-
-    vec3 grid_location(in vec3 offset) {
+    vec3 rescale_offset(in vec3 offset) {
+        // convert voxel offset to block grid.
         // spherical coordinates using the "3rd major convention"
         // https://en.wikipedia.org/wiki/Spherical_coordinate_system#Conventions
-        //return offset;
         float r = rescale_f(offset[0], i_depth_num, LayerScale);
         // swapping phi and theta.
         float phi = rescale_f(offset[1], i_row_num, RowScale);
         float theta = rescale_f(offset[2], i_col_num, ColumnScale);
+        return vec3(r, phi, theta);
+    }
+
+    vec3 grid_xyz(in vec3 spherical) {
+        // convert block grid coords to xyz (trivial here)
+        float r = spherical[0];
+        // swapping phi and theta.
+        float phi = spherical[1];
+        float theta = spherical[2];
         //return vec3(r, theta, phi);
         
         float sint = sin(theta);
@@ -127,6 +135,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         float z = r * cosp;
         return vec3(x, y, z);
     }
+    ${grid_location_decl}
     `;
 
     $.fn.webGL2crossingVoxels = function(options) {
@@ -507,15 +516,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
             ${get_sizes_macro("gl_VertexID")}
             //location = location_offset;
-            location = grid_location(vec3(0,0,0));
+            vec3 rescaled = rescale_offset(vec3(0,0,0));
+            //location = grid_location(vec3(0,0,0));
+            location = grid_xyz(rescaled);
 
             bool voxel_ok = true;
             if (u_grid_min[0] < u_grid_max[0]) {
                 // voxel coordinate filtering is enabled
                 voxel_ok = ( 
-                    (u_grid_min[0] <= f_col_num) && (f_col_num < u_grid_max[0]) &&
-                    (u_grid_min[1] <= f_row_num) && (f_row_num < u_grid_max[1]) &&
-                    (u_grid_min[2] <= f_depth_num) && (f_depth_num < u_grid_max[2]) );
+                    (u_grid_min[0] <= rescaled[0]) && (rescaled[0] < u_grid_max[0]) &&
+                    (u_grid_min[1] <= rescaled[1]) && (rescaled[1] < u_grid_max[1]) &&
+                    (u_grid_min[2] <= rescaled[2]) && (rescaled[2] < u_grid_max[2]) );
             }
 
             // Dont tile last column/row/layer which wraps around
