@@ -64,11 +64,25 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         `;
     };
 
-    // function to compute (x,y,z) location of offset relative to voxel location.
-    var locate_std_decl = `
+    // functions to compute (x,y,z) location of offset relative to voxel location.
+    var grid_location_decl = `
     vec3 grid_location(in vec3 offset) {
+        vec3 rescaled = rescale_offset(offset);
+        return grid_xyz(rescaled);
+    }
+    `;
+
+    var locate_std_decl = `
+    vec3 rescale_offset(in vec3 offset) {
+        // convert voxel offset to block grid
         return location_offset + offset;
     }
+
+    vec3 grid_xyz(in vec3 offset) {
+        // convert block grid coords to xyz (trivial here)
+        return offset;
+    }
+    ${grid_location_decl}
     `;
 
     // xxxx the scaling and and polar conversion could be separated eventually if useful.
@@ -93,26 +107,23 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         return (x0 * (1.0 - offset)) + (x1 * offset);  // no clamping?
     }
 
-
-    /*
-    vec3 grid_location(in vec3 offset) {
-        // debug version
-        float x = offset[0];
-        int index = i_depth_num;
-        //sampler2D scaling = LayerScale;
-        //float x0 = texelFetch(LayerScale, ivec2(i_block_num, index), 0).r;
-        //float x1 = texelFetch(LayerScale, ivec2(i_block_num, index+1), 0).r;
-        float x0 = texelFetch(LayerScale, ivec2(index, i_block_num), 0).r;
-        float x1 = texelFetch(LayerScale, ivec2(index+1, i_block_num), 0).r;
-        return vec3(x, x0, x1);
-    }
-    */
-
-    vec3 grid_location(in vec3 offset) {
-        //return offset;
+    vec3 rescale_offset(in vec3 offset) {
+        // convert voxel offset to block grid.
+        // spherical coordinates using the "3rd major convention"
+        // https://en.wikipedia.org/wiki/Spherical_coordinate_system#Conventions
         float r = rescale_f(offset[0], i_depth_num, LayerScale);
-        float theta = rescale_f(offset[1], i_row_num, RowScale);
-        float phi = rescale_f(offset[2], i_col_num, ColumnScale);
+        // swapping phi and theta.
+        float phi = rescale_f(offset[1], i_row_num, RowScale);
+        float theta = rescale_f(offset[2], i_col_num, ColumnScale);
+        return vec3(r, phi, theta);
+    }
+
+    vec3 grid_xyz(in vec3 spherical) {
+        // convert block grid coords to xyz (trivial here)
+        float r = spherical[0];
+        // swapping phi and theta.
+        float phi = spherical[1];
+        float theta = spherical[2];
         //return vec3(r, theta, phi);
         
         float sint = sin(theta);
@@ -123,8 +134,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         float y = r * sinp * sint;
         float z = r * cosp;
         return vec3(x, y, z);
-        
     }
+    ${grid_location_decl}
     `;
 
     $.fn.webGL2crossingVoxels = function(options) {
@@ -271,8 +282,36 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     radius: 1,  // shared radius for spheres
                     width_segments: 10,
                     height_segments: 10,}, options);
-                settings.locations = this.compact_locations
+                settings.locations = this.compact_locations;
                 return $.fn.webGL2crossingVoxels.spheresMesh(settings);
+            };
+            get_points_mesh(options) {
+                // must be run after get_compacted_feedbacks has run at least once.
+                var that = this;
+                var settings = $.extend({
+                    THREE: null,   // required THREE instance
+                    size: null,
+                    colorize: false,
+                }, options);
+                settings.locations = this.compact_locations;
+                settings.center = this.compacted_feedbacks.mid;
+                settings.radius = this.compacted_feedbacks.radius;
+                if (settings.colorize) {
+                    settings.colors = this.get_location_colors();
+                }
+                var result = $.fn.webGL2crossingVoxels.pointsMesh(settings);
+                result.update_sphere_locations = function(locations, colors) {
+                    locations = locations || that.compact_locations;
+                    var geometry = result.geometry;
+                    geometry.attributes.position.array = locations;
+                    geometry.attributes.position.needsUpdate = true;
+                    if (settings.colorize) {
+                        colors = colors || that.get_location_colors();
+                        geometry.attributes.color.array = colors;
+                        geometry.attributes.color.needsUpdate = true;
+                    }
+                };
+                return result;
             };
             get_compacted_feedbacks(location_only) {
                 this.run();
@@ -332,13 +371,100 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         this.index_array, this.location_array, this.compact_locations, 3, location_fill
                     );
                 }
-                return {
+                var mins = null;
+                var maxes = null;
+                var locs = this.compact_locations;
+                var indices = this.compact_indices;
+                if ((indices.length>0) && (indices[0]>=0)) {
+                    mins = [locs[0], locs[1], locs[2]];
+                    maxes = [locs[0], locs[1], locs[2]];
+                    for (var i=0; i<indices.length; i++) {
+                        if (indices[i]<0) {
+                            break;
+                        }
+                        for (var k=0; k<3; k++) {
+                            var v = locs[i*3 + k];
+                            mins[k] = Math.min(mins[k], v);
+                            maxes[k] = Math.max(maxes[k], v);
+                        }
+                    }
+                }
+                var n2 = 0;
+                var mid = [];
+                if (mins) {
+                    for (var k=0; k<3; k++) {
+                        mid.push(0.5 * (mins[k] + maxes[k]));
+                        n2 += (mins[k] - maxes[k]) ** 2;
+                    }
+                }
+                this.compacted_feedbacks = {
+                    mid: mid,
+                    radius: 0.5 * Math.sqrt(n2),
+                    mins: mins,
+                    maxes: maxes,
                     indices: this.compact_indices, 
                     front_corners: this.compact_front_corners,
                     back_corners: this.compact_back_corners,
                     locations: this.compact_locations,
                 };
+                return this.compacted_feedbacks;
             };
+            get_location_colors() {
+                var indices = this.compact_indices;
+                var locations = this.compact_locations;
+                var feedbacks = this.compacted_feedbacks;
+                var mins = feedbacks.mins;
+                var maxes = feedbacks.maxes;
+                var colors = this.compact_colors;
+                if (!colors) {
+                    colors = new Float32Array(locations.length);
+                    this.compact_colors = colors;
+                }
+                if ((!indices) || (indices[0] < 0)) {
+                    return colors;  // no points: do nothing
+                }
+                var diffs = [];
+                var base_intensity = 0.2;
+                for (var j=0; j<3; j++) {
+                    var d = maxes[j] - mins[j];
+                    if (d < 1e-9) {
+                        d = 1.0;
+                    }
+                    diffs.push(d / (1 - base_intensity));
+                }
+                for (var i=0; i<indices.length; i++) {
+                    if (indices[i]<0) {
+                        break;
+                    }
+                    for (var j=0; j<3; j++) {
+                        var ij = i * 3 + j;
+                        colors[ij] = base_intensity + (locations[ij] - mins[j])/diffs[j];
+                    }
+                }
+                return colors;
+            };
+            reset_three_camera(camera, radius_multiple, orbit_control) {
+                // adjust three.js camera to look at current voxels
+                var cf = this.compacted_feedbacks;
+                if ((!cf) || (!cf.mins)) {
+                    // no points -- punt
+                    return;
+                }
+                var cx = cf.mid[0];
+                var cy = cf.mid[1];
+                var cz = cf.mid[2];
+                radius_multiple = radius_multiple || 3;
+                camera.position.x = cx;
+                camera.position.y = cy;
+                camera.position.z = cz + radius_multiple * cf.radius;
+                camera.lookAt(cf.mid[0], cf.mid[1], cf.mid[2]);
+                if (orbit_control) {
+                    orbit_control.center.x = cx;
+                    orbit_control.center.y = cy;
+                    orbit_control.center.z = cz;
+                }
+                return camera;
+            }
             set_threshold(value) {
                 this.runner.change_uniform("uValue", [value]);
             };
@@ -390,15 +516,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
             ${get_sizes_macro("gl_VertexID")}
             //location = location_offset;
-            location = grid_location(vec3(0,0,0));
+            vec3 rescaled = rescale_offset(vec3(0,0,0));
+            //location = grid_location(vec3(0,0,0));
+            location = grid_xyz(rescaled);
 
             bool voxel_ok = true;
             if (u_grid_min[0] < u_grid_max[0]) {
                 // voxel coordinate filtering is enabled
                 voxel_ok = ( 
-                    (u_grid_min[0] <= f_col_num) && (f_col_num < u_grid_max[0]) &&
-                    (u_grid_min[1] <= f_row_num) && (f_row_num < u_grid_max[1]) &&
-                    (u_grid_min[2] <= f_depth_num) && (f_depth_num < u_grid_max[2]) );
+                    (u_grid_min[0] <= rescaled[0]) && (rescaled[0] < u_grid_max[0]) &&
+                    (u_grid_min[1] <= rescaled[1]) && (rescaled[1] < u_grid_max[1]) &&
+                    (u_grid_min[2] <= rescaled[2]) && (rescaled[2] < u_grid_max[2]) );
             }
 
             // Dont tile last column/row/layer which wraps around
@@ -425,6 +553,36 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
         `;};
         return new WebGL2CrossingVoxels(options);
+    };
+
+    $.fn.webGL2crossingVoxels.pointsMesh = function (options) {
+        var settings = $.extend({
+            THREE: null,   // required THREE instance
+            locations: null,  // inifial points locations, required
+            colors: null, // optional
+            radius: 1.0,  // radius of bounding sphere
+            center: [0, 0, 0],  // center of bounding sphere
+            size: null,
+        }, options);
+        var THREE = settings.THREE;
+        var locations = settings.locations;
+        var c = settings.center;
+        var size = settings.size || settings.radius * 0.01;
+        var geometry = new THREE.BufferGeometry();
+        geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( locations, 3 ) );
+        geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(c[0], c[1], c[2]), settings.radius);
+        var vertex_colors = false;
+        if (settings.colors) {
+            geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( settings.colors, 3 ) );
+            vertex_colors = true;
+        }
+        var material = new THREE.PointsMaterial( { size: size, vertexColors: vertex_colors } );
+        var points = new THREE.Points( geometry, material );
+        points.update_sphere_locations = function(locations) {
+            geometry.attributes.position.array = locations;
+            geometry.attributes.position.needsUpdate = true;
+        };
+        return points;
     };
 
     $.fn.webGL2crossingVoxels.spheresMesh = function (options) {

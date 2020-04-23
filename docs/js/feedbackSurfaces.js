@@ -271,8 +271,36 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     radius: 1,  // shared radius for spheres
                     width_segments: 10,
                     height_segments: 10,}, options);
-                settings.locations = this.compact_locations
+                settings.locations = this.compact_locations;
                 return $.fn.webGL2crossingVoxels.spheresMesh(settings);
+            };
+            get_points_mesh(options) {
+                // must be run after get_compacted_feedbacks has run at least once.
+                var that = this;
+                var settings = $.extend({
+                    THREE: null,   // required THREE instance
+                    size: null,
+                    colorize: false,
+                }, options);
+                settings.locations = this.compact_locations;
+                settings.center = this.compacted_feedbacks.mid;
+                settings.radius = this.compacted_feedbacks.radius;
+                if (settings.colorize) {
+                    settings.colors = this.get_location_colors();
+                }
+                var result = $.fn.webGL2crossingVoxels.pointsMesh(settings);
+                result.update_sphere_locations = function(locations, colors) {
+                    locations = locations || that.compact_locations;
+                    var geometry = result.geometry;
+                    geometry.attributes.position.array = locations;
+                    geometry.attributes.position.needsUpdate = true;
+                    if (settings.colorize) {
+                        colors = colors || that.get_location_colors();
+                        geometry.attributes.color.array = colors;
+                        geometry.attributes.color.needsUpdate = true;
+                    }
+                };
+                return result;
             };
             get_compacted_feedbacks(location_only) {
                 this.run();
@@ -332,13 +360,92 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         this.index_array, this.location_array, this.compact_locations, 3, location_fill
                     );
                 }
-                return {
+                var mins = null;
+                var maxes = null;
+                var locs = this.compact_locations;
+                var indices = this.compact_indices;
+                if ((indices.length>0) && (indices[0]>=0)) {
+                    mins = [locs[0], locs[1], locs[2]];
+                    maxes = [locs[0], locs[1], locs[2]];
+                    for (var i=0; i<indices.length; i++) {
+                        if (indices[i]<0) {
+                            break;
+                        }
+                        for (var k=0; k<3; k++) {
+                            var v = locs[i*3 + k];
+                            mins[k] = Math.min(mins[k], v);
+                            maxes[k] = Math.max(maxes[k], v);
+                        }
+                    }
+                }
+                var n2 = 0;
+                var mid = [];
+                if (mins) {
+                    for (var k=0; k<3; k++) {
+                        mid.push(0.5 * (mins[k] + maxes[k]));
+                        n2 += (mins[k] - maxes[k]) ** 2;
+                    }
+                }
+                this.compacted_feedbacks = {
+                    mid: mid,
+                    radius: 0.5 * Math.sqrt(n2),
+                    mins: mins,
+                    maxes: maxes,
                     indices: this.compact_indices, 
                     front_corners: this.compact_front_corners,
                     back_corners: this.compact_back_corners,
                     locations: this.compact_locations,
                 };
+                return this.compacted_feedbacks;
             };
+            get_location_colors() {
+                var indices = this.compact_indices;
+                var locations = this.compact_locations;
+                var feedbacks = this.compacted_feedbacks;
+                var mins = feedbacks.mins;
+                var maxes = feedbacks.maxes;
+                var colors = this.compact_colors;
+                if (!colors) {
+                    colors = new Float32Array(locations.length);
+                    this.compact_colors = colors;
+                }
+                if ((!indices) || (indices[0] < 0)) {
+                    return colors;  // no points: do nothing
+                }
+                var diffs = [];
+                var base_intensity = 0.2;
+                for (var j=0; j<3; j++) {
+                    var d = maxes[j] - mins[j];
+                    if (d < 1e-9) {
+                        d = 1.0;
+                    }
+                    diffs.push(d / (1 - base_intensity));
+                }
+                for (var i=0; i<indices.length; i++) {
+                    if (indices[i]<0) {
+                        break;
+                    }
+                    for (var j=0; j<3; j++) {
+                        var ij = i * 3 + j;
+                        colors[ij] = base_intensity + (locations[ij] - mins[j])/diffs[j];
+                    }
+                }
+                return colors;
+            };
+            reset_three_camera(camera, radius_multiple) {
+                // adjust three.js camera to look at current voxels
+                var cf = this.compacted_feedbacks;
+                if ((!cf) || (!cf.mins)) {
+                    // no points -- punt
+                    return;
+                }
+                radius_multiple = radius_multiple || 3;
+                camera.position.x = cf.mid[0];
+                camera.position.y = cf.mid[1];
+                camera.position.z = cf.mid[2] + radius_multiple * cf.radius;
+                camera.lookAt(cf.mid[0], cf.mid[1], cf.mid[2])
+                return camera;
+            }
             set_threshold(value) {
                 this.runner.change_uniform("uValue", [value]);
             };
@@ -425,6 +532,36 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
         `;};
         return new WebGL2CrossingVoxels(options);
+    };
+
+    $.fn.webGL2crossingVoxels.pointsMesh = function (options) {
+        var settings = $.extend({
+            THREE: null,   // required THREE instance
+            locations: null,  // inifial points locations, required
+            colors: null, // optional
+            radius: 1.0,  // radius of bounding sphere
+            center: [0, 0, 0],  // center of bounding sphere
+            size: null,
+        }, options);
+        var THREE = settings.THREE;
+        var locations = settings.locations;
+        var c = settings.center;
+        var size = settings.size || settings.radius * 0.01;
+        var geometry = new THREE.BufferGeometry();
+        geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( locations, 3 ) );
+        geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(c[0], c[1], c[2]), settings.radius);
+        var vertex_colors = false;
+        if (settings.colors) {
+            geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( settings.colors, 3 ) );
+            vertex_colors = true;
+        }
+        var material = new THREE.PointsMaterial( { size: size, vertexColors: vertex_colors } );
+        var points = new THREE.Points( geometry, material );
+        points.update_sphere_locations = function(locations) {
+            geometry.attributes.position.array = locations;
+            geometry.attributes.position.needsUpdate = true;
+        };
+        return points;
     };
 
     $.fn.webGL2crossingVoxels.spheresMesh = function (options) {

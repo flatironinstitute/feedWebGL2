@@ -16,6 +16,13 @@ in Javascript using WebGL.
 The package implements uses for instanced transform feedback
 including contour and iso-surface generation tools.
 
+The <code>feedWebGL2</code> is useful for building scientific data exploration tools
+such as:
+
+* <a href="https://github.com/flatironinstitute/radiation_viz">Astrophysical simulation data explorers</a> and
+
+* <a href="https://github.com/flatironinstitute/Fermi_surface_visualization">Fermi surface data explorers</a>.
+
 <a href="https://flatironinstitute.github.io/feedWebGL2/">
 Go to demos and additional information.
 </a>
