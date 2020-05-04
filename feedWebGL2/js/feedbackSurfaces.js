@@ -1300,16 +1300,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     debugger;
                     that.link_needs_update = true;
                 }
-                var check_update_link = function() {
+                var check_update_link = function(nbins) {
+                    var do_clean = clean || nbins;
+                    var bin_size = nbins || normal_binning;
                     // update the geometry positions array in place and mark for update in geometry
-                    if (! that.link_needs_update) {
+                    if ((!that.link_needs_update) && (!nbins)) {
                         // only update upon request and only if needed
                         that.link_needs_update = false;
                         return;
                     }
                     var positions, normals;
-                    if (clean) {
-                        var pn = that.clean_positions_and_normals(normal_binning);
+                    if (do_clean) {
+                        var pn = that.clean_positions_and_normals(bin_size);
                         positions = pn.positions;
                         normals = pn.normals;
                     } else {
