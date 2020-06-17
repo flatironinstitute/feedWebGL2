@@ -16,6 +16,7 @@ setup(
     url=url,
     install_requires=[
         "jp_doodle",
+        "jp_proxy_widget",
         ],
     license="MIT"
 )
