@@ -52,9 +52,115 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.slice_displays = [null, null, null];
                 this.dots_display = null;
                 this.surface_display = null;
+                this.surface = null;
                 // intial slicing indices
                 this.ijk = [0,0,0];
             };
+            set_up_surface() {
+                var shape = this.shape;
+                var num_cols, num_rows, num_layers;
+                [num_cols, num_rows, num_layers] = shape;
+                var s = this.settings;
+                var surface =  $.fn.webGL2surfaces3dopt({
+                    feedbackContext: this.feedbackContext,
+                    valuesArray: this.buffer,
+                    num_rows: num_rows,
+                    num_cols: num_cols,
+                    num_layers: num_layers,
+                    color: [1, 0, 0],
+                    rasterize: false,
+                    threshold: s.threshold,
+                    shrink_factor: s.shrink_factor,  // how much to shrink the arrays
+                });
+                surface.set_grid_limits([0,0,0], shape);
+                surface.run();
+                this.surface = surface;
+            };
+            initialize_surface_display(container) {
+                if (!this.surface) {
+                    this.set_up_surface();
+                }
+                container.empty();
+                var canvas = document.createElement( 'canvas' );
+                var context = canvas.getContext( 'webgl2', { alpha: false } ); 
+                var renderer = new THREE.WebGLRenderer( { canvas: canvas, context: context } );
+                renderer.setPixelRatio( window.devicePixelRatio );
+                renderer.setSize( container.width(), container.height() );
+                renderer.outputEncoding = THREE.sRGBEncoding;
+                container[0].appendChild( renderer.domElement );
+                var camera = new THREE.PerspectiveCamera( 45, container.width()/container.height(), 0.1, 10000 );
+                var material = new THREE.MeshNormalMaterial( {  } );
+                material.side = THREE.DoubleSide;
+                var geometry = this.surface.linked_three_geometry(THREE);
+                var mesh = new THREE.Mesh( geometry,  material );
+                var scene = new THREE.Scene();
+                scene.add(mesh);
+                this.surface_scene = scene;
+                this.surface_mesh = mesh;
+                this.surface_camera = camera;
+                this.surface_renderer = renderer;
+                this.sync_cameras();
+                //renderer.render( scene, camera );
+            };
+            sync_cameras() {
+                var surface_camera = this.surface_camera;
+                var voxel_camera = this.voxel_camera;
+                // https://stackoverflow.com/questions/49201438/threejs-apply-properties-from-one-camera-to-another-camera
+                var d = new THREE.Vector3(),
+                    q = new THREE.Quaternion(),
+                    s = new THREE.Vector3();
+                voxel_camera.matrixWorld.decompose( d, q, s );
+                surface_camera.position.copy( d );
+                surface_camera.quaternion.copy( q );
+                surface_camera.scale.copy( s );
+            };
+            initialize_voxels(container) {
+                if (!this.surface) {
+                    this.set_up_surface();
+                }
+                var voxels = this.surface.crossing;
+                container.empty();
+                var canvas = document.createElement( 'canvas' );
+                var context = canvas.getContext( 'webgl2', { alpha: false } ); 
+                var renderer = new THREE.WebGLRenderer( { canvas: canvas, context: context } );
+                renderer.setPixelRatio( window.devicePixelRatio );
+                renderer.setSize( container.width(), container.height() );
+                renderer.outputEncoding = THREE.sRGBEncoding;
+                container[0].appendChild( renderer.domElement );
+                var camera = new THREE.PerspectiveCamera( 45, container.width()/container.height(), 0.1, 10000 );
+                voxels.reset_three_camera(camera, 3.5);
+                var mesh = voxels.get_points_mesh({
+                    THREE: THREE,
+                    colorize: true,
+                    size: 0.5,
+                });
+                var scene = new THREE.Scene();
+                scene.add(mesh);
+
+                //var g = new THREE.SphereGeometry(1, 6,6);
+                //var m = new THREE.MeshNormalMaterial();
+                //m.wireframe = true;
+                //var c = new THREE.Mesh(g, m);
+                //scene.add(c);
+
+                //renderer.render( scene, camera );
+                this.voxel_scene = scene;
+                this.voxel_mesh = mesh;
+                this.voxel_camera = camera;
+                this.voxel_renderer = renderer;
+                this.voxelControls = new THREE.OrbitControls(camera, renderer.domElement);
+                this.voxelControls.userZoom = false;
+                this.voxelClock = new THREE.Clock();
+            };
+            animate() {
+                var delta = this.voxelClock.getDelta();
+                this.voxelControls.update(delta);
+                this.voxel_renderer.render(this.voxel_scene, this.voxel_camera);
+                this.sync_cameras();
+                this.surface_renderer.render(this.surface_scene, this.surface_camera);
+                var that = this;
+                requestAnimationFrame(function () { that.animate(); });
+            }
             array_value(ijk) {
                 // index into the values array at col_i row_j layer_k
                 var nc, nr, nl;
@@ -200,6 +306,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     "grid-row": "2",
                     "height": `${slice_side}px`,
                 });
+                this.initialize_voxels(dots_div);
+
                 var contour_div = $("<div/>").appendTo(container);
                 contour_div.html("CONTOUR DIV HERE");
                 contour_div.css({
@@ -208,17 +316,20 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     "grid-row": "1 / 3",
                     "height": `${contour_side}px`,
                 });
+                this.initialize_surface_display(contour_div);
+
                 this.slice_displays = [this.x_slicer, this.y_slicer, this.z_slicer];
                 this.info = $("<div/>").appendTo(container);
                 this.show_info();
+                this.animate()
             };
             show_info() {
                 this.info.html("ijk: " + this.ijk + ", threshold: " + this.threshold.toExponential(2))
-            }
+            };
             redraw() {
                 this.slice_displays.map(x => x.draw_frame());
                 this.show_info();
-            }
+            };
         };
 
         class Slicer32 {
@@ -362,7 +473,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             threshold: threshold,
             shrink_factor: 0.45,
         });
-        V.build_scaffolding(container, 800);
+        V.build_scaffolding(container, 1200);
         return V
     };
 
