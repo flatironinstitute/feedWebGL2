@@ -729,22 +729,38 @@
     };
 
     $.fn.feedWebGL2.setup_gl_for_example = function (container) {
+        container.empty();
+        var canvas_and_gl = $.fn.feedWebGL2.setup_canvas_and_gl();
+        var $canvas = canvas_and_gl.canvas;
+        var glCanvas = $canvas[0];
+        $canvas.appendTo(container);
+        // set up and clear the viewport
+        var gl = canvas_and_gl.gl;
+        gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+        gl.clearColor(0.8, 0.9, 1.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        return gl;
+    };
+
+    $.fn.feedWebGL2.setup_canvas_and_gl = function () {
         var init_html = `<canvas id="glcanvas" width="600" height="600">
                             Oh no! Your browser doesn't support canvas!
                         </canvas>`;
 
-        container.empty();
-        var $canvas = $(init_html).appendTo(container);
+        //container.empty();
+        //var $canvas = $(init_html).appendTo(container);
+        var $canvas = $(init_html);
         var glCanvas = $canvas[0];
 
         // **** webgl2!
         var gl = glCanvas.getContext("webgl2");
+        return {gl: gl, canvas: $canvas};
         // set up and clear the viewport
-        gl.viewport(0, 0, glCanvas.width, glCanvas.height);
-        gl.clearColor(0.8, 0.9, 1.0, 1.0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
+        //gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+        //gl.clearColor(0.8, 0.9, 1.0, 1.0);
+        //gl.clear(gl.COLOR_BUFFER_BIT);
 
-        return gl;
+        //return gl;
     };
 
     $.fn.feedWebGL2.trivial_example = function (container) {
