@@ -71,6 +71,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     rasterize: false,
                     threshold: s.threshold,
                     shrink_factor: s.shrink_factor,  // how much to shrink the arrays
+                    dx: [1,0,0],
+                    dy: [0,1,0],
+                    dz: [0,0,1],
+                    translation: [0,0,0],
                 });
                 surface.set_grid_limits([0,0,0], shape);
                 surface.run();
@@ -99,6 +103,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.surface_mesh = mesh;
                 this.surface_camera = camera;
                 this.surface_renderer = renderer;
+                this.surface.crossing.reset_three_camera(camera);
                 this.sync_cameras();
                 //renderer.render( scene, camera );
             };
@@ -446,10 +451,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 0,0,0,
             ]);
         } else {
-            num_rows = 5;
-            num_cols = 6;
-            num_layers = 7;
-            threshold = 3.333;
+            num_rows = 18;
+            num_cols = 16;
+            num_layers = 17;
+            threshold = 7.333;
             valuesArray = new Float32Array(num_rows * num_cols * num_layers);
             var index = 0;
             for (var k=0; k<num_layers; k++) {
