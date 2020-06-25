@@ -394,7 +394,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 if (mins) {
                     for (var k=0; k<3; k++) {
                         mid.push(0.5 * (mins[k] + maxes[k]));
-                        n2 += (mins[k] - maxes[k]) ** 2;
+                        //n2 += (mins[k] - maxes[k]) ** 2;
+                        var d = (mins[k] - maxes[k]);
+                        n2 += d * d;
                     }
                 }
                 this.compacted_feedbacks = {
