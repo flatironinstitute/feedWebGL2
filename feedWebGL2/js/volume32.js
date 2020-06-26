@@ -328,8 +328,41 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.info = $("<div/>").appendTo(container);
                 this.focus_button = $("<button>Focus</button>").appendTo(container);
                 this.focus_button.click(function() { that.focus_volume(); });
+
+                // threshold slider
+                var slider =  $("<div/>").appendTo(container);
+                var bmin = this.buffer[0];
+                var bmax = this.buffer[0];
+                for (var i=0; i<this.buffer.length; i++) {
+                    bmin = Math.min(this.buffer[i], bmin);
+                    bmax = Math.max(this.buffer[i], bmax);
+                }
+                this.bmin = bmin;
+                this.bmax = bmax;
+                var update = function () {
+                    var threshold = + slider.slider("option", "value");
+                    that.info.html("SLIDE TO: " + threshold);
+                    that.threshold = threshold;
+                    that.update_volume();
+                };
+                slider.slider({
+                    min: bmin,
+                    max: bmax,
+                    step: 0.01 * (bmax - bmin),
+                    value: this.threshold,
+                    slide: update,
+                    change: update,
+                })
+                this.threshold_slider = slider;
+
                 this.show_info();
                 this.animate()
+            };
+            set_threshold(value) {
+                value = value | this.bmin
+                value = Math.min(this.bmax, Math.max(this.bmin, value));
+                this.threshold = value;
+                this.threshold_slider.slider("option", "value", value);
             };
             focus_volume() {
                 var surface = this.surface;
@@ -437,7 +470,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     if ((x >= 0) && (x < d0) && (y >= 0) && (y < d1)) {
                         that.volume.ijk[i0] = x;
                         that.volume.ijk[i1] = y;
-                        that.volume.threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+                        //that.volume.threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+                        var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+                        that.volume.set_threshold(threshold)
                         that.volume.redraw();
                     }
                 };
