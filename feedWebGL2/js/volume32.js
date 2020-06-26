@@ -346,7 +346,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     var threshold = + slider.slider("option", "value");
                     that.info.html("SLIDE TO: " + threshold);
                     that.threshold = threshold;
-                    that.update_volume();
+                    //that.update_volume();
+                    that.redraw();
                 };
                 slider.slider({
                     min: bmin,
