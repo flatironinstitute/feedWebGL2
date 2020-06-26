@@ -1289,7 +1289,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 geometry.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
                 that.link_needs_update = false;
                 var after_run = function(that) {
-                    debugger;
                     that.link_needs_update = true;
                 }
                 var check_update_link = function(nbins) {
@@ -1365,7 +1364,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     }
                 }
                 if (normal_binning && (clean_length > 0)) {
-                    debugger;
                     // unify geometrically close normal values
                     var key_to_normal = {};
                     var denominators = [];
@@ -1627,7 +1625,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 geometry.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
                 that.link_needs_update = false;
                 var after_run = function(that) {
-                    debugger;
                     that.link_needs_update = true;
                 }
                 var check_update_link = function() {
