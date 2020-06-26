@@ -38,6 +38,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 assert_positive(s.num_cols);
                 assert_positive(s.num_layers);
                 this.shape = [s.num_cols, s.num_rows, s.num_layers];
+                this.grid_mins = [0, 0, 0];
+                this.grid_maxes = this.shape.slice();
+                this.dragging_slice = null;
                 this.threshold = s.threshold;
 
                 var size = s.num_rows * s.num_cols * s.num_layers;
@@ -76,7 +79,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     dz: [0,0,1],
                     translation: [0,0,0],
                 });
-                surface.set_grid_limits([0,0,0], shape);
+                surface.set_grid_limits(this.grid_mins, this.grid_maxes);
                 surface.run();
                 this.surface = surface;
             };
@@ -418,27 +421,32 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 );
                 this.frame_factor = side * 1.0 / maxdim;
                 this.maxdim = maxdim;
+                this.dragging = null;
                 this.draw_frame();
             }
             draw_frame() {
                 var d0, d1, i0, i1;
+                var volume = this.volume;
+                var frame = this.frame;
                 [i0, i1] = this.dimensions;
                 [d0, d1] = this.shape;
+                var grid_mins = [volume.grid_mins[i0], volume.grid_mins[i1]];
+                var grid_maxes = [volume.grid_maxes[i0], volume.grid_maxes[i1]];
                 var m = this.maxdim;
                 var blue = [0,0,255,255]
                 var yellow = [255,255,0,255]
-                this.frame.reset_frame();
-                var event_rect = this.frame.frame_rect({x:0, y:0, w:d0, h:d1, color:"black", name:"event_rect"})
+                frame.reset_frame();
+                var event_rect = frame.frame_rect({x:-1, y:-1, w:d0, h:d1, color:"rgba(0,0,0,0)", name:"event_rect"})
                 var slice_info = this.volume.array_slice(this.volume.ijk, this.dimensions);
                 this.container.name_image_data(self.name, slice_info.bytes, slice_info.cols, slice_info.rows, blue, yellow);
                 var ff = this.frame_factor;
-                this.frame.named_image({image_name: self.name, x:0, y:0, w:ff*slice_info.cols, h:ff*slice_info.rows})
-                this.frame.lower_left_axes({
+                frame.named_image({image_name: self.name, x:0, y:0, w:ff*slice_info.cols, h:ff*slice_info.rows})
+                frame.lower_left_axes({
                     min_x:0, min_y:0, max_x:this.shape[0], max_y:this.shape[1],
                     x_anchor: 0, y_anchor:0, max_tick_count:3,
                 });
-                this.frame.text({x:-0.1*m, y:d1 * 0.5, align:"right", text: this.vname})
-                this.frame.text({y:-0.1*m, x:d0 * 0.5, text: this.hname, degrees:-90})
+                frame.text({x:-0.1*m, y:d1 * 0.5, align:"right", text: this.vname})
+                frame.text({y:-0.1*m, x:d0 * 0.5, text: this.hname, degrees:-90})
                 // circles marking crossing pixels
                 var threshold = this.volume.threshold;
                 var mins = slice_info.mins;
@@ -448,21 +456,39 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         var m = mins[j][i];
                         var M = maxes[j][i];
                         if ((m <= threshold) && (M >= threshold)) {
-                            this.frame.frame_circle({x: i + 0.5, y: j + 0.5, fill:false, color:"white", r:0.35});
+                            frame.frame_circle({x: i + 0.5, y: j + 0.5, fill:false, color:"white", r:0.35});
                         }
                     }
                 }
                 // highlight ijk point
                 var hx = this.volume.ijk[i0];
                 var hy = this.volume.ijk[i1];
-                this.frame.frame_circle({x: hx+0.5, y:hy+0.5, r:0.25, color:"rgba(255,255,255,0.7)"});
-                this.frame.frame_circle({x: hx+0.5, y:hy+0.5, r:0.25, color:"black", fill:false});
+                frame.frame_circle({x: hx+0.5, y:hy+0.5, r:0.25, color:"rgba(255,255,255,0.7)"});
+                frame.frame_circle({x: hx+0.5, y:hy+0.5, r:0.25, color:"black", fill:false});
+
+                // min boundaries
+                frame.frame_rect({x: grid_mins[0], y:0, w:-grid_mins[0], h:d1, color:"rgba(255,255,255,0.5)"});
+                frame.frame_rect({x: 0, y:grid_mins[1], w:d0, h:-grid_mins[1], color:"rgba(255,255,255,0.5)"});
+                // max boundaries
+                frame.frame_rect({x: grid_maxes[0], y:0, w:d0-grid_maxes[0], h:d1, color:"rgba(255,255,255,0.5)"});
+                frame.frame_rect({x: 0, y:grid_maxes[1], w:d0, h:d1-grid_maxes[1], color:"rgba(255,255,255,0.5)"});
+                // boundary draggers
+                var Mins = frame.rect({x: grid_mins[0], y: grid_mins[1], w:-20, h:-20, color:"black", name:"Mins"})
+                var Maxes = frame.rect({x: grid_maxes[0], y: grid_maxes[1], w:20, h:20, color:"black", name:"Maxes"})
+
                 this.container.fit(null, 10);
 
                 // events
                 var that = this;
 
                 var click = function(event) {
+                    console.log("click: " + event.canvas_name);
+                    if (volume.dragging_slice == that) {
+                        console.log("click: let mouse up handler deal with it...");
+                        return;
+                    }
+                    console.log("click: resetting ijk");
+                    volume.dragging_slice = null;
                     // if the event is in bounds, set the ijk and the threshold and redraw
                     var frame_location = that.frame.event_model_location(event);
                     var x = Math.floor(frame_location.x);
@@ -477,6 +503,61 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     }
                 };
                 event_rect.on("click", click);
+
+                //this.dragging = null;
+                var mouse_down = function(event) {
+                    var name = event.canvas_name;
+                    if ((name=="Mins") || (name=="Maxes")) {
+                        console.log("mouse_down dragging: " + name);
+                        that.dragging = name;
+                        volume.dragging_slice = that;
+                    } else {
+                        console.log("mouse_down: no valid target to drag.");
+                        that.dragging = null;
+                        volume.dragging_slice = null;
+                    }
+                };
+                Mins.on("mousedown", mouse_down);
+                Maxes.on("mousedown", mouse_down);
+
+                var mouse_move = function(event) {
+                    if (volume.dragging_slice == that) {
+                        var frame_location = that.frame.event_model_location(event);
+                        var x = Math.round(frame_location.x);
+                        var y = Math.round(frame_location.y);
+                        if ((x >= -1) && (x <= d0) && (y >= -1) && (y <= d1)) {
+                            if (that.dragging == "Mins") {
+                                console.log("mouse_move mins: " + [x,y]);
+                                volume.grid_mins[i0] = x;
+                                volume.grid_mins[i1] = y;
+                                volume.redraw();
+                            } else if (that.dragging == "Maxes") {
+                                console.log("mouse_move maxes: " + [x,y]);
+                                volume.grid_maxes[i0] = x;
+                                volume.grid_maxes[i1] = y;
+                                volume.redraw();
+                            } else {
+                                console.log("mouse_move not dragging valid name: ", that.dragging);
+                                that.dragging = null;
+                                volume.dragging_slice = null;
+                            }
+                        }
+                    } else {
+                        console.log("mouse_move not dragging slice");
+                        that.dragging = null;
+                        volume.draggin_slice = null;
+                    }
+                };
+                event_rect.on("mousemove", mouse_move);
+
+                var mouse_up = function(event) {
+                    console.log("mouse_up")
+                    volume.dragging_slice = null;
+                };
+                this.container.on_canvas_event("mouseup", mouse_up);
+                //this.container.on_canvas_event("mouseout", mouse_up);
+                // attach to mouseout jQuery event (not canvas event)
+                //this.container.on("mouseout", mouse_up);
             };
         };
 
