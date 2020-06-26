@@ -437,7 +437,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var blue = [0,0,255,255]
                 var yellow = [255,255,0,255]
                 frame.reset_frame();
-                var event_rect = frame.frame_rect({x:-1, y:-1, w:d0, h:d1, color:"rgba(0,0,0,0)", name:"event_rect"})
+                var event_rect = frame.frame_rect({x:-1, y:-1, w:d0+1, h:d1+1, color:"rgba(0,0,0,0)", name:"event_rect"})
                 var slice_info = this.volume.array_slice(this.volume.ijk, this.dimensions);
                 this.container.name_image_data(self.name, slice_info.bytes, slice_info.cols, slice_info.rows, blue, yellow);
                 var ff = this.frame_factor;
@@ -483,12 +483,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var that = this;
 
                 var click = function(event) {
-                    console.log("click: " + event.canvas_name);
+                    //cl("click: " + event.canvas_name);
                     if (volume.dragging_slice == that) {
-                        console.log("click: let mouse up handler deal with it...");
+                        //cl("click: let mouse up handler deal with it...");
                         return;
                     }
-                    console.log("click: resetting ijk");
+                    //cl("click: resetting ijk");
                     volume.dragging_slice = null;
                     // if the event is in bounds, set the ijk and the threshold and redraw
                     var frame_location = that.frame.event_model_location(event);
@@ -509,11 +509,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var mouse_down = function(event) {
                     var name = event.canvas_name;
                     if ((name=="Mins") || (name=="Maxes")) {
-                        console.log("mouse_down dragging: " + name);
+                        //cl("mouse_down dragging: " + name);
                         that.dragging = name;
                         volume.dragging_slice = that;
                     } else {
-                        console.log("mouse_down: no valid target to drag.");
+                        //cl("mouse_down: no valid target to drag.");
                         that.dragging = null;
                         volume.dragging_slice = null;
                     }
@@ -528,23 +528,23 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         var y = Math.round(frame_location.y);
                         if ((x >= -1) && (x <= d0) && (y >= -1) && (y <= d1)) {
                             if (that.dragging == "Mins") {
-                                console.log("mouse_move mins: " + [x,y]);
+                                //cl("mouse_move mins: " + [x,y]);
                                 volume.grid_mins[i0] = x;
                                 volume.grid_mins[i1] = y;
                                 volume.redraw();
                             } else if (that.dragging == "Maxes") {
-                                console.log("mouse_move maxes: " + [x,y]);
+                                //cl("mouse_move maxes: " + [x,y]);
                                 volume.grid_maxes[i0] = x;
                                 volume.grid_maxes[i1] = y;
                                 volume.redraw();
                             } else {
-                                console.log("mouse_move not dragging valid name: ", that.dragging);
+                                //cl("mouse_move not dragging valid name: ", that.dragging);
                                 that.dragging = null;
                                 volume.dragging_slice = null;
                             }
                         }
                     } else {
-                        console.log("mouse_move not dragging slice");
+                        //cl("mouse_move not dragging slice");
                         that.dragging = null;
                         volume.draggin_slice = null;
                     }
@@ -552,7 +552,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 event_rect.on("mousemove", mouse_move);
 
                 var mouse_up = function(event) {
-                    console.log("mouse_up")
+                    //cl("mouse_up")
                     volume.dragging_slice = null;
                 };
                 this.container.on_canvas_event("mouseup", mouse_up);
