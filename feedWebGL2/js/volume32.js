@@ -261,14 +261,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
             build_scaffolding(container, width) {
                 // create standard layout for 3 slices, voxel dots and contours
+                var that = this;
                 var contour_side = width * 0.5;
                 var slice_side = contour_side * 0.5;
                 container.empty();
                 container.css({
                     "display": "grid",
                     "grid-template-columns": `${slice_side}px ${slice_side}px ${contour_side}px`,
-                    "grid-template-rows": `${slice_side}px ${slice_side}px}`,
-                    //"grid-gap": `${s.gap}`,
+                    "grid-template-rows": `${slice_side}px ${slice_side}px auto`,
+                    "grid-gap": "3px",
                 });
                 var x_div = $("<div/>").appendTo(container);
                 x_div.html("X DIV HERE");
@@ -325,14 +326,31 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
                 this.slice_displays = [this.x_slicer, this.y_slicer, this.z_slicer];
                 this.info = $("<div/>").appendTo(container);
+                this.focus_button = $("<button>Focus</button>").appendTo(container);
+                this.focus_button.click(function() { that.focus_volume(); });
                 this.show_info();
                 this.animate()
+            };
+            focus_volume() {
+                var surface = this.surface;
+                var crossing = this.surface.crossing;
+                var shift = 2.5;
+                crossing.reset_three_camera(this.surface_camera, shift);
+                crossing.reset_three_camera(this.voxel_camera, shift, this.voxelControls);
             };
             show_info() {
                 this.info.html("ijk: " + this.ijk + ", threshold: " + this.threshold.toExponential(2))
             };
+            update_volume() {
+                var surface = this.surface;
+                surface.set_threshold(this.threshold);
+                surface.run();
+                this.voxel_mesh.update_sphere_locations(surface.crossing.compact_locations);
+                surface.check_update_link();
+            };
             redraw() {
                 this.slice_displays.map(x => x.draw_frame());
+                this.update_volume()
                 this.show_info();
             };
         };
