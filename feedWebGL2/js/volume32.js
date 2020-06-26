@@ -145,11 +145,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var scene = new THREE.Scene();
                 scene.add(mesh);
 
-                //var g = new THREE.SphereGeometry(1, 6,6);
-                //var m = new THREE.MeshNormalMaterial();
+                var g = new THREE.SphereGeometry(0.5, 6,6);
+                var m = new THREE.MeshNormalMaterial();
                 //m.wireframe = true;
-                //var c = new THREE.Mesh(g, m);
-                //scene.add(c);
+                var c = new THREE.Mesh(g, m);
+                c.position.set(...this.ijk);
+                this.ijk_mesh = c;
+                scene.add(c);
 
                 //renderer.render( scene, camera );
                 this.voxel_scene = scene;
@@ -387,6 +389,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
             redraw() {
                 this.slice_displays.map(x => x.draw_frame());
+                this.ijk_mesh.position.set(...this.ijk);
                 this.update_volume()
                 this.show_info();
             };
