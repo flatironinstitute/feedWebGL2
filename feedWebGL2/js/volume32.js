@@ -37,7 +37,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 assert_positive(s.num_rows);
                 assert_positive(s.num_cols);
                 assert_positive(s.num_layers);
-                this.shape = [s.num_cols, s.num_rows, s.num_layers];
+                this.shape = [s.num_rows, s.num_cols, s.num_layers];
                 this.grid_mins = [0, 0, 0];
                 this.grid_maxes = this.shape.slice();
                 this.dragging_slice = null;
@@ -60,9 +60,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.ijk = [0,0,0];
             };
             set_up_surface() {
+                debugger;
                 var shape = this.shape;
                 var num_cols, num_rows, num_layers;
                 [num_cols, num_rows, num_layers] = shape;
+                var size = num_rows * num_cols * num_layers;
+                var buffer = this.buffer;
+                if (buffer.length != size) {
+                    throw new Error("buffer size must exactly match dimensions.")
+                }
                 var s = this.settings;
                 var surface =  $.fn.webGL2surfaces3dopt({
                     feedbackContext: this.feedbackContext,
@@ -102,6 +108,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var mesh = new THREE.Mesh( geometry,  material );
                 var scene = new THREE.Scene();
                 scene.add(mesh);
+                this.surface_material = material;
                 this.surface_scene = scene;
                 this.surface_mesh = mesh;
                 this.surface_camera = camera;
@@ -285,7 +292,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     "height": `${slice_side}px`,
                 });
                 // X slicer shows Z in columns and Y in rows
-                this.x_slicer = new Slicer32(this, [2,1], x_div, slice_side);
+                this.x_slicer = new Slicer32(this, [0,1], x_div, slice_side);
 
                 var y_div = $("<div/>").appendTo(container);
                 y_div.html("Y DIV HERE");
@@ -296,7 +303,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     "height": `${slice_side}px`,
                 });
                 // Y slicer shows X in columns and Z in rows
-                this.y_slicer = new Slicer32(this, [0,2], y_div, slice_side);
+                this.y_slicer = new Slicer32(this, [2,0], y_div, slice_side);
 
                 var z_div = $("<div/>").appendTo(container);
                 z_div.html("Z DIV HERE");
@@ -307,7 +314,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     "height": `${slice_side}px`,
                 });
                 // Z slicer shows X in columns and Y in rows
-                this.z_slicer = new Slicer32(this, [0,1], z_div, slice_side);
+                this.z_slicer = new Slicer32(this, [2,1], z_div, slice_side);
 
                 var dots_div = $("<div/>").appendTo(container);
                 dots_div.html("DOTS DIV HERE");
@@ -330,9 +337,29 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.initialize_surface_display(contour_div);
 
                 this.slice_displays = [this.x_slicer, this.y_slicer, this.z_slicer];
+
+                // info area
                 this.info = $("<div/>").appendTo(container);
-                this.focus_button = $("<button>Focus</button>").appendTo(container);
+
+                // button area
+                var button_area = $("<div/>").appendTo(container);
+                this.focus_button = $("<button>Focus</button>").appendTo(button_area);
                 this.focus_button.click(function() { that.focus_volume(); });
+
+                this.sync_button = $("<button>sync</button>").appendTo(button_area);
+                this.sync_button.click(function() { that.redraw(true); });
+
+                var auto_sync = $("<span> auto</span>").appendTo(button_area)
+                this.sync_check = $('<input type="checkbox" checked/>').appendTo(auto_sync);
+                this.sync_check.change(function() {
+                    that.redraw();
+                });
+
+                var wires = $("<span> wires</span>").appendTo(button_area)
+                this.wires_check = $('<input type="checkbox"/>').appendTo(wires);
+                this.wires_check.change(function() {
+                    that.redraw();
+                });
 
                 // threshold slider
                 var slider =  $("<div/>").appendTo(container);
@@ -365,7 +392,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.animate()
             };
             set_threshold(value) {
-                value = value | this.bmin
+                value = value || this.bmin
                 value = Math.min(this.bmax, Math.max(this.bmin, value));
                 this.threshold = value;
                 this.threshold_slider.slider("option", "value", value);
@@ -385,12 +412,19 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 surface.set_threshold(this.threshold);
                 surface.run();
                 this.voxel_mesh.update_sphere_locations(surface.crossing.compact_locations);
+                var wires = this.wires_check.is(":checked");
+                this.surface_material.wireframe = wires;
                 surface.check_update_link();
             };
-            redraw() {
+            redraw(sync) {
+                if (!sync) {
+                    sync = this.sync_check.is(':checked');
+                }
                 this.slice_displays.map(x => x.draw_frame());
                 this.ijk_mesh.position.set(...this.ijk);
-                this.update_volume()
+                if (sync) {
+                    this.update_volume();
+                }
                 this.show_info();
             };
         };
@@ -404,7 +438,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.side = side;
                 var d0, d1;
                 [d0, d1] = dimensions;
-                var names = ["X", "Y", "Z"];
+                var names = ["Z", "Y", "X"];
                 this.name = "slice(" + d0 + "," + d1 + ")";
                 this.hname = names[d0];
                 this.vname = names[d1];
@@ -498,6 +532,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     var x = Math.floor(frame_location.x);
                     var y = Math.floor(frame_location.y);
                     if ((x >= 0) && (x < d0) && (y >= 0) && (y < d1)) {
+                        debugger;
                         that.volume.ijk[i0] = x;
                         that.volume.ijk[i1] = y;
                         //that.volume.threshold = 0.5 * (mins[y][x] + maxes[y][x]);
@@ -597,9 +632,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var index = 0;
             for (var k=0; k<num_layers; k++) {
                 var dk = k - 2;
-                for (var j=0; j<num_rows; j++) {
+                for (var j=0; j<num_cols; j++) {
                     var dj = j - 4;
-                    for (var i=0; i<num_cols; i++) {
+                    for (var i=0; i<num_rows; i++) {
                         var di = i - 3;
                         valuesArray[index] = Math.sqrt(dk * dk + dj * dj + di * di);
                         index ++;
