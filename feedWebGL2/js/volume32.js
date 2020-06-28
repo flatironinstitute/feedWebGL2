@@ -22,6 +22,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // when getting compact arrays
                     // shrink the array sizes by this factor.
                     shrink_factor: 0.2,
+                    dx: [1,0,0],
+                    dy: [0,1,0],
+                    dz: [0,0,1],
                 }, options);
                 var s = this.settings;
                 var context = s.feedbackContext;
@@ -80,9 +83,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     rasterize: false,
                     threshold: s.threshold,
                     shrink_factor: s.shrink_factor,  // how much to shrink the arrays
-                    dx: [1,0,0],
-                    dy: [0,1,0],
-                    dz: [0,0,1],
+                    dx: s.dx,
+                    dy: s.dy,
+                    dz: s.dz,
                     translation: [0,0,0],
                 });
                 surface.set_grid_limits(this.grid_mins, this.grid_maxes);
@@ -363,6 +366,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
                 // threshold slider
                 var slider =  $("<div/>").appendTo(container);
+                slider.css("background-image", "linear-gradient(to right, blue, yellow)");
                 var bmin = this.buffer[0];
                 var bmax = this.buffer[0];
                 for (var i=0; i<this.buffer.length; i++) {
