@@ -160,6 +160,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // samplers are prepared by caller if needed.  Descriptors provided by caller.
                     samplers: {},
                     location_fill: -1e12,
+                    dx: [1, 0, 0],
+                    dy: [0, 1, 0],
+                    dz: [0, 0, 1],
                 }, options);
 
                 var s = this.settings;
@@ -314,6 +317,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 return result;
             };
             get_compacted_feedbacks(location_only) {
+                var s = this.settings;
                 this.run();
                 var location_fill = this.settings.location_fill;
                 var rn = this.runner;
@@ -388,10 +392,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             maxes[k] = Math.max(maxes[k], v);
                         }
                     }
+                } else {
+                    mins = [0,0,0];
+                    maxes = [0,0,0];
                 }
                 var n2 = 0;
                 var mid = [];
                 if (mins) {
+                    // increase the maxes by offset in each dim
+                    maxes = this.vsum(maxes, s.dx);
+                    maxes = this.vsum(maxes, s.dy);
+                    maxes = this.vsum(maxes, s.dz);
+                    n2 = this.vdistance2(mins, maxes);
                     for (var k=0; k<3; k++) {
                         mid.push(0.5 * (mins[k] + maxes[k]));
                         //n2 += (mins[k] - maxes[k]) ** 2;
@@ -410,6 +422,24 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     locations: this.compact_locations,
                 };
                 return this.compacted_feedbacks;
+            };
+            // XXX should get vector ops from somewhere else.
+            vdistance2(v1, v2) {
+                var result = 0.0;
+                if ((v1) && (v2)) {
+                    for (var k=0; k<3; k++) {
+                        var d = v1[k] - v2[k];
+                        result += d * d;
+                    }
+                }
+                return result;
+            };
+            vsum(v1, v2) {
+                var result = [];
+                for (var k=0; k<3; k++) {
+                    result.push(v1[k] + v2[k]);
+                }
+                return result;
             };
             get_location_colors() {
                 var indices = this.compact_indices;
@@ -1178,6 +1208,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     location: s.location,
                     samplers: this.samplers,
                     // never rasterize the crossing pixels
+                    dx: s.dx,
+                    dy: s.dy,
+                    dz: s.dz,
                 });
                 // initialize segmenter upon first run.
                 this.segments = null; 
