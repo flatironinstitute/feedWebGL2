@@ -88,10 +88,19 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     dz: s.dz,
                     translation: [0,0,0],
                 });
-                surface.set_grid_limits(this.grid_mins, this.grid_maxes);
-                surface.run();
+                //surface.set_grid_limits(this.grid_mins, this.grid_maxes);
                 this.surface = surface;
+                this.set_limits();
+                surface.run();
             };
+            set_limits() {
+                // xxxx someday rationalize the indexing!
+                var gm = this.grid_mins;
+                var mins = [gm[2], gm[1], gm[0]];
+                var gM = this.grid_maxes;
+                var maxes = [gM[2], gM[1], gM[0]];
+                this.surface.set_grid_limits(mins, maxes);
+            }
             initialize_surface_display(container) {
                 if (!this.surface) {
                     this.set_up_surface();
@@ -116,7 +125,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.surface_mesh = mesh;
                 this.surface_camera = camera;
                 this.surface_renderer = renderer;
-                this.surface.crossing.reset_three_camera(camera);
+                this.surface.crossing.reset_three_camera(camera, 2.0);
                 this.sync_cameras();
                 //renderer.render( scene, camera );
             };
@@ -146,7 +155,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 renderer.outputEncoding = THREE.sRGBEncoding;
                 container[0].appendChild( renderer.domElement );
                 var camera = new THREE.PerspectiveCamera( 45, container.width()/container.height(), 0.1, 10000 );
-                voxels.reset_three_camera(camera, 3.5);
+                voxels.reset_three_camera(camera, 2.0);
                 var mesh = voxels.get_points_mesh({
                     THREE: THREE,
                     colorize: true,
@@ -404,7 +413,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             focus_volume() {
                 var surface = this.surface;
                 var crossing = this.surface.crossing;
-                var shift = 2.5;
+                var shift = 2.0;
                 crossing.reset_three_camera(this.surface_camera, shift);
                 crossing.reset_three_camera(this.voxel_camera, shift, this.voxelControls);
             };
@@ -413,6 +422,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
             update_volume() {
                 var surface = this.surface;
+                this.set_limits();
                 surface.set_threshold(this.threshold);
                 surface.run();
                 this.voxel_mesh.update_sphere_locations(surface.crossing.compact_locations);
