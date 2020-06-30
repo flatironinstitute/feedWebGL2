@@ -1236,6 +1236,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             run () {
                 var s = this.settings;
                 var compacted = this.crossing.get_compacted_feedbacks();
+                this.radius = compacted.radius;
+                this.mid_point = compacted.mid;
                 if (!this.segments) {
                     var container = $(this.feedbackContext.canvas);
                     this.segments = container.webGL2TriangulateVoxels({
@@ -1343,6 +1345,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         positions = that.get_positions(geometry.attributes.position.array);
                         normals = that.get_normals(geometry.attributes.normal.array);
                     }
+                    var mid = that.mid_point;
+                    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(mid[0], mid[1], mid[2]), that.radius);
                     geometry.attributes.position.array = positions;
                     geometry.attributes.position.needsUpdate = true;
                     geometry.attributes.normal.array = normals;
@@ -1461,8 +1465,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     }
                 }
                 if (truncate) {
-                    clean_positions = clean_positions.subarray(0, clean_length);
-                    clean_normals = clean_normals.subarray(0, clean_length);
+                    // use slice (not aubarray) so the buffer is not shared (?)
+                    clean_positions = clean_positions.slice(0, clean_length);
+                    clean_normals = clean_normals.slice(0, clean_length);
                 }
                 return {
                     positions: clean_positions,

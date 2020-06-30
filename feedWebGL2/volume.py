@@ -8,6 +8,7 @@ import numpy as np
 import jp_proxy_widget
 from jp_doodle.data_tables import widen_notebook
 from jp_doodle import dual_canvas
+from IPython.display import display
 
 required_javascript_modules = [
     local_files.vendor_path("js_lib/three.min.js"),
@@ -60,21 +61,83 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             element.V = element.volume32(options);
         """, options=options)
 
-    def load_3d_numpy_array(self, ary, threshold=None, shrink_factor=0.2):
+    def load_3d_numpy_array(self, ary, threshold=None, shrink_factor=None, chunksize=10000000):
+        if not self.rendered:
+            display(self)
         if threshold is None:
             threshold = 0.5 * (ary.min() + ary.max());
         self.element.html("Loading shape: " + repr(ary.shape) + " " + repr([threshold, shrink_factor]))
         (num_layers, num_cols, num_rows) = ary.shape
+        if shrink_factor is None:
+            shrink_factor = self.shrink_heuristic(*ary.shape)
         ary32 = np.array(ary, dtype=np.float32)
         self.set_options(num_rows, num_cols, num_layers, threshold=threshold, shrink_factor=shrink_factor)
         self.data = ary32
         ary_bytes = bytearray(ary32.tobytes())
+        nbytes = len(ary_bytes)
         self.js_init("""
             debugger;
-            element.uint8array = uint8array;
-            element.valuesArray = new Float32Array(uint8array.buffer);
-            element.V.buffer = element.valuesArray;
-        """, uint8array=ary_bytes)
+            var uint8array = new Uint8Array(length);
+            element.build_status = function(msg) {
+                element.html(msg);
+            }
+            element.set_data = function(uint8, at_index) {
+                uint8array.set(uint8, at_index);
+            };
+            element.load_buffer = function () {
+                var valuesArray = new Float32Array(uint8array.buffer);
+                element.V.buffer = valuesArray;
+                uint8array = null;
+            };
+            // Retrieving positions and normals -- not chunked.
+            var positions_and_normals = null;
+            element.position_count = function() {
+                // call positions_count to prepare arrays...
+                positions_and_normals = element.V.surface.clean_positions_and_normals(false, true);
+                return positions_and_normals.positions.length;
+            };
+            element.get_positions_bytes = function() {
+                return new Uint8Array(positions_and_normals.positions.buffer);
+            };
+            element.get_normals_bytes = function() {
+                return new Uint8Array(positions_and_normals.normals.buffer);
+            };
+        """, length=nbytes)
+        cursor = 0
+        while cursor < nbytes:
+            next_cursor = cursor + chunksize
+            percent = int(next_cursor * 100.0 / nbytes)
+            chunk = ary_bytes[cursor:next_cursor]
+            self.element.set_data(chunk, cursor).sync_value()
+            self.element.build_status("Loaded %s (%s%s)" % (next_cursor, percent, "%"))
+            cursor = next_cursor
+        self.element.load_buffer().sync_value()
+        self.element.build_status("Loaded: " + repr(nbytes))
+
+    def positions_and_normals(self):
+        from jp_proxy_widget.hex_codec import hex_to_bytearray
+        float_count = self.element.position_count().sync_value()
+        positions_hex = self.element.get_positions_bytes().sync_value()
+        normals_hex = self.element.get_normals_bytes().sync_value()
+        def float32array(hex):
+            # xxx this should be a convenience provided in jp_proxy_widget...
+            print("converting", hex)
+            bytes_array = hex_to_bytearray(hex)
+            floats_array = np.frombuffer(bytes_array, dtype=np.float32)
+            print("got floats", floats_array)
+            assert floats_array.shape == (float_count,), "bad data received " + repr((floats_array.shape, float_count))
+            triples = float_count // 3
+            return floats_array.reshape((triples, 3))
+        positions = float32array(positions_hex)
+        normals = float32array(normals_hex)
+        return (positions, normals)
+
+    shrink_multiple = 4.0
+    shrink_max = 0.7
+
+    def shrink_heuristic(self, n, m, k):
+        c = (n*m + m*k + n*k) * self.shrink_multiple / (n*m*k)
+        return min(c, self.shrink_max)
 
     def build(self, width=1200):
         assert self.options is not None, "options must be intialized"
@@ -89,9 +152,9 @@ class Example:
         widen_notebook()
     
     def get_array(self):
-        x = np.linspace(-1.111, 2, 50)
-        y = np.linspace(-1.111, 2, 51)
-        z = np.linspace(-1.111, 2, 52)
+        x = np.linspace(-1.111, 2, 115)
+        y = np.linspace(-1.111, 2, 114)
+        z = np.linspace(-1.111, 2, 113)
         xv, yv, zv = np.meshgrid(x, y, z, indexing="ij")
         def distance(x0, y0, z0):
             return np.sqrt((x0-xv) ** 2 + (y0 - yv) ** 2 + (z0 - zv) **2)
@@ -118,6 +181,6 @@ class Example:
 
     def run(self):
         W = self.W
-        W.load_3d_numpy_array(self.ary, threshold=self.ary.ravel()[4])
+        W.load_3d_numpy_array(self.ary, chunksize=300019)
         W.build()
     
