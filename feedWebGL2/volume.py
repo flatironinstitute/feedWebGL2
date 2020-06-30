@@ -121,10 +121,10 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         normals_hex = self.element.get_normals_bytes().sync_value()
         def float32array(hex):
             # xxx this should be a convenience provided in jp_proxy_widget...
-            print("converting", hex)
+            #print("converting", hex)
             bytes_array = hex_to_bytearray(hex)
             floats_array = np.frombuffer(bytes_array, dtype=np.float32)
-            print("got floats", floats_array)
+            #print("got floats", floats_array)
             assert floats_array.shape == (float_count,), "bad data received " + repr((floats_array.shape, float_count))
             triples = float_count // 3
             return floats_array.reshape((triples, 3))
