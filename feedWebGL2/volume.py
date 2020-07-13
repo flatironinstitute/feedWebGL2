@@ -114,7 +114,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         self.element.load_buffer().sync_value()
         self.element.build_status("Loaded: " + repr(nbytes))
 
-    def positions_and_normals(self):
+    def triangles_and_normals(self):
         from jp_proxy_widget.hex_codec import hex_to_bytearray
         float_count = self.element.position_count().sync_value()
         positions_hex = self.element.get_positions_bytes().sync_value()
@@ -126,8 +126,8 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             floats_array = np.frombuffer(bytes_array, dtype=np.float32)
             #print("got floats", floats_array)
             assert floats_array.shape == (float_count,), "bad data received " + repr((floats_array.shape, float_count))
-            triples = float_count // 3
-            return floats_array.reshape((triples, 3))
+            triangles = float_count // 9
+            return floats_array.reshape((triangles, 3, 3))
         positions = float32array(positions_hex)
         normals = float32array(normals_hex)
         return (positions, normals)
@@ -144,6 +144,67 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         assert self.data is not None, "data must be provided"
         self.element.html("building")
         self.element.V.build_scaffolding(self.get_element(), width)
+        self.element.V.focus_volume()
+
+    def doodle_diagram(
+        self, 
+        pixels=700, 
+        corners=True,
+        all_corners=True,
+        triangles=True,
+        crossing=True,
+        force=False):
+        from jp_doodle import nd_frame
+        ary = self.data
+        (width, height, depth) = ary.shape
+        if max(*ary.shape) > 25 and not force:
+            raise ValueError("Aborting: array is too large for doodle diagram.")
+        threshold = self.element.V.threshold.sync_value()
+        swatch = nd_frame.swatch3d(pixels=pixels, model_height=height)
+        # rotate the 3d reference frame a bit so we aren't looking straight into the z axis
+        center = [width * 0.5, height * 0.5, depth * 0.5]
+        radius = width + height + depth
+        swatch.orbit(center3d=center, radius=radius, shift2d=(-1, -0.8))
+        swatch.orbit_all(center3d=center, radius=radius)
+        # draw voxel corner circles (fill if crossing)
+        if corners:
+            for x in range(width):
+                for y in range(height):
+                    for z in range(depth):
+                        a = ary[x, y, z]
+                        color = "blue"
+                        if a > threshold:
+                            color = "#770" # darker yellow
+                        corners = ary[x:x+2, y:y+2, z:z+2]
+                        fill = False 
+                        #print(x,y,z, corners.max(), threshold, corners.min())
+                        if crossing:
+                            if (corners.max() > threshold and corners.min() < threshold):
+                                fill = True
+                        if all_corners or fill:
+                            swatch.frame_circle(location=(x,y,z), color=color, r=0.1, fill=fill, lineWidth=3)
+        # draw triangles and normals
+        if triangles:
+            (triangles, normals) = self.triangles_and_normals()
+            for (i, triangle) in enumerate(triangles):
+                normal = normals[i][0]
+                anormal = np.abs(normal)
+                color = "rgb(%s,%s,%s)" % tuple(int(x * 255) for x in anormal)
+                fillcolor = "rgba(%s,%s,%s,0.3)" % tuple(int(x * 255) for x in anormal)
+                tcenter = triangle.mean(axis=0)
+                for i in range(3):
+                    triangle[i] += 0.2 * (tcenter - triangle[i])
+                swatch.polygon(locations=triangle, color=color, fill=False, lineWidth=2)
+                swatch.polygon(locations=triangle, color=fillcolor)
+                swatch.arrow(location1=tcenter, location2=(tcenter + 0.2 * normal), lineWidth=2, color=color, head_length=0.02)
+        swatch.fit(0.6)
+
+def display_isosurface(for_array, threshold=None, save=False):
+    W = Volume32()
+    W.load_3d_numpy_array(for_array, threshold=threshold)
+    W.build()
+    if save:
+        return W
 
 class Example:
 
