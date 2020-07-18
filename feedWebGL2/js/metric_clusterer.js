@@ -22,13 +22,19 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     delta: 0.01,
                     // epsilon is cut-off for "too close" positions
                     epsilon: 1.0e-10,
+                    // number of mobile positions (default all)
+                    nmobile: null,
                 }, options);
                 var s = this.settings;
                 if ((!s.positions) || (!s.metric)) {
                     throw new Error("positions and metric are required.");
                 }
                 s.npos = s.positions.length;
-                if ((s.npos * s.npos) != s.metric.length) {
+                s.nmobile = s.nmobile || s.npos;
+                if (s.nmobile > s.npos) {
+                    throw new Error("mobile positions cannot exceed positions.");
+                }
+                if ((s.npos * s.nmobile) != s.metric.length) {
                     throw new Error("positions and metric must match");
                 }
                 s.buffer_size = s.npos * 4;
@@ -73,11 +79,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.positions_texture = context.texture("all_positions", typ, fmt, ifmt);
                 this.positions_texture.load_array(pos_array, width, height)
                 this.metric_texture = context.texture("metric", "FLOAT", "RED", "R32F");
-                this.metric_texture.load_array(metric_array, s.npos, s.npos)
+                this.metric_texture.load_array(metric_array, s.nmobile, s.npos)
                 // create the runner
                 this.runr = this.program.runner({
                     num_instances: 1,
-                    vertices_per_instance: s.npos,
+                    vertices_per_instance: s.nmobile,
                     rasterize: false,
                     uniforms: {
                         delta: {
@@ -170,6 +176,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     };
     
     $.fn.metric_clusterer.example = function (container) {
+        var nmobile = 4;
         var positions = [
             [1,1,1],
             [1,-1,-1],
@@ -183,20 +190,25 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             3, 4, 0, 3,
             2, 2, 3, 0,
         ];
+
+        nmobile = 3;
         positions = [
-            [2, 0, 0],
-            [0, 0, 0],
-            [-2, 0, 0],
+            [2, -1, -1],
+            [0, -1, -1],
+            [-2, -1, -1],
+            [0, 10, -1],
         ];
         metric = [
-            0, 2, 2,
-            2, 0, 2,
-            2, 2, 0,
+            -1, -1, -1,
+            -1, -1, -1,
+            6,  -1, -1,
+            -1, 12, -1,
         ]
         debugger;
         var clusterer = container.metric_clusterer({
             dimensions: 3,
             positions: positions,
+            nmobile: nmobile,
             metric: metric,
             delta: 1.0,  // for testing only, should be smaller normally
         });
