@@ -118,8 +118,75 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
             step () {
                 this.runr.run();
-                return this.runr.feedback_array("shifted_position")
+                this.shifted_positions_array =  this.runr.feedback_array("shifted_position");
+                return this.shifted_positions_array;
             };
+            get_positions (all) { 
+                var sp = this.shifted_positions_array;
+                var s = this.settings;
+                var nmobile = s.nmobile;
+                var dim = s.dimensions;
+                var s_positions = [];
+                var index = 0;
+                for (var i=0; i<nmobile; i++) {
+                    var p = [];
+                    for (var j=0; j<dim; j++) {
+                        p.push(sp[index + j]);
+                    }
+                    s_positions.push(p);
+                    index += 4;
+                }
+                if (all) {
+                    var positions = s.positions;
+                    var npos = positions.length();
+                    // xxx shared reference
+                    for (var i=nmobile; i<npos; i++) {
+                        s_positions.push(positions[i]);
+                    }
+                }
+                return s_positions;
+            };
+            get_centered_positions(diameter, all) {
+                if (!diameter) {
+                    throw new Error("diameter is required.")
+                }
+                var s_positions = this.get_positions(all);
+                var s = this.settings;
+                var dim = s.dimensions;
+                var npos = s_positions.length;
+                var mins = s_positions[0].slice();
+                var maxes = mins.slice();
+                for (var i=0; i<npos; i++) {
+                    var p = s_positions[i];
+                    for (j=0; j<dim; j++) {
+                        var v = p[j];
+                        mins[j] = Math.min(mins[j], v);
+                        maxes[j] = Math.max(maxes[j], v);
+                    }
+                }
+                var center = [];
+                var diff = [];
+                for (var j=0; j<dim; j++) {
+                    var m = mins[j];
+                    var M = maxes[j];
+                    center.push( 0.5 * (m + M) );
+                    diff.push( M - m );
+                }
+                var d = Math.max(...diff);
+                var scale = diameter / d;
+                var c_positions = [];
+                for (var i=0; i<npos; i++) {
+                    var p = s_positions[i];
+                    var c_p = []
+                    for (j=0; j<dim; j++) {
+                        var v = p[j];
+                        var c = center[j];
+                        c_p.push( (v - c) * scale );
+                    }
+                    c_positions.push(c_p);
+                }
+                return c_positions;
+            }
         };
 
         var cluster_shift_shader = `#version 300 es
@@ -213,6 +280,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             delta: 1.0,  // for testing only, should be smaller normally
         });
         var array = clusterer.step();
-        container.html("Got " + array.length);
+        var c_pos = clusterer.get_centered_positions(10.0)
+        container.html("Got " + array.length + " centered " + c_pos.length);
     };
 })(jQuery)
