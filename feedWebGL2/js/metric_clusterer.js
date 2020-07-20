@@ -202,6 +202,21 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     c_positions.push(c_p);
                 }
                 return c_positions;
+            };
+            step_and_feedback() {
+                // full round trip: adjust points, feed back for next iteration, return new positions and max shift
+                this.step();
+                var positions = this.get_positions();
+                var shifts = this.get_shifts();
+                var max_shift = shifts[0];
+                for (var i=0; i<shifts.length; i++) {
+                    max_shift = Math.max(max_shift, shifts[i]);
+                }
+                this.feed_back_positions();
+                return {
+                    positions: positions,
+                    max_shift: max_shift,
+                }
             }
         };
 
