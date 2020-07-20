@@ -54,6 +54,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         pos_array[offset + j] = v[j];
                     }
                 }
+                this.positions_array = pos_array;
                 // get the webgl context container
                 var context = this.settings.feedbackContext;
                 if (!context) {
@@ -69,6 +70,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     vertex_shader: cluster_shift_shader,
                     feedbacks: {
                         shifted_position: { num_components: 4 },
+                        shift_length: { num_components: 1 },
                     }
                 });
                 var typ = "FLOAT";
@@ -120,6 +122,20 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.runr.run();
                 this.shifted_positions_array =  this.runr.feedback_array("shifted_position");
                 return this.shifted_positions_array;
+            };
+            feed_back_positions() {
+                // combine shifted positions with static positions
+                var pos = this.positions_array;
+                pos.set(this.shifted_positions_array);
+                // reload the positions sampler (texture)
+                //var width = 1;
+                //var height = pos.length / 4;
+                //this.positions_texture.load_array(pos, width, height)
+                this.positions_texture.reload_array(pos);
+                this.positions_buffer.copy_from_array(pos);
+            };
+            get_shifts() {
+                return this.runr.feedback_array("shift_length").slice();
             };
             get_positions (all) { 
                 var sp = this.shifted_positions_array;
@@ -201,9 +217,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         uniform sampler2D metric;
 
         out vec4 shifted_position;
+        out float shift_length;
 
         void main() {
-            vec4 position = initial_position;
+            vec4 total_shift = vec4(0.0, 0.0, 0.0, 0.0);
             int i = gl_VertexID;
             ivec2 psize = textureSize(all_positions, 0);
             int N = psize[1];
@@ -231,11 +248,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         float factor = n / m;
                         float logfactor = log(factor);
                         vec4 shift = (delta * logfactor / n) * diff;
-                        position += shift;
+                        total_shift += shift;
                     }
                 }
             }
-            shifted_position = position;
+            shifted_position = initial_position + total_shift;
+            shift_length = length(total_shift);
         }
         `;
 
@@ -279,8 +297,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             metric: metric,
             delta: 1.0,  // for testing only, should be smaller normally
         });
-        var array = clusterer.step();
+        var array = clusterer.step().slice();
         var c_pos = clusterer.get_centered_positions(10.0)
+        var shifts = clusterer.get_shifts();
         container.html("Got " + array.length + " centered " + c_pos.length);
+        // run another step with new positions
+        clusterer.feed_back_positions();
+        var array2 = clusterer.step().slice();
+        var c_pos2 = clusterer.get_centered_positions(10.0);
+        var shifts2 = clusterer.get_shifts();
+        $("<div>step 2 " + c_pos2.length + "</div>").appendTo(container);
     };
 })(jQuery)
