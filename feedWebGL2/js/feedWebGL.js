@@ -423,6 +423,11 @@
                 var feedback = this.allocated_feedbacks[name];
                 return feedback.get_array(optionalPreAllocatedArrBuffer);
             };
+            copy_feedback_to_buffer(from_feedback_name, to_buffer_name) {
+                var feedback = this.allocated_feedbacks[from_feedback_name];
+                var buffer = this.program.context.get_buffer(to_buffer_name);
+                feedback.copy_into_buffer(buffer);
+            };
             feedback_vectors(name) {
                 var feedback = this.allocated_feedbacks[name];
                 return feedback.get_vectors();
@@ -506,7 +511,24 @@
                 // xxxxx is this needed?                
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            }
+            };
+            reload_array(array) {
+                // reload the texture with new array values
+                var gl = this.context.gl;
+                var target = gl.TEXTURE_2D;
+                var level = 0;
+                var xoffset = 0;
+                var yoffset = 0;
+                var height = this.height;
+                var width = this.width;
+                var format = gl[this.format];
+                var gl_type = gl[this.typ];
+                var srcData = array;
+                var srcOffset = 0;
+                // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
+                gl.bindTexture(target, this.gl_texture);
+                gl.texSubImage2D(target, level, xoffset, yoffset, width, height, format, gl_type, srcData, srcOffset);
+            };
         };
 
         class FeedbackVariable {
