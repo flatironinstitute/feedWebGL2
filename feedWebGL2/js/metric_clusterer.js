@@ -140,6 +140,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             get_positions (all) { 
                 var sp = this.shifted_positions_array;
                 var s = this.settings;
+                if (!sp) {
+                    // default to original positions
+                    sp = s.positions.slice(0, 4 * s.nmobile);
+                }
                 var nmobile = s.nmobile;
                 var dim = s.dimensions;
                 var s_positions = [];
@@ -217,7 +221,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     positions: positions,
                     max_shift: max_shift,
                 }
-            }
+            };
+            step_shift() {
+                // just get the max shift (for jupyter -- save roundtrip)
+                return this.step_and_feedback().max_shift;
+            };
         };
 
         var cluster_shift_shader = `#version 300 es
@@ -266,9 +274,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         total_shift += shift;
                     }
                 }
+            } 
+            shift_length = length(total_shift);
+            // limit the shift to 1
+            if (shift_length > 1.0) {
+                total_shift = total_shift / shift_length;
             }
             shifted_position = initial_position + total_shift;
-            shift_length = length(total_shift);
         }
         `;
 
