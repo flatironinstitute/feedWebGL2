@@ -39,8 +39,9 @@ def load_requirements(widget=None, silent=True, additional=()):
     widget.load_js_files(all_requirements)
     dual_canvas.load_requirements(widget, silent=silent)
     if not silent:
-        widget.element.html("<div>Requirements for <b>chart_ipynb</b> have been loaded.</div>")
+        widget.element.html("<div>Requirements for <b>volume viewer</b> have been loaded.</div>")
         display(widget)
+    REQUIREMENTS_LOADED = True
 
 class Volume32(jp_proxy_widget.JSProxyWidget):
 
