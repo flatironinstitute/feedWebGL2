@@ -610,7 +610,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 geometry.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
                 that.link_needs_update = false;
                 var after_run = function(that) {
-                    debugger;
                     that.link_needs_update = true;
                 }
                 var check_update_link = function() {
@@ -629,7 +628,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 return geometry;
             };
             set_threshold(value) {
-                debugger;
                 this.crossing.set_threshold(value);
                 // xxxx must be after first run!
                 if (this.segments) {
@@ -800,7 +798,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 geometry.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
                 that.link_needs_update = false;
                 var after_run = function(that) {
-                    debugger;
                     that.link_needs_update = true;
                 }
                 var check_update_link = function() {

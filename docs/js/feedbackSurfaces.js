@@ -64,11 +64,25 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         `;
     };
 
-    // function to compute (x,y,z) location of offset relative to voxel location.
-    var locate_std_decl = `
+    // functions to compute (x,y,z) location of offset relative to voxel location.
+    var grid_location_decl = `
     vec3 grid_location(in vec3 offset) {
+        vec3 rescaled = rescale_offset(offset);
+        return grid_xyz(rescaled);
+    }
+    `;
+
+    var locate_std_decl = `
+    vec3 rescale_offset(in vec3 offset) {
+        // convert voxel offset to block grid
         return location_offset + offset;
     }
+
+    vec3 grid_xyz(in vec3 offset) {
+        // convert block grid coords to xyz (trivial here)
+        return offset;
+    }
+    ${grid_location_decl}
     `;
 
     // xxxx the scaling and and polar conversion could be separated eventually if useful.
@@ -93,26 +107,23 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         return (x0 * (1.0 - offset)) + (x1 * offset);  // no clamping?
     }
 
-
-    /*
-    vec3 grid_location(in vec3 offset) {
-        // debug version
-        float x = offset[0];
-        int index = i_depth_num;
-        //sampler2D scaling = LayerScale;
-        //float x0 = texelFetch(LayerScale, ivec2(i_block_num, index), 0).r;
-        //float x1 = texelFetch(LayerScale, ivec2(i_block_num, index+1), 0).r;
-        float x0 = texelFetch(LayerScale, ivec2(index, i_block_num), 0).r;
-        float x1 = texelFetch(LayerScale, ivec2(index+1, i_block_num), 0).r;
-        return vec3(x, x0, x1);
-    }
-    */
-
-    vec3 grid_location(in vec3 offset) {
-        //return offset;
+    vec3 rescale_offset(in vec3 offset) {
+        // convert voxel offset to block grid.
+        // spherical coordinates using the "3rd major convention"
+        // https://en.wikipedia.org/wiki/Spherical_coordinate_system#Conventions
         float r = rescale_f(offset[0], i_depth_num, LayerScale);
-        float theta = rescale_f(offset[1], i_row_num, RowScale);
-        float phi = rescale_f(offset[2], i_col_num, ColumnScale);
+        // swapping phi and theta.
+        float phi = rescale_f(offset[1], i_row_num, RowScale);
+        float theta = rescale_f(offset[2], i_col_num, ColumnScale);
+        return vec3(r, phi, theta);
+    }
+
+    vec3 grid_xyz(in vec3 spherical) {
+        // convert block grid coords to xyz (trivial here)
+        float r = spherical[0];
+        // swapping phi and theta.
+        float phi = spherical[1];
+        float theta = spherical[2];
         //return vec3(r, theta, phi);
         
         float sint = sin(theta);
@@ -123,8 +134,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         float y = r * sinp * sint;
         float z = r * cosp;
         return vec3(x, y, z);
-        
     }
+    ${grid_location_decl}
     `;
 
     $.fn.webGL2crossingVoxels = function(options) {
@@ -432,18 +443,26 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
                 return colors;
             };
-            reset_three_camera(camera, radius_multiple) {
+            reset_three_camera(camera, radius_multiple, orbit_control) {
                 // adjust three.js camera to look at current voxels
                 var cf = this.compacted_feedbacks;
                 if ((!cf) || (!cf.mins)) {
                     // no points -- punt
                     return;
                 }
+                var cx = cf.mid[0];
+                var cy = cf.mid[1];
+                var cz = cf.mid[2];
                 radius_multiple = radius_multiple || 3;
-                camera.position.x = cf.mid[0];
-                camera.position.y = cf.mid[1];
-                camera.position.z = cf.mid[2] + radius_multiple * cf.radius;
-                camera.lookAt(cf.mid[0], cf.mid[1], cf.mid[2])
+                camera.position.x = cx;
+                camera.position.y = cy;
+                camera.position.z = cz + radius_multiple * cf.radius;
+                camera.lookAt(cf.mid[0], cf.mid[1], cf.mid[2]);
+                if (orbit_control) {
+                    orbit_control.center.x = cx;
+                    orbit_control.center.y = cy;
+                    orbit_control.center.z = cz;
+                }
                 return camera;
             }
             set_threshold(value) {
@@ -497,15 +516,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
             ${get_sizes_macro("gl_VertexID")}
             //location = location_offset;
-            location = grid_location(vec3(0,0,0));
+            vec3 rescaled = rescale_offset(vec3(0,0,0));
+            //location = grid_location(vec3(0,0,0));
+            location = grid_xyz(rescaled);
 
             bool voxel_ok = true;
             if (u_grid_min[0] < u_grid_max[0]) {
                 // voxel coordinate filtering is enabled
                 voxel_ok = ( 
-                    (u_grid_min[0] <= f_col_num) && (f_col_num < u_grid_max[0]) &&
-                    (u_grid_min[1] <= f_row_num) && (f_row_num < u_grid_max[1]) &&
-                    (u_grid_min[2] <= f_depth_num) && (f_depth_num < u_grid_max[2]) );
+                    (u_grid_min[0] <= rescaled[0]) && (rescaled[0] < u_grid_max[0]) &&
+                    (u_grid_min[1] <= rescaled[1]) && (rescaled[1] < u_grid_max[1]) &&
+                    (u_grid_min[2] <= rescaled[2]) && (rescaled[2] < u_grid_max[2]) );
             }
 
             // Dont tile last column/row/layer which wraps around
@@ -928,6 +949,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     offsets[C_index[iTetrahedronNumber]],
                     offsets[D_INDEX]
                 );
+                vec3[4] grid_locations = vec3[](
+                    grid_location(t_offsets[0]),
+                    grid_location(t_offsets[1]),
+                    grid_location(t_offsets[2]),
+                    grid_location(t_offsets[3])
+                );
                 // weights as array
                 float wts[N_CORNERS] = float[](
                     front_corners[0], front_corners[1], front_corners[2], front_corners[3], 
@@ -954,42 +981,26 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 if (U_left[ci] >= 0) {
                     int SegLs[N_VERTICES] = int[](U_left[ci], V_left[ci], W_left[ci]);
                     int SegRs[N_VERTICES] = int[](U_right[ci], V_right[ci], W_right[ci]);
-                    
-                    int SegL = SegLs[iVertexNumber];
-                    int SegR = SegRs[iVertexNumber];
-                    vec3 offsetL = t_offsets[SegL];
-                    vec3 offsetR = t_offsets[SegR];
-                    
-                    float wtL = t_wts[SegL];
-                    float wtR = t_wts[SegR];
-                    // check denominator is not too small? xxxx
-                    float delta = (wtL - uValue) / (wtL - wtR);
-                    vec3 combined_offset = ((1.0 - delta) * offsetL) + (delta * offsetR);
-                    //vec3 vertex = combined_offset + vec3(col_num, row_num, layer_num);
-                    //vec3 vertex = combined_offset + vec3(layer_num, row_num, col_num);
-                    //vec3 vertex = combined_offset + location_offset;
-                    vec3 vertex = grid_location(combined_offset);
+                    vec3[N_VERTICES] combined_offsets;
+                    // compute intercepts for all vertices of the triangle
+                    for (int vnum=0; vnum<N_VERTICES; vnum++) {
+                        int SegL = SegLs[vnum];
+                        int SegR = SegRs[vnum];
+                        vec3 offsetL = grid_locations[SegL];
+                        vec3 offsetR = grid_locations[SegR];
+                        float wtL = t_wts[SegL];
+                        float wtR = t_wts[SegR];
+                        // check denominator is not too small? xxxx
+                        float delta = (wtL - uValue) / (wtL - wtR);
+                        combined_offsets[vnum] = ((1.0 - delta) * offsetL) + (delta * offsetR);
+                    }
+                    vec3 vertex = combined_offsets[iVertexNumber];
                     vPosition = dx * vertex[0] + dy * vertex[1] + dz * vertex[2] + translation;
                     gl_Position.xyz = vPosition;
                     gl_Position[3] = 1.0;
                     //vdump = float[4](vertex[0], vertex[1], vertex[2], delta);
 
-                    // compute normal in terms of grid locations for tetrahedral vertices
-                    vec3[4] grid_locations = vec3[](
-                        grid_location(t_offsets[0]),
-                        grid_location(t_offsets[1]),
-                        grid_location(t_offsets[2]),
-                        grid_location(t_offsets[3])
-                    );
-
-                    vec3 center = (grid_locations[0] + grid_locations[1] + grid_locations[2] + grid_locations[3])/4.0;
-                    vec3 nm = ( 
-                        + (grid_locations[0] - center) * (t_wts[0] - uValue) 
-                        + (grid_locations[1] - center) * (t_wts[1] - uValue) 
-                        + (grid_locations[2] - center) * (t_wts[2] - uValue) 
-                        + (grid_locations[3] - center) * (t_wts[3] - uValue) 
-                        );
-                    
+                    vec3 nm = cross(combined_offsets[1] - combined_offsets[0], combined_offsets[2] - combined_offsets[0]);
                     float ln = length(nm);
                     if (ln > 1e-12) {
                         vNormal = nm / ln;
@@ -1279,16 +1290,19 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     debugger;
                     that.link_needs_update = true;
                 }
-                var check_update_link = function() {
+                var check_update_link = function(nbins) {
+                    // update the surface if needed, using nbins for normal_binning if provided.
+                    var do_clean = clean || nbins;
+                    var bin_size = nbins || normal_binning;
                     // update the geometry positions array in place and mark for update in geometry
-                    if (! that.link_needs_update) {
-                        // only update upon request and only if needed
+                    if ((!that.link_needs_update) && (!nbins)) {
+                        // only update upon request and only if needed, or if binning was specified
                         that.link_needs_update = false;
                         return;
                     }
                     var positions, normals;
-                    if (clean) {
-                        var pn = that.clean_positions_and_normals(normal_binning);
+                    if (do_clean) {
+                        var pn = that.clean_positions_and_normals(bin_size);
                         positions = pn.positions;
                         normals = pn.normals;
                     } else {

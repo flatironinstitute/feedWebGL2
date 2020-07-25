@@ -32,3 +32,12 @@ Go to demos and additional information.
 <a href="https://flatironinstitute.github.io/feedWebGL2/Fermi_Surfaces.html">
 Screen shot from the Fermi iso-surfaces example.
 </a>
+
+## The package includes a Python package embedding of the Javascript functionality into Jupyter using widgets
+
+## Development install of Python package
+
+```
+pip install -e .
+```
+

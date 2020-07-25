@@ -160,6 +160,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // samplers are prepared by caller if needed.  Descriptors provided by caller.
                     samplers: {},
                     location_fill: -1e12,
+                    dx: [1, 0, 0],
+                    dy: [0, 1, 0],
+                    dz: [0, 0, 1],
                 }, options);
 
                 var s = this.settings;
@@ -314,6 +317,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 return result;
             };
             get_compacted_feedbacks(location_only) {
+                var s = this.settings;
                 this.run();
                 var location_fill = this.settings.location_fill;
                 var rn = this.runner;
@@ -388,13 +392,23 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             maxes[k] = Math.max(maxes[k], v);
                         }
                     }
+                } else {
+                    mins = [0,0,0];
+                    maxes = [0,0,0];
                 }
                 var n2 = 0;
                 var mid = [];
                 if (mins) {
+                    // increase the maxes by offset in each dim
+                    maxes = this.vsum(maxes, s.dx);
+                    maxes = this.vsum(maxes, s.dy);
+                    maxes = this.vsum(maxes, s.dz);
+                    n2 = this.vdistance2(mins, maxes);
                     for (var k=0; k<3; k++) {
                         mid.push(0.5 * (mins[k] + maxes[k]));
-                        n2 += (mins[k] - maxes[k]) ** 2;
+                        //n2 += (mins[k] - maxes[k]) ** 2;
+                        var d = (mins[k] - maxes[k]);
+                        n2 += d * d;
                     }
                 }
                 this.compacted_feedbacks = {
@@ -408,6 +422,24 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     locations: this.compact_locations,
                 };
                 return this.compacted_feedbacks;
+            };
+            // XXX should get vector ops from somewhere else.
+            vdistance2(v1, v2) {
+                var result = 0.0;
+                if ((v1) && (v2)) {
+                    for (var k=0; k<3; k++) {
+                        var d = v1[k] - v2[k];
+                        result += d * d;
+                    }
+                }
+                return result;
+            };
+            vsum(v1, v2) {
+                var result = [];
+                for (var k=0; k<3; k++) {
+                    result.push(v1[k] + v2[k]);
+                }
+                return result;
             };
             get_location_colors() {
                 var indices = this.compact_indices;
@@ -949,6 +981,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     offsets[C_index[iTetrahedronNumber]],
                     offsets[D_INDEX]
                 );
+                vec3[4] grid_locations = vec3[](
+                    grid_location(t_offsets[0]),
+                    grid_location(t_offsets[1]),
+                    grid_location(t_offsets[2]),
+                    grid_location(t_offsets[3])
+                );
                 // weights as array
                 float wts[N_CORNERS] = float[](
                     front_corners[0], front_corners[1], front_corners[2], front_corners[3], 
@@ -975,42 +1013,26 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 if (U_left[ci] >= 0) {
                     int SegLs[N_VERTICES] = int[](U_left[ci], V_left[ci], W_left[ci]);
                     int SegRs[N_VERTICES] = int[](U_right[ci], V_right[ci], W_right[ci]);
-                    
-                    int SegL = SegLs[iVertexNumber];
-                    int SegR = SegRs[iVertexNumber];
-                    vec3 offsetL = t_offsets[SegL];
-                    vec3 offsetR = t_offsets[SegR];
-                    
-                    float wtL = t_wts[SegL];
-                    float wtR = t_wts[SegR];
-                    // check denominator is not too small? xxxx
-                    float delta = (wtL - uValue) / (wtL - wtR);
-                    vec3 combined_offset = ((1.0 - delta) * offsetL) + (delta * offsetR);
-                    //vec3 vertex = combined_offset + vec3(col_num, row_num, layer_num);
-                    //vec3 vertex = combined_offset + vec3(layer_num, row_num, col_num);
-                    //vec3 vertex = combined_offset + location_offset;
-                    vec3 vertex = grid_location(combined_offset);
+                    vec3[N_VERTICES] combined_offsets;
+                    // compute intercepts for all vertices of the triangle
+                    for (int vnum=0; vnum<N_VERTICES; vnum++) {
+                        int SegL = SegLs[vnum];
+                        int SegR = SegRs[vnum];
+                        vec3 offsetL = grid_locations[SegL];
+                        vec3 offsetR = grid_locations[SegR];
+                        float wtL = t_wts[SegL];
+                        float wtR = t_wts[SegR];
+                        // check denominator is not too small? xxxx
+                        float delta = (wtL - uValue) / (wtL - wtR);
+                        combined_offsets[vnum] = ((1.0 - delta) * offsetL) + (delta * offsetR);
+                    }
+                    vec3 vertex = combined_offsets[iVertexNumber];
                     vPosition = dx * vertex[0] + dy * vertex[1] + dz * vertex[2] + translation;
                     gl_Position.xyz = vPosition;
                     gl_Position[3] = 1.0;
                     //vdump = float[4](vertex[0], vertex[1], vertex[2], delta);
 
-                    // compute normal in terms of grid locations for tetrahedral vertices
-                    vec3[4] grid_locations = vec3[](
-                        grid_location(t_offsets[0]),
-                        grid_location(t_offsets[1]),
-                        grid_location(t_offsets[2]),
-                        grid_location(t_offsets[3])
-                    );
-
-                    vec3 center = (grid_locations[0] + grid_locations[1] + grid_locations[2] + grid_locations[3])/4.0;
-                    vec3 nm = ( 
-                        + (grid_locations[0] - center) * (t_wts[0] - uValue) 
-                        + (grid_locations[1] - center) * (t_wts[1] - uValue) 
-                        + (grid_locations[2] - center) * (t_wts[2] - uValue) 
-                        + (grid_locations[3] - center) * (t_wts[3] - uValue) 
-                        );
-                    
+                    vec3 nm = cross(combined_offsets[1] - combined_offsets[0], combined_offsets[2] - combined_offsets[0]);
                     float ln = length(nm);
                     if (ln > 1e-12) {
                         vNormal = nm / ln;
@@ -1186,6 +1208,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     location: s.location,
                     samplers: this.samplers,
                     // never rasterize the crossing pixels
+                    dx: s.dx,
+                    dy: s.dy,
+                    dz: s.dz,
                 });
                 // initialize segmenter upon first run.
                 this.segments = null; 
@@ -1211,6 +1236,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             run () {
                 var s = this.settings;
                 var compacted = this.crossing.get_compacted_feedbacks();
+                this.radius = compacted.radius;
+                this.mid_point = compacted.mid;
                 if (!this.segments) {
                     var container = $(this.feedbackContext.canvas);
                     this.segments = container.webGL2TriangulateVoxels({
@@ -1297,25 +1324,29 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 geometry.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
                 that.link_needs_update = false;
                 var after_run = function(that) {
-                    debugger;
                     that.link_needs_update = true;
                 }
-                var check_update_link = function() {
+                var check_update_link = function(nbins) {
+                    // update the surface if needed, using nbins for normal_binning if provided.
+                    var do_clean = clean || nbins;
+                    var bin_size = nbins || normal_binning;
                     // update the geometry positions array in place and mark for update in geometry
-                    if (! that.link_needs_update) {
-                        // only update upon request and only if needed
+                    if ((!that.link_needs_update) && (!nbins)) {
+                        // only update upon request and only if needed, or if binning was specified
                         that.link_needs_update = false;
                         return;
                     }
                     var positions, normals;
-                    if (clean) {
-                        var pn = that.clean_positions_and_normals(normal_binning);
+                    if (do_clean) {
+                        var pn = that.clean_positions_and_normals(bin_size);
                         positions = pn.positions;
                         normals = pn.normals;
                     } else {
                         positions = that.get_positions(geometry.attributes.position.array);
                         normals = that.get_normals(geometry.attributes.normal.array);
                     }
+                    var mid = that.mid_point;
+                    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(mid[0], mid[1], mid[2]), that.radius);
                     geometry.attributes.position.array = positions;
                     geometry.attributes.position.needsUpdate = true;
                     geometry.attributes.normal.array = normals;
@@ -1370,7 +1401,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     }
                 }
                 if (normal_binning && (clean_length > 0)) {
-                    debugger;
                     // unify geometrically close normal values
                     var key_to_normal = {};
                     var denominators = [];
@@ -1435,8 +1465,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     }
                 }
                 if (truncate) {
-                    clean_positions = clean_positions.subarray(0, clean_length);
-                    clean_normals = clean_normals.subarray(0, clean_length);
+                    // use slice (not aubarray) so the buffer is not shared (?)
+                    clean_positions = clean_positions.slice(0, clean_length);
+                    clean_normals = clean_normals.slice(0, clean_length);
                 }
                 return {
                     positions: clean_positions,
@@ -1632,7 +1663,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 geometry.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
                 that.link_needs_update = false;
                 var after_run = function(that) {
-                    debugger;
                     that.link_needs_update = true;
                 }
                 var check_update_link = function() {
