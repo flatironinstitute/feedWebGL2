@@ -102,8 +102,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var num_vectors = this.settings.num_vectors;
                 this.nhigh = nhigh;
                 this.nlow = nlow;
-                this.low_indices = new Int32Array(nlow * num_vectors);
-                this.high_indices = new Int32Array(nhigh * num_vectors);
+                //this.low_indices = new Int32Array(nlow * num_vectors);
+                //this.high_indices = new Int32Array(nhigh * num_vectors);
+                this.low_indices = [];
+                this.high_indices = [];
                 var L = this.low_indices;
                 var H = this.high_indices;
                 // https://stackoverflow.com/questions/8273047/javascript-function-similar-to-python-range
@@ -113,14 +115,20 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 for (var i=0; i<num_vectors; i++) {
                     row = this.get_matrix_row(i);
                     index_array.sort(index_compare);
-                    var Lstart = nlow * i;
+                    //var Lstart = nlow * i;
+                    var Lrow = [];
+                    var Hrow = [];
                     for (var j=0; j<nlow; j++) {
-                        L[Lstart + j] = index_array[j];  // XXX includes "identity index" i
+                        //L[Lstart + j] = index_array[j];  // XXX includes "identity index" i
+                        Lrow.push(index_array[j])
                     }
-                    var Hstart = nhigh * i;
+                    //var Hstart = nhigh * i;
                     for (var j=0; j<nhigh; j++) {
-                        H[Hstart + j] = index_array[num_vectors - 1 - j];
+                        //H[Hstart + j] = index_array[num_vectors - 1 - j];
+                        Hrow.push(index_array[num_vectors - 1 - j]);
                     }
+                    L.push(Lrow);
+                    H.push(Hrow);
                 }
                 return {
                     num_vectors: num_vectors,
@@ -129,7 +137,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     low_indices: L,
                     high_indices: H,
                 }
-            }
+            };
+            lose_context() {
+                // attempt to release resources on the GPU and elsewhere.
+                this.program = null;
+                this.runr = null;
+                this.metric_value = null;
+                this.settings.context.lose_context();
+                this.settings = null;
+            };
         };
 
         return new MetricGenerator(options);
@@ -188,6 +204,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         });
         var m = G.get_matrix();
         var e = G.calculate_extremal_indices(2, 1);
+        G.lose_context();
         $("<div>got " + m.length + "::" + e.high_indices.length + "</div>").appendTo(container);
         return G;
     };

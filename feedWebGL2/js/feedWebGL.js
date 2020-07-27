@@ -63,6 +63,16 @@
                     }
                 }
             };
+            lose_context() {
+                // Lose the webGL context. This should release resources on the GPU?
+                // xxxx could explicitly dispose of resources recursively....
+                this.canvas = null;
+                this.buffers = null;
+                this.programs = null;
+                this.error = "Web context has been forced lost by API call lose_context.";
+                this.gl.getExtension('WEBGL_lose_context').loseContext();
+                this.gl = null;
+            };
             fresh_name(prefix) {
                 this.counter += 1;
                 return prefix + this.counter;
