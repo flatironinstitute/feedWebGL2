@@ -14,7 +14,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.settings = $.extend({
                     // feedback context object
                     context: null,
-                    // Float32Array of vector values
+                    // Float32Array of vector values, or convertible
                     ravelled_vectors: null,
                     vector_length: null,
                     num_vectors: null,
@@ -29,8 +29,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 if (!s.context) {
                     s.context = $.fn.feedWebGL2({});
                 }
+                var ravelled_vectors = new Float32Array(s.ravelled_vectors);
                 this.vector_texture = s.context.texture("vectors", "FLOAT", "RED", "R32F");
-                this.vector_texture.load_array(s.ravelled_vectors, s.vector_length, s.num_vectors);
+                this.vector_texture.load_array(ravelled_vectors, s.vector_length, s.num_vectors);
                 // unneeded parameters required by Firefox
                 var dummy_array = new Int32Array(s.num_vectors);
                 this.dummyBuffer = s.context.buffer("metricDummyBuffer");
