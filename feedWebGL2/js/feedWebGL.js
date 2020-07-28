@@ -2,6 +2,8 @@
 // jQuery plugin for webGL feedback programs.
 
 // xxxx should provide logic for releasing structures.
+// xxxx should support array of texture 
+// https://stackoverflow.com/questions/19592850/how-to-bind-an-array-of-textures-to-a-webgl-shader-uniform
 
 (function($) {
     $.fn.feedWebGL2 = function (options) {
