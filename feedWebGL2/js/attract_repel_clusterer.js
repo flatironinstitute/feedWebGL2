@@ -111,10 +111,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         },
                     },
                 });
+                this.has_run = false;
             };
             step () {
                 this.runr.run();
                 this.shifted_positions_array =  this.runr.feedback_array("shifted_position");
+                this.has_run = true;
                 return this.shifted_positions_array;
             };
             step_and_feedback() {
@@ -182,9 +184,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     c_positions.push(c_p);
                 }
                 var max_shift = 0.0;
-                var shifts = this.runr.feedback_array("shift_length");
-                for (var i=0; i<shifts.length; i++) {
-                    max_shift = Math.max(shifts[i], max_shift);
+                if (this.has_run) {
+                    var shifts = this.runr.feedback_array("shift_length");
+                    for (var i=0; i<shifts.length; i++) {
+                        max_shift = Math.max(shifts[i], max_shift);
+                    }
                 }
                 return {
                     centered_positions: c_positions,
