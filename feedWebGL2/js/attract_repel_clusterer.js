@@ -51,13 +51,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
                 // copy positions
                 this.positions = new Float32Array(s.positions);
+                this.indices = new Int32Array(s.indices);
+                this.index_distances = new Float32Array(s.index_distances);
                 // set up textures
                 this.positions_texture = s.context.texture("positions", "FLOAT", "RGBA", "RGBA32F");
                 this.positions_texture.load_array(this.positions, 1, s.num_vertices)
                 this.distance_texture = s.context.texture("distance", "FLOAT", "RED", "R32F");
-                this.distance_texture.load_array(s.index_distances, s.indices_per_vertex, s.num_vertices);
+                this.distance_texture.load_array(this.index_distances, s.indices_per_vertex, s.num_vertices);
                 this.index_texture = s.context.texture("indices", "INT", "RED_INTEGER", "R32I");
-                this.index_texture.load_array(s.indices, s.indices_per_vertex, s.num_vertices);
+                this.index_texture.load_array(this.indices, s.indices_per_vertex, s.num_vertices);
                 // set up buffers
                 this.positions_buffer = s.context.buffer("positions_buffer");
                 this.positions_buffer.initialize_from_array(this.positions);
@@ -231,7 +233,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             //int N = psize[1];
             ivec2 isize = textureSize(index_distances, 0);
             int num_indices = isize[0];
-            int index;
+            int index = -1;
             // add in influence for each index
             for (int j=0; j<num_indices; j++) {
                 ivec2 ji = ivec2(j, i);
@@ -259,8 +261,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             diff = vec4(-epsilon, 0, 0, 0);
                         }
                     }
-                    float factor = n / m;
+                      float factor = n / m;
                     float logfactor = log(factor + log_shift);
+                    // distance weakening (disabled atm)
+                    //logfactor = logfactor / log(3.0 + m);
                     vec4 shift = (delta * logfactor / n) * diff;
                     total_shift += shift;
                 }
@@ -279,12 +283,21 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         var v = new Float32Array([
             1, 1, 0, 0,
             2, 0, 0, 0,
+            3, 3, 0, 0,
         ]);
-        var ind = new Int32Array([1, 0]);
-        var dist = new Float32Array([3, 2]);
+        var ind = new Int32Array([
+            0,1,2,
+            0,1,2,
+            0,1,2,
+        ]);
+        var dist = new Float32Array([
+            3,4,5,
+            3,4,5,
+            3,4,5,
+        ]);
         var C = container.attract_repel_clusterer({
             positions: v,
-            indices_per_vertex: 1,
+            indices_per_vertex: 3,
             indices: ind,
             index_distances: dist,
         });
