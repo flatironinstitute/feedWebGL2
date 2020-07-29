@@ -84,7 +84,8 @@ class AttractRepelMatrix:
 
 class AttractRepelClusterer:
 
-    def __init__(self, initial_positions, indices, distances):
+    def __init__(self, initial_positions, indices, distances, delta=0.1):
+        self.delta = delta
         self.initial_positions = np.array(initial_positions, dtype=np.float)
         self.indices = np.array(indices, dtype=np.int)
         self.distances = np.array(distances, dtype=np.float)
@@ -105,6 +106,7 @@ class AttractRepelClusterer:
                 indices_per_vertex: indices_per_vertex,
                 indices: indices,
                 index_distances: index_distances,
+                delta: delta,
             });
             element.current_positions = function () {
                 return element.clusterer.get_positions(dimension);
@@ -118,12 +120,13 @@ class AttractRepelClusterer:
         indices=list(self.indices.ravel()),
         index_distances=list(self.distances.ravel()),
         dimension=self.dimension,
+        delta=self.delta,
         )
         self.widget = in_widget
 
 class DisplayController:
 
-    def __init__(self, vectors, labels, width, nclose, nfar, dim=3):
+    def __init__(self, vectors, labels, width, nclose, nfar, dim=3, delta=0.1):
         self.vectors = np.array(vectors, dtype=np.float)
         (self.nvectors, self.vlength) = self.vectors.shape
         assert self.nvectors == len(labels)
@@ -132,10 +135,14 @@ class DisplayController:
         self.nclose = int(nclose)
         self.nfar = int(nfar)
         self.dim = int(dim)
+        self.delta = delta
 
     def set_up_swatch(self):
         from jp_doodle import nd_frame, dual_canvas
         from IPython.display import display
+        import ipywidgets as widgets
+        from jp_doodle.data_tables import widen_notebook
+        widen_notebook()
         self.frame = nd_frame.swatch3d(pixels=800, model_height=self.width, auto_show=False)
         self.canvas = self.frame.in_canvas
         display(self.frame.in_canvas.debugging_display())
@@ -156,6 +163,7 @@ class DisplayController:
             initial_positions=self.initial_positions,
             indices=self.indices,
             distances=self.distances,
+            delta=self.delta,
         )
         self.clusterer.install_in_widget(self.canvas)
         self.canvas.js_init(
@@ -193,9 +201,10 @@ class DisplayController:
                     var count = 0;
                     var step = function() {
                         element.clusterer.step_and_feedback();
-                        var info = element.clusterer.get_centered_positions(width, dimensions)
+                        // always get 3d positions
+                        var info = element.clusterer.get_centered_positions(width, 3)
                         // draw graph with names enabled
-                        if ((count % 10) == 0) {
+                        if ((count % 20) == 0) {
                             element.draw_graph(false, info.centered_positions);
                         }
                         var max_shift = info.max_shift;
@@ -256,7 +265,8 @@ class DisplayController:
         positions = np.zeros((self.nvectors, self.dim))
         width = self.width
         for i in range(self.dim):
-            positions[:, i] = np.sin( (i+1) * r ) * (width + 1)
+            m = np.sqrt( (i*5 + 9))
+            positions[:, i] = np.sin( m * r ) * (width + 1)
         #print ("positions before")
         #print(positions)
         # pull positions between previous near points
