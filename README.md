@@ -1,4 +1,7 @@
 # feedWebGL2
+
+[![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/AaronWatters/feedWebGL2/master)
+
 Tools for implementing WebGL2 feedback processing stages for graphics preprocessing or other purposes
 
 <blockquote>
@@ -27,11 +30,8 @@ such as:
 Go to demos and additional information.
 </a>
 
-<img src="docs/images/Fermi.png" width="600px">
+<img src="notebooks/volume_test.png" width="600px">
 
-<a href="https://flatironinstitute.github.io/feedWebGL2/Fermi_Surfaces.html">
-Screen shot from the Fermi iso-surfaces example.
-</a>
 
 ## The package includes a Python package embedding of the Javascript functionality into Jupyter using widgets
 
