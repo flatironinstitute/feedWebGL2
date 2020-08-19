@@ -723,6 +723,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     location: "std",
                     // samplers are prepared by caller if needed.  Descriptors provided by caller.
                     samplers: {},
+                    // rotate the color direction using unit matrix
+                    color_rotator: [
+                        1, 0, 0,
+                        0, 1, 0,
+                        0, 0, 1,
+                    ],
                 }, options);
                 var s = this.settings;
                 this.feedbackContext = s.feedbackContext;
@@ -808,6 +814,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             vtype: "1fv",
                             default_value: [s.invalid_coordinate],
                         },
+                        color_rotator: {
+                            vtype: "3fv",
+                            is_matrix: true,
+                            default_value: s.color_rotator,
+                        }
                     },
                     inputs: {
                         index: {
@@ -883,6 +894,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         
         // uniform offsets in xyz directions
         uniform vec3 dx, dy, dz, translation;
+
+        // color rotator for converting normals to colors
+        uniform mat3 color_rotator;
         
         // invalid value marker
         uniform float uInvalid;
@@ -1037,7 +1051,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     if (ln > 1e-12) {
                         vNormal = nm / ln;
                     }
-                    vColor = abs(vNormal);  // XXX FOR TESTING ONLY
+                    //vColor = abs(vNormal);  // XXX FOR TESTING ONLY
+                    vec3 colorVector = 1.0 + (color_rotator * vNormal);
+                    vColor = normalize(colorVector);
                 }
             }
             //vPosition = gl_Position.xyz;
@@ -1164,6 +1180,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     location: "std", 
                     // parameters needed by location method if any.
                     location_parameters: null,
+                    // rotate the color direction using unit matrix
+                    color_rotator: [
+                        1, 0, 0,
+                        0, 1, 0,
+                        0, 0, 1,
+                    ],
                 }, options);
                 this.check_geometry();
                 var s = this.settings;
@@ -1258,6 +1280,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         invalid_coordinate: s.invalid_coordinate,
                         location: s.location,
                         samplers: this.samplers,
+                        color_rotator: s.color_rotator,
                     });
                 } else {
                     // reset buffer content
@@ -1352,7 +1375,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     geometry.attributes.normal.array = normals;
                     geometry.attributes.normal.needsUpdate = true;
                     geometry.attributes.color.array = that.get_colors(geometry.attributes.color.array);
-                    geometry.attributes.normal.needsUpdate = true;
+                    geometry.attributes.color.needsUpdate = true;
                     that.link_needs_update = false;
                 }
                 this.settings.after_run_callback = after_run;
@@ -1677,7 +1700,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     geometry.attributes.normal.array = that.get_normals(geometry.attributes.normal.array);
                     geometry.attributes.normal.needsUpdate = true;
                     geometry.attributes.color.array = that.get_colors(geometry.attributes.color.array);
-                    geometry.attributes.normal.needsUpdate = true;
+                    geometry.attributes.color.needsUpdate = true;
                     that.link_needs_update = false;
                 }
                 this.settings.after_run_callback = after_run;
@@ -1944,6 +1967,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 threshold: 0.3,
                 // only for "optimized"
                 shrink_factor: 0.8,
+                // rotate the color direction using unit matrix
+                color_rotator: [
+                    0, 0, 1,
+                    1, 0, 0,
+                    0, 1, 0,
+                ],
             }
         );
         // attach an input to change the threshold
