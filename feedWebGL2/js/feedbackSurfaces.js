@@ -1169,7 +1169,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     //dy: [0, 1, 0],
                     //dz: [0, 0, 1],
                     //translation: [-1, -1, 0],
-                    color: [1, 1, 1],
+                    //color: [1, 1, 1],   ??? not used???
                     rasterize: false,
                     threshold: 0,  // value at contour
                     invalid_coordinate: -100000,  // invalidity marker for positions, must be very negative
@@ -1525,6 +1525,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         return new WebGL2Surfaces3dOpt(options);
     };
 
+    /*
     $.fn.webGL2surfaces3d = function (options) {
 
         // XXXX THIS IS HISTORICAL AND HAS NOT BEEN UPDATED FOR NEW CONVENTIONS XXXX
@@ -1543,7 +1544,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     dy: [0, 1, 0],
                     dz: [0, 0, 1],
                     translation: [-1, -1, 0],
-                    color: [1, 1, 1],
+                    //color: [1, 1, 1],   ??? not used ???
                     //rasterize: false,
                     threshold: 0,  // value at contour
                     invalid_coordinate: -100000,  // invalidity marker for positions
@@ -1925,9 +1926,14 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         
         return new WebGL2Surfaces3d(options);
     };
+    */
 
-    $.fn.webGL2surfaces3d.simple_example = function (container, opt) {
+    $.fn.webGL2surfaces3dopt.simple_example = function (container, opt) {
         var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        if (!opt) {
+            throw new Error("'non optimized' surface implementation has been commented out.");
+        }
 
         var context = container.feedWebGL2({
             gl: gl,
@@ -1947,11 +1953,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         ]);
         var h = 0.5
         var ddz = 0.1
-        var init = container.webGL2surfaces3d;
-        if (opt) {
-            init = container.webGL2surfaces3dopt;
-        }
-        var contours = init(
+        //var init = container.webGL2surfaces3d;
+        //if (opt) {
+        //    init = container.webGL2surfaces3dopt;
+        //}
+        var contours = container.webGL2surfaces3dopt(
             {
                 feedbackContext: context,
                 valuesArray: valuesArray,
@@ -1962,7 +1968,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 dy: [0, h, 0],
                 dz: [ddz, 0.33*ddz, h],
                 translation: [-h, -h, -h],
-                color: [h, h, h],
+                //color: [h, h, h],  ??? not used ???
                 rasterize: true,
                 threshold: 0.3,
                 // only for "optimized"
