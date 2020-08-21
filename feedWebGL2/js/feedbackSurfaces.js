@@ -313,7 +313,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         geometry.attributes.color.array = colors;
                         geometry.attributes.color.needsUpdate = true;
                     }
+                    var c = that.compacted_feedbacks.mid;
+                    var r = that.compacted_feedbacks.radius;
+                    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(c[0], c[1], c[2]), r);
                 };
+                result.update_sphere_locations();
                 return result;
             };
             get_compacted_feedbacks(location_only) {
@@ -863,6 +867,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.runner.change_uniform("uValue", [value]);
                 //this.runner.run();
             };
+            set_color_rotator(value) {
+                this.runner.change_uniform("color_rotator", value);
+            };
             get_positions(optionalPreAllocatedArrBuffer) {
                 return this.runner.feedback_array(
                     "vPosition",
@@ -1235,7 +1242,22 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     dz: s.dz,
                 });
                 // initialize segmenter upon first run.
-                this.segments = null; 
+                this.segments = null;
+                // named perspectives which share this underlying surface data structure
+                this.named_perspectives = {};
+            };
+            get_perspective(name, options) {
+                options = options || {};
+                options.name = name;
+                var perspective = new webGL2SurfacePerspective(options);
+                this.named_perspectives[name] = perspective;
+                return perspective;
+            };
+            reset_perspectives() {
+                // mark all perspectives as invalid (use before generating new geometry)
+                for (var name in this.named_perspectives) {
+                    this.named_perspectives[name].reset();
+                }
             };
             check_geometry() {
                 // arrange the geometry parameters to fit in [-1:1] cube unless specified otherwise
@@ -1328,7 +1350,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
             linked_three_geometry (THREE, clean, normal_binning) {
                 // create a three.js geometry linked to the current positions feedback array.
-                // xxxx only one geometry may be linked at a time.
+                // xxxx multiple linked geometries may interfere with eachother unless carefully managed.
                 // this is a bit convoluted in an attempt to only update attributes when needed.
                 var that = this;
                 var positions, normals;
@@ -1380,6 +1402,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
                 this.settings.after_run_callback = after_run;
                 this.check_update_link = check_update_link;
+                geometry.check_update_link = check_update_link;
                 return geometry;
             };
             clean_positions_and_normals(normal_binning, truncate) {
@@ -1511,6 +1534,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     this.segments.set_threshold(value);
                 }
             };
+            set_color_rotator(value) {
+                this.settings.color_rotator = value;
+                if (this.segments) {
+                    this.segments.set_color_rotator(value);
+                }
+            };
             get_positions(a) {
                 return this.segments.get_positions(a);
             };
@@ -1519,6 +1548,100 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
             get_colors(a) {
                 return this.segments.get_colors(a);
+            };
+        };
+
+        class webGL2SurfacePerspective {
+            // A view of the surface at a specified threshold and color rotation, etc.
+            // The underlying surface may be shared between many perspectives!!!
+            constructor(surface, options) {
+                this.surface = surface;
+                var ssettings = surface.settings;
+                this.settings = $.extend({
+                    threshold: ssettings.threshold,
+                    color_rotator: s.color_rotator,
+                }, options);
+                this.positions = null;
+                this.normals = null;
+                this.colors = null;
+                this.points_mesh = null;
+                this.reset();
+            };
+            get_points_mesh(THREE, colorize) {
+                this.surface.reset_perspectives();
+                this.check_voxels();
+                this.points_mesh = this.surface.crossing.get_points_mesh({THREE: THREE, colorize:colorize});
+                return this.points_mesh;
+            };
+            update_points_mesh(mesh) {
+                mesh = mesh || this.points_mesh;
+                this.check_voxels();
+                mesh.update_sphere_locations();
+            };
+            get_surface_geometry (THREE, clean, normal_binning) {
+                this.surface.reset_perspectives();
+                this.check_surface();
+                this.surface_geometry = this.surface.linked_three_geometry(THREE, clean, normal_binning);
+                return this.surface_geometry;
+            };
+            update_surface_geometry(geometry) {
+                geometry = geometry || this.surface_geometry;
+                this.surface.reset_perspectives();
+                this.check_surface();
+                geometry.check_update_link();
+            };
+            set_threshold(threshold) {
+                this.settings.threshold = threshold;
+                this.reset();
+            };
+            set_color_rotator(matrix) {
+                this.settings.color_rotator = matrix;
+                this.reset();
+            };
+            reset() {
+                this.voxels_ready = false;
+                this.surface_ready = false;
+                this.parameters_set = false;
+            };
+            check_parameters() {
+                // lazily set parameters just before execution.
+                if (!this.parameters_set) {
+                    // mark all (other) perspectives as invalid
+                    this.surface.reset_perspectives();
+                    this.surface.set_color_rotator(self.settings.color_rotator);
+                    this.surface.set_threshold(self.settings.threshold)
+                    this.parameters_set = true;
+                }
+            };
+            check_voxels() {
+                this.check_parameters();
+                if (!this.voxels_ready) {
+                    this.surface.crossing.get_compacted_feedbacks();
+                    this.voxels_ready = true;
+                }
+            };
+            check_surface() {
+                this.check_parameters();
+                if (!this.surface_ready) {
+                    this.surface.run();
+                    this.surface_ready = true;
+                    this.voxels_ready = true;  // surface.run automatically updates voxels too.
+                }
+            };
+            get_positions() {
+                this.check_surface();
+                this.positions = this.surface.get_positions(this.positions);
+                return this.positions;
+            };
+            get_normals() {
+                this.check_surface();
+                this.normals = this.surface.get_normals(this.normals);
+                return this.normals;
+            };
+            get_colors() {
+                this.check_surface();
+                this.colors = this.surface.get_colors(this.colors);
+                return this.colors;
             };
         };
 
