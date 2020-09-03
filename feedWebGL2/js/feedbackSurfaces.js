@@ -119,7 +119,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     }
 
     vec3 grid_xyz(in vec3 spherical) {
-        // convert block grid coords to xyz (trivial here)
+        // convert block polar grid coords to xyz (non-trivial)
         float r = spherical[0];
         // swapping phi and theta.
         float phi = spherical[1];
