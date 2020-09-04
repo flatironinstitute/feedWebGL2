@@ -12,6 +12,19 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
 (function($) {
 
+
+    var noop_fragment_shader = `#version 300 es
+    #ifdef GL_ES
+        precision highp float;
+    #endif
+    
+    out vec4 color;
+
+    void main() {
+        color = vec4(1.0, 0.0, 0.0, 1.0);
+    }
+    `;
+
     var std_sizes_declarations = `
     int voxel_index;
     int i_block_num;
@@ -156,13 +169,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // when getting compact arrays
                     // shrink the array sizes by this factor.
                     shrink_factor: 0.2,
+                    // grid coordinate convention.
                     location: "std",
                     // samplers are prepared by caller if needed.  Descriptors provided by caller.
                     samplers: {},
+                    // invalid marker
                     location_fill: -1e12,
+                    // coordinate vectors
                     dx: [1, 0, 0],
                     dy: [0, 1, 0],
                     dz: [0, 0, 1],
+                    fragment_shader: noop_fragment_shader,
                 }, options);
 
                 var s = this.settings;
@@ -701,6 +718,406 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
     };
 
+    $.fn.webGL2DiagonalInterpolation = function (options) {
+        // For each voxel with crossing diagonals for an isosurface 
+        // generate a weighted average of the diagonal interpolations as a
+        // combined interpolation for the voxel.
+        class WebGL2DiagonalInterpolation {
+            constructor(options) {
+                // There is a lot of similar code with WebGL2TriangulateVoxels xxxx refactor?
+                this.settings = $.extend({
+                    feedbackContext: null,
+                    // array of indices (from crossing voxels)
+                    indices: null,
+                    // array of corners (from crossing voxels)
+                    front_corners: null,
+                    back_corners: null,
+                    // volume dimensions
+                    num_rows: null,
+                    num_cols: null,
+                    num_layers: 0,  // if >1 then indexing in multiple blocks
+                    dx: [1, 0, 0],
+                    dy: [0, 1, 0],
+                    dz: [0, 0, 1],
+                    translation: [0, 0, 0],
+                    color: [1, 1, 1],
+                    rasterize: false,
+                    threshold: 0,  // value at contour
+                    // invalid_coordinate: -100000,  // invalidity marker for positions
+                    location: "std",
+                    // samplers are prepared by caller if needed.  Descriptors provided by caller.
+                    samplers: {},
+                    // rotate the color direction using unit matrix
+                    color_rotator: [
+                        1, 0, 0,
+                        0, 1, 0,
+                        0, 0, 1,
+                    ],
+                    fragment_shader: noop_fragment_shader,
+                    epsilon: 1e-10,
+                }, options);
+                var s = this.settings;
+                this.feedbackContext = s.feedbackContext;
+
+                // allocate and load buffers with a fresh name
+                this.index_buffer = this.feedbackContext.buffer()
+                this.index_buffer.initialize_from_array(s.indices);
+                this.front_corner_buffer = this.feedbackContext.buffer()
+                this.front_corner_buffer.initialize_from_array(s.front_corners);
+                this.back_corner_buffer = this.feedbackContext.buffer()
+                this.back_corner_buffer.initialize_from_array(s.back_corners);
+
+                // each voxel is interpolated. triangles are constructed downstream.
+                var vertices_per_instance = s.indices.length;
+                var num_instances = 1;
+
+                // xxxx refactor...
+                var vertex_shader;
+                if (s.location == "std") {
+                    vertex_shader = crossingDiagonalsShader(locate_std_decl);
+                } else if (s.location="polar_scaled") {
+                    vertex_shader = crossingDiagonalsShader(locate_polar_scaled_decl);
+                } else {
+                    throw new Error("unknown grid location type: " + s.location);
+                }
+
+                this.program = this.feedbackContext.program({
+                    vertex_shader: vertex_shader,
+                    fragment_shader: this.settings.fragment_shader,
+                    feedbacks: {
+                        index_out: {type: "int"},
+                        vPosition: {num_components: 3},
+                        vNormal: {num_components: 3},
+                        vColor: {num_components: 3},
+                    },
+                });
+
+                this.runner = this.program.runner({
+                    num_instances: num_instances,
+                    vertices_per_instance: vertices_per_instance,
+                    rasterize: this.settings.rasterize,
+                    uniforms: {
+                        uRowSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_cols],
+                        },
+                        uColSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_rows],
+                        },
+                        // number of layers
+                        uLayerSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_layers],
+                        },
+                        uValue: {
+                            vtype: "1fv",
+                            default_value: [s.threshold],
+                        },
+                        epsilon: {
+                            vtype: "1fv",
+                            default_value: [s.epsilon],
+                        },
+                        dx: {
+                            vtype: "3fv",
+                            default_value: s.dx,
+                        },
+                        dy: {
+                            vtype: "3fv",
+                            default_value: s.dy,
+                        },
+                        dz: {
+                            vtype: "3fv",
+                            default_value: s.dz,
+                        },
+                        translation: {
+                            vtype: "3fv",
+                            default_value: s.translation,
+                        },
+                        color_rotator: {
+                            vtype: "3fv",
+                            is_matrix: true,
+                            default_value: s.color_rotator,
+                        },
+                    },
+                    inputs: {
+                        index: {
+                            per_vertex: true,
+                            num_components: 1,
+                            type: "int",
+                            from_buffer: {
+                                name: this.index_buffer.name,
+                            },
+                        },
+                        front_corners: {
+                            per_vertex: true,
+                            num_components: 4,
+                            from_buffer: {
+                                name: this.front_corner_buffer.name,
+                            },
+                        },
+                        back_corners: {
+                            per_vertex: true,
+                            num_components: 4,
+                            from_buffer: {
+                                name: this.back_corner_buffer.name,
+                            },
+                        },
+                    },
+                    samplers: s.samplers,
+                });
+            };
+            run() {
+                this.runner.install_uniforms();
+                this.runner.run();
+            };
+            set_threshold(value) {
+                //this.runner.uniforms.uValue.value = [value];
+                this.runner.change_uniform("uValue", [value]);
+                //this.runner.run();
+            };
+            set_color_rotator(value) {
+                this.runner.change_uniform("color_rotator", value);
+            };
+            get_positions(optionalPreAllocatedArrBuffer) {
+                return this.runner.feedback_array(
+                    "vPosition",
+                    optionalPreAllocatedArrBuffer);
+            };
+            get_normals(optionalPreAllocatedArrBuffer) {
+                return this.runner.feedback_array(
+                    "vNormal",
+                    optionalPreAllocatedArrBuffer);
+            };
+            get_colors(optionalPreAllocatedArrBuffer) {
+                return this.runner.feedback_array(
+                    "vColor",
+                    optionalPreAllocatedArrBuffer);
+            };
+            get_indices(optionalPreAllocatedArrBuffer) {
+                return this.runner.feedback_array(
+                    "index_out",
+                    optionalPreAllocatedArrBuffer);
+            };
+        };
+
+        // XXXX THERE IS A LOT OF PASTED CODE FROM crossingVoxelShader below -- should refactor/unify
+        var crossingDiagonalsShader = function(grid_location_declaration) {
+            return `#version 300 es
+
+        // global length of rows
+        uniform int uRowSize;
+
+        // global number of columnss
+        uniform int uColSize;
+
+        // global number of layers (if values are in multiple blocks, else 0)
+        uniform int uLayerSize;
+        
+        // global contour threshold
+        uniform float uValue;
+
+        // uniform offsets in xyz directions
+        // applied after grid relative computations, compatible with triangulate_vertex_shader
+        uniform vec3 dx, dy, dz, translation;
+
+        // color rotator for converting normals to colors
+        uniform mat3 color_rotator;
+
+        // small positive cut_off value
+        uniform float epsilon;
+
+        // per mesh corner values
+        in vec4 front_corners, back_corners;
+
+        // per mesh ravelled voxel index
+        in int index;
+
+        // feedbacks out
+        out vec3 vColor, vPosition, vNormal;
+
+        // index feedback (validity indicator, negative==not valid)
+        flat out int index_out;
+
+        ${std_sizes_declarations}
+        ${grid_location_declaration}
+
+        void main() {
+            // default to invalid index indicating the voxel does not have an interpolation
+            index_out = -1;
+            vPosition = vec3(-1.0, -1.0, -1.0);
+            vNormal = vPosition;
+            vColor = vPosition;
+
+            if (index > 0) {   // don't process invalid index.
+                ${get_sizes_macro("index")}
+
+                // unpack corner values
+                float a000 = front_corners[0];
+                float a001 = front_corners[1];
+                float a010 = front_corners[2];
+                float a011 = front_corners[3];
+
+                float a100 = back_corners[0];
+                float a101 = back_corners[1];
+                float a110 = back_corners[2];
+                float a111 = back_corners[3];
+
+                // Compute the combined interpolated position
+                float[4] diagonal_start_values = float[] (
+                    a000,
+                    a100,
+                    a010,
+                    a110
+                );
+                float[4] diagonal_end_values = float[] (
+                    a111,
+                    a011,
+                    a101,
+                    a001
+                );
+                // corner positions
+                vec3 p000 = grid_location(vec3(0.0, 0.0, 0.0));
+                vec3 p001 = grid_location(vec3(0.0, 0.0, 1.0));
+                vec3 p010 = grid_location(vec3(0.0, 1.0, 0.0));
+                vec3 p011 = grid_location(vec3(0.0, 1.0, 1.0));
+                vec3 p100 = grid_location(vec3(1.0, 0.0, 0.0));
+                vec3 p101 = grid_location(vec3(1.0, 0.0, 1.0));
+                vec3 p110 = grid_location(vec3(1.0, 1.0, 0.0));
+                vec3 p111 = grid_location(vec3(1.0, 1.0, 1.0));
+                // diagonal positions
+                vec3[4] diagonal_start_positions = vec3[] (
+                    p000,
+                    p100,
+                    p010,
+                    p110
+                );
+                vec3[4] diagonal_end_positions = vec3[] (
+                    p111,
+                    p011,
+                    p101,
+                    p001
+                );
+                // compute weighted sum
+                bool found = false;
+                vec3 position_sum = vec3(0.0, 0.0, 0.0);
+                float offset_sum = 0.0;
+                for (int i_diagonal=0; i_diagonal<4; i_diagonal++) {
+                    float start_value = diagonal_start_values[i_diagonal];
+                    float end_value = diagonal_end_values[i_diagonal];
+                    // does the diagonal cross the isosurface threshold uValue?
+                    float d_start = start_value - uValue;
+                    float d_end = end_value - uValue;
+                    if ( (d_start * d_end) <= 0.0 ) {
+                        found = true;
+                        vec3 start_position = diagonal_start_positions[i_diagonal];
+                        vec3 end_position = diagonal_start_positions[i_diagonal];
+                        float d = start_value - end_value;
+                        float lambda = 0.0;
+                        if (abs(d) > epsilon) {
+                            lambda = d_start / d;
+                        }
+                        float lambda1 = 1.0 - lambda;
+                        vec3 diagonal_interpolation = (lambda1 * start_position) + (lambda * end_position);
+                        float offset = max(epsilon, min(lambda, lambda1));
+                        // weighted sum by nearest relative distance to corner (or epsilon if too small)
+                        position_sum += diagonal_interpolation * offset;
+                        offset_sum += offset;
+                    }
+                }
+                if (found) {
+                    // there is an interpolation.
+                    index_out = index;  // position is valid
+                    // weighted average position.
+                    vec3 vertex = position_sum / offset_sum;
+                    // Converted position feedback:
+                    vPosition = dx * vertex[0] + dy * vertex[1] + dz * vertex[2] + translation;
+
+                    // compute normal
+                    vec3 d = vec3(a100 - a000, a010 - a000, a001 - a000);
+                    // column major declaration
+                    mat3 Mtranspose = mat3 (p100 - p000, p010 - p000, p001 - p000);
+                    mat3 M = transpose(Mtranspose);
+                    mat3 Minv = inverse(M);
+                    vec3 n = Minv * d;
+                    // rotate normal
+                    n = dx * n[0] + dy * n[1] + dz * n[2];
+                    float ln = length(n);
+                    if (ln > epsilon) {
+                        vNormal = n / ln;
+                    } else {
+                        vNormal = vec3(1.0, 0.0, 0.0);  // ??? arbitrary...
+                    }
+                    vColor = normalize(1.0 + (color_rotator * vNormal));
+                }
+            }
+        }
+        `;};
+        return new WebGL2DiagonalInterpolation(options);
+    };
+    
+    $.fn.webGL2DiagonalInterpolation.example = function (container) {
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+        });
+
+        var front_cornersArray = new Float32Array([
+            0, 0, 0, 0,
+            0, 0, 0 ,1,
+            0, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 0,
+            1, 0, 0, 0,
+            -1.,-1,-1,-1, 
+            -1.,-1,-1,-1, 
+            -1.,-1,-1,-1, 
+        ]);
+        var back_cornersArray = new Float32Array([
+            0, 0, 0, 1,
+            0, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 0,
+            1, 0, 0, 0,
+            0, 0, 0, 0,
+            -1.,-1,-1,-1, 
+            -1.,-1,-1,-1, 
+            -1.,-1,-1,-1, 
+        ]);
+        var indexArray = new Int32Array([
+            0,1,3,4,9,10,12,13,-1,-1,-1
+        ]);
+        var interpolator = container.webGL2DiagonalInterpolation({
+            feedbackContext: context,
+            indices: indexArray,
+            front_corners: front_cornersArray,
+            back_corners: back_cornersArray,
+            num_rows: 3,
+            num_cols: 3,
+            rasterize: true,
+            dx: [0.3, 0, 0],
+            dy: [0, 0.3, 0],
+            dz: [0, 0, 0.3],
+            threshold: 0.5,
+        });
+        interpolator.run();
+        var positions = interpolator.get_positions();
+        var indices = interpolator.get_indices();
+        for (var i=0; i<indices.length; i++) {
+            $("<br/>").appendTo(container);
+            $("<span> " + indices[i] + " </span>").appendTo(container);
+            for (var j=0; j<3; j++) {
+                $("<span> " + positions[i*3 + j] + " </span>").appendTo(container);
+            }
+        }
+        return interpolator;
+    };
+
     $.fn.webGL2TriangulateVoxels = function (options) {
         class WebGL2TriangulateVoxels {
 
@@ -822,7 +1239,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             vtype: "3fv",
                             is_matrix: true,
                             default_value: s.color_rotator,
-                        }
+                        },
                     },
                     inputs: {
                         index: {
@@ -1053,7 +1470,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     gl_Position[3] = 1.0;
                     //vdump = float[4](vertex[0], vertex[1], vertex[2], delta);
 
+                    // compute normal
                     vec3 nm = cross(combined_offsets[1] - combined_offsets[0], combined_offsets[2] - combined_offsets[0]);
+                    // rotate normal
+                    nm = dx * nm[0] + dy * nm[1] + dz * nm[2];
                     float ln = length(nm);
                     if (ln > 1e-12) {
                         vNormal = nm / ln;
