@@ -949,7 +949,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             vNormal = vPosition;
             vColor = vPosition;
 
-            if (index > 0) {   // don't process invalid index.
+            if (index >= 0) {   // don't process invalid index.
                 ${get_sizes_macro("index")}
 
                 // unpack corner values
@@ -1011,7 +1011,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     if ( (d_start * d_end) <= 0.0 ) {
                         found = true;
                         vec3 start_position = diagonal_start_positions[i_diagonal];
-                        vec3 end_position = diagonal_start_positions[i_diagonal];
+                        vec3 end_position = diagonal_end_positions[i_diagonal];
                         float d = start_value - end_value;
                         float lambda = 0.0;
                         if (abs(d) > epsilon) {
