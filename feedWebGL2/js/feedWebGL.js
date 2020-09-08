@@ -110,6 +110,7 @@
                 // where the sentinel is negative the from_buffer is degenerate
                 // pack non-degenerate entries into to_buffer
                 // KISS implementation for now (no sub-buffer copies)
+                // 
                 fill = fill || 0;
                 var limit = to_buffer.length;
                 var to_index = 0;
@@ -121,6 +122,7 @@
                         from_index += num_components;
                     } else {
                         // copy
+                        //sentinel[i] = to_index; // don't do this it breaks something!
                         for (var j=0; j<num_components; j++) {
                             to_buffer[to_index] = from_buffer[from_index];
                             from_index ++;
