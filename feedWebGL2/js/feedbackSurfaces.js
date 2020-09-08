@@ -1578,494 +1578,498 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
     };
 
-    $.fn.webGL2surfaces3dopt = function (options) {
-        // "optimized surfaces" by truncating buffer sizes
-        // which may result in some data omission in dense cases.
-        class WebGL2Surfaces3dOpt {
-            constructor(options) {
-                var that = this;
-                this.settings = $.extend({
-                    // default settings:
-                    shrink_factor: 0.1, // how much to shrink buffers
-                    feedbackContext: null,    // the underlying FeedbackContext context to use
-                    valuesArray: null,   // the array buffer of values to contour
-                    num_rows: null,
-                    num_cols: null,
-                    num_layers: 1,  // default to "flat"
-                    num_blocks: 1,
-                    //dx: [1, 0, 0],
-                    //dy: [0, 1, 0],
-                    //dz: [0, 0, 1],
-                    //translation: [-1, -1, 0],
-                    //color: [1, 1, 1],   ??? not used???
-                    rasterize: false,
-                    threshold: 0,  // value at contour
-                    invalid_coordinate: -100000,  // invalidity marker for positions, must be very negative
-                    grid_min: [0, 0, 0],
-                    grid_max: [-1, -1, -1],  // disabled grid coordinate filtering (invalid limits)
-                    after_run_callback: null,   // call this after each run.
-                    // method of conversion from grid coordinates to world coordinates
-                    location: "std", 
-                    // parameters needed by location method if any.
-                    location_parameters: null,
-                    // rotate the color direction using unit matrix
-                    color_rotator: [
-                        1, 0, 0,
-                        0, 1, 0,
-                        0, 0, 1,
-                    ],
-                }, options);
-                this.check_geometry();
-                var s = this.settings;
-                this.feedbackContext = s.feedbackContext;
+    // BEGIN DEDENT HERE
+    //$.fn.webGL2surfaces3dopt = function (options) {
+    // "optimized surfaces" by truncating buffer sizes
+    // which may result in some data omission in dense cases.
+    class WebGL2Surfaces3dOpt {
+        constructor(options) {
+            var that = this;
+            this.settings = $.extend({
+                // default settings:
+                shrink_factor: 0.1, // how much to shrink buffers
+                feedbackContext: null,    // the underlying FeedbackContext context to use
+                valuesArray: null,   // the array buffer of values to contour
+                num_rows: null,
+                num_cols: null,
+                num_layers: 1,  // default to "flat"
+                num_blocks: 1,
+                //dx: [1, 0, 0],
+                //dy: [0, 1, 0],
+                //dz: [0, 0, 1],
+                //translation: [-1, -1, 0],
+                //color: [1, 1, 1],   ??? not used???
+                rasterize: false,
+                threshold: 0,  // value at contour
+                invalid_coordinate: -100000,  // invalidity marker for positions, must be very negative
+                grid_min: [0, 0, 0],
+                grid_max: [-1, -1, -1],  // disabled grid coordinate filtering (invalid limits)
+                after_run_callback: null,   // call this after each run.
+                // method of conversion from grid coordinates to world coordinates
+                location: "std", 
+                // parameters needed by location method if any.
+                location_parameters: null,
+                // rotate the color direction using unit matrix
+                color_rotator: [
+                    1, 0, 0,
+                    0, 1, 0,
+                    0, 0, 1,
+                ],
+            }, options);
+            this.check_geometry();
+            var s = this.settings;
+            this.feedbackContext = s.feedbackContext;
+            var container = $(this.feedbackContext.canvas);
+            if (!this.feedbackContext) {
+                throw new Error("Feedback context required.");
+            }
+            var nvalues = s.valuesArray.length;
+            var nvoxels = s.num_rows * s.num_cols * s.num_layers * s.num_blocks;
+            if (nvalues != nvoxels) {
+                // for now strict checking
+                throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
+            }
+            // samplers for location conversion, if any
+            this.samplers = {};
+            this.textures = {}
+            if (s.location == "polar_scaled") {
+                // set up scaling textures
+                this.samplers.RowScale = this.feedbackContext.texture("RowScale", "FLOAT", "RED", "R32F");
+                var set_up_sampler = function(name, size) {
+                    var texture = that.feedbackContext.texture(name, "FLOAT", "RED", "R32F");
+                    texture.load_array(s.location_parameters[name], size, s.num_blocks)
+                    that.textures[name] = texture;
+                    that.samplers[name] = {dim: "2D", from_texture: name};
+                };
+                set_up_sampler("RowScale", s.num_rows+1);
+                set_up_sampler("ColumnScale", s.num_cols+1);
+                set_up_sampler("LayerScale", s.num_layers+1);
+            }
+            this.crossing = container.webGL2crossingVoxels({
+                feedbackContext: this.feedbackContext,
+                valuesArray: s.valuesArray,
+                num_rows: s.num_rows,
+                num_cols: s.num_cols,
+                num_layers: s.num_layers,
+                num_blocks: s.num_blocks,
+                threshold: s.threshold,
+                shrink_factor: s.shrink_factor,
+                grid_min: s.grid_min,
+                grid_max: s.grid_max,  // disabled grid coordinate filtering (invalid limits)
+                location: s.location,
+                samplers: this.samplers,
+                // never rasterize the crossing pixels
+                dx: s.dx,
+                dy: s.dy,
+                dz: s.dz,
+            });
+            // initialize segmenter upon first run.
+            this.segments = null;
+            // named perspectives which share this underlying surface data structure
+            this.named_perspectives = {};
+        };
+        get_perspective(name, options) {
+            options = options || {};
+            options.name = name;
+            var perspective = new webGL2SurfacePerspective(options);
+            this.named_perspectives[name] = perspective;
+            return perspective;
+        };
+        reset_perspectives() {
+            // mark all perspectives as invalid (use before generating new geometry)
+            for (var name in this.named_perspectives) {
+                this.named_perspectives[name].reset();
+            }
+        };
+        check_geometry() {
+            // arrange the geometry parameters to fit in [-1:1] cube unless specified otherwise
+            var s = this.settings;
+            if (s.location != "std") {
+                return;  // don't mess with non-standard geometry
+            }
+            if (!s.dx) {
+                // geometry needs specifying:
+                var max_dimension = Math.max(s.num_rows, s.num_cols, s.num_layers);
+                var dpixel = 2.0 / max_dimension;
+                s.dx = [dpixel, 0, 0];
+                s.dy = [0, dpixel, 0];
+                s.dz = [0, 0, dpixel];
+                if (!s.translation) {
+                    s.translation = [-0.5 * s.num_cols * dpixel, -0.5 * s.num_rows * dpixel, -0.5 * s.num_layers * dpixel]
+                }
+            }
+        }
+        run () {
+            var s = this.settings;
+            var compacted = this.crossing.get_compacted_feedbacks();
+            this.radius = compacted.radius;
+            this.mid_point = compacted.mid;
+            if (!this.segments) {
                 var container = $(this.feedbackContext.canvas);
-                if (!this.feedbackContext) {
-                    throw new Error("Feedback context required.");
-                }
-                var nvalues = s.valuesArray.length;
-                var nvoxels = s.num_rows * s.num_cols * s.num_layers * s.num_blocks;
-                if (nvalues != nvoxels) {
-                    // for now strict checking
-                    throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
-                }
-                // samplers for location conversion, if any
-                this.samplers = {};
-                this.textures = {}
-                if (s.location == "polar_scaled") {
-                    // set up scaling textures
-                    this.samplers.RowScale = this.feedbackContext.texture("RowScale", "FLOAT", "RED", "R32F");
-                    var set_up_sampler = function(name, size) {
-                        var texture = that.feedbackContext.texture(name, "FLOAT", "RED", "R32F");
-                        texture.load_array(s.location_parameters[name], size, s.num_blocks)
-                        that.textures[name] = texture;
-                        that.samplers[name] = {dim: "2D", from_texture: name};
-                    };
-                    set_up_sampler("RowScale", s.num_rows+1);
-                    set_up_sampler("ColumnScale", s.num_cols+1);
-                    set_up_sampler("LayerScale", s.num_layers+1);
-                }
-                this.crossing = container.webGL2crossingVoxels({
+                this.segments = container.webGL2TriangulateVoxels({
                     feedbackContext: this.feedbackContext,
-                    valuesArray: s.valuesArray,
+                    indices: compacted.indices,
+                    front_corners: compacted.front_corners,
+                    back_corners: compacted.back_corners,
                     num_rows: s.num_rows,
                     num_cols: s.num_cols,
                     num_layers: s.num_layers,
                     num_blocks: s.num_blocks,
-                    threshold: s.threshold,
-                    shrink_factor: s.shrink_factor,
-                    grid_min: s.grid_min,
-                    grid_max: s.grid_max,  // disabled grid coordinate filtering (invalid limits)
-                    location: s.location,
-                    samplers: this.samplers,
-                    // never rasterize the crossing pixels
+                    rasterize: s.rasterize,
                     dx: s.dx,
                     dy: s.dy,
                     dz: s.dz,
+                    translation: s.translation,
+                    threshold: s.threshold,
+                    invalid_coordinate: s.invalid_coordinate,
+                    location: s.location,
+                    samplers: this.samplers,
+                    color_rotator: s.color_rotator,
                 });
-                // initialize segmenter upon first run.
-                this.segments = null;
-                // named perspectives which share this underlying surface data structure
-                this.named_perspectives = {};
-            };
-            get_perspective(name, options) {
-                options = options || {};
-                options.name = name;
-                var perspective = new webGL2SurfacePerspective(options);
-                this.named_perspectives[name] = perspective;
-                return perspective;
-            };
-            reset_perspectives() {
-                // mark all perspectives as invalid (use before generating new geometry)
-                for (var name in this.named_perspectives) {
-                    this.named_perspectives[name].reset();
-                }
-            };
-            check_geometry() {
-                // arrange the geometry parameters to fit in [-1:1] cube unless specified otherwise
-                var s = this.settings;
-                if (s.location != "std") {
-                    return;  // don't mess with non-standard geometry
-                }
-                if (!s.dx) {
-                    // geometry needs specifying:
-                    var max_dimension = Math.max(s.num_rows, s.num_cols, s.num_layers);
-                    var dpixel = 2.0 / max_dimension;
-                    s.dx = [dpixel, 0, 0];
-                    s.dy = [0, dpixel, 0];
-                    s.dz = [0, 0, dpixel];
-                    if (!s.translation) {
-                        s.translation = [-0.5 * s.num_cols * dpixel, -0.5 * s.num_rows * dpixel, -0.5 * s.num_layers * dpixel]
-                    }
-                }
+            } else {
+                // reset buffer content
+                this.segments.index_buffer.copy_from_array(
+                    compacted.indices
+                );
+                this.segments.front_corner_buffer.copy_from_array(
+                    compacted.front_corners
+                );
+                this.segments.back_corner_buffer.copy_from_array(
+                    compacted.back_corners
+                );
             }
-            run () {
-                var s = this.settings;
-                var compacted = this.crossing.get_compacted_feedbacks();
-                this.radius = compacted.radius;
-                this.mid_point = compacted.mid;
-                if (!this.segments) {
-                    var container = $(this.feedbackContext.canvas);
-                    this.segments = container.webGL2TriangulateVoxels({
-                        feedbackContext: this.feedbackContext,
-                        indices: compacted.indices,
-                        front_corners: compacted.front_corners,
-                        back_corners: compacted.back_corners,
-                        num_rows: s.num_rows,
-                        num_cols: s.num_cols,
-                        num_layers: s.num_layers,
-                        num_blocks: s.num_blocks,
-                        rasterize: s.rasterize,
-                        dx: s.dx,
-                        dy: s.dy,
-                        dz: s.dz,
-                        translation: s.translation,
-                        threshold: s.threshold,
-                        invalid_coordinate: s.invalid_coordinate,
-                        location: s.location,
-                        samplers: this.samplers,
-                        color_rotator: s.color_rotator,
-                    });
+            this.indices = compacted.indices;
+            this.vertices_per_instance = this.segments.vertices_per_instance;
+            this.segments.run();
+            var after_run_callback = this.settings.after_run_callback;
+            if (after_run_callback) {
+                after_run_callback(this);
+            }
+            //var positions = segments.get_positions();
+        };
+        colorization(voxel_color_source, vertex_color_destination) {
+            // apply voxel colors to vertices for active voxel indices
+            var indices = this.indices;
+            var vertices_per_instance = this.vertices_per_instance;
+            var skip_index = vertices_per_instance * 3;
+            var num_indices = indices.length;
+            var count = 0;
+            for (var i=0; i<num_indices; i++){
+                var index = indices[i];
+                if (index < 0) {
+                    count += skip_index;
                 } else {
-                    // reset buffer content
-                    this.segments.index_buffer.copy_from_array(
-                        compacted.indices
-                    );
-                    this.segments.front_corner_buffer.copy_from_array(
-                        compacted.front_corners
-                    );
-                    this.segments.back_corner_buffer.copy_from_array(
-                        compacted.back_corners
-                    );
-                }
-                this.indices = compacted.indices;
-                this.vertices_per_instance = this.segments.vertices_per_instance;
-                this.segments.run();
-                var after_run_callback = this.settings.after_run_callback;
-                if (after_run_callback) {
-                    after_run_callback(this);
-                }
-                //var positions = segments.get_positions();
-            };
-            colorization(voxel_color_source, vertex_color_destination) {
-                // apply voxel colors to vertices for active voxel indices
-                var indices = this.indices;
-                var vertices_per_instance = this.vertices_per_instance;
-                var skip_index = vertices_per_instance * 3;
-                var num_indices = indices.length;
-                var count = 0;
-                for (var i=0; i<num_indices; i++){
-                    var index = indices[i];
-                    if (index < 0) {
-                        count += skip_index;
-                    } else {
-                        var cindex = 3 * index;
-                        for (var vn=0; vn<vertices_per_instance; vn++) {
-                            for (var cn=0; cn<3; cn++) {
-                                vertex_color_destination[count] = voxel_color_source[cindex + cn];
-                                count ++;
-                            }
+                    var cindex = 3 * index;
+                    for (var vn=0; vn<vertices_per_instance; vn++) {
+                        for (var cn=0; cn<3; cn++) {
+                            vertex_color_destination[count] = voxel_color_source[cindex + cn];
+                            count ++;
                         }
                     }
                 }
-                return vertex_color_destination;
-            };
-            linked_three_geometry (THREE, clean, normal_binning) {
-                // create a three.js geometry linked to the current positions feedback array.
-                // xxxx multiple linked geometries may interfere with eachother unless carefully managed.
-                // this is a bit convoluted in an attempt to only update attributes when needed.
-                var that = this;
+            }
+            return vertex_color_destination;
+        };
+        linked_three_geometry (THREE, clean, normal_binning) {
+            // create a three.js geometry linked to the current positions feedback array.
+            // xxxx multiple linked geometries may interfere with eachother unless carefully managed.
+            // this is a bit convoluted in an attempt to only update attributes when needed.
+            var that = this;
+            var positions, normals;
+            if (clean) {
+                var pn = this.clean_positions_and_normals(normal_binning);
+                positions = pn.positions;
+                normals = pn.normals;
+            } else {
+                positions = this.get_positions();
+                normals = this.get_normals();
+            }
+            var colors = this.get_colors();  // xxxx remove this? (debug only)
+            var geometry = new THREE.BufferGeometry();
+            geometry.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
+            geometry.setAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
+            geometry.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
+            that.link_needs_update = false;
+            var after_run = function(that) {
+                that.link_needs_update = true;
+            }
+            var check_update_link = function(nbins) {
+                // update the surface if needed, using nbins for normal_binning if provided.
+                var do_clean = clean || nbins;
+                var bin_size = nbins || normal_binning;
+                // update the geometry positions array in place and mark for update in geometry
+                if ((!that.link_needs_update) && (!nbins)) {
+                    // only update upon request and only if needed, or if binning was specified
+                    that.link_needs_update = false;
+                    return;
+                }
                 var positions, normals;
-                if (clean) {
-                    var pn = this.clean_positions_and_normals(normal_binning);
+                if (do_clean) {
+                    var pn = that.clean_positions_and_normals(bin_size);
                     positions = pn.positions;
                     normals = pn.normals;
                 } else {
-                    positions = this.get_positions();
-                    normals = this.get_normals();
+                    positions = that.get_positions(geometry.attributes.position.array);
+                    normals = that.get_normals(geometry.attributes.normal.array);
                 }
-                var colors = this.get_colors();  // xxxx remove this? (debug only)
-                var geometry = new THREE.BufferGeometry();
-                geometry.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
-                geometry.setAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
-                geometry.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
+                var mid = that.mid_point;
+                geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(mid[0], mid[1], mid[2]), that.radius);
+                geometry.attributes.position.array = positions;
+                geometry.attributes.position.needsUpdate = true;
+                geometry.attributes.normal.array = normals;
+                geometry.attributes.normal.needsUpdate = true;
+                geometry.attributes.color.array = that.get_colors(geometry.attributes.color.array);
+                geometry.attributes.color.needsUpdate = true;
                 that.link_needs_update = false;
-                var after_run = function(that) {
-                    that.link_needs_update = true;
+            }
+            this.settings.after_run_callback = after_run;
+            this.check_update_link = check_update_link;
+            geometry.check_update_link = check_update_link;
+            return geometry;
+        };
+        clean_positions_and_normals(normal_binning, truncate) {
+            var positions = this.get_positions();
+            var normals = this.get_normals();
+            var nfloats = positions.length;
+            var clean_positions = new Float32Array(nfloats);
+            var clean_normals = new Float32Array(nfloats);
+            var clean_length = 0;
+            var tetrahedron_indices = this.crossing.compact_indices;
+            var vertices_per_tetrahedron = this.segments.vertices_per_instance;
+            var too_small = this.settings.invalid_coordinate + 1;
+            var maxes = null;
+            var mins = null;
+            for (var i=0; i<tetrahedron_indices.length; i++) {
+                if (tetrahedron_indices[i] < 0) {
+                    break;  // sentinel: end of valid tetrahedron indices
                 }
-                var check_update_link = function(nbins) {
-                    // update the surface if needed, using nbins for normal_binning if provided.
-                    var do_clean = clean || nbins;
-                    var bin_size = nbins || normal_binning;
-                    // update the geometry positions array in place and mark for update in geometry
-                    if ((!that.link_needs_update) && (!nbins)) {
-                        // only update upon request and only if needed, or if binning was specified
-                        that.link_needs_update = false;
-                        return;
-                    }
-                    var positions, normals;
-                    if (do_clean) {
-                        var pn = that.clean_positions_and_normals(bin_size);
-                        positions = pn.positions;
-                        normals = pn.normals;
-                    } else {
-                        positions = that.get_positions(geometry.attributes.position.array);
-                        normals = that.get_normals(geometry.attributes.normal.array);
-                    }
-                    var mid = that.mid_point;
-                    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(mid[0], mid[1], mid[2]), that.radius);
-                    geometry.attributes.position.array = positions;
-                    geometry.attributes.position.needsUpdate = true;
-                    geometry.attributes.normal.array = normals;
-                    geometry.attributes.normal.needsUpdate = true;
-                    geometry.attributes.color.array = that.get_colors(geometry.attributes.color.array);
-                    geometry.attributes.color.needsUpdate = true;
-                    that.link_needs_update = false;
-                }
-                this.settings.after_run_callback = after_run;
-                this.check_update_link = check_update_link;
-                geometry.check_update_link = check_update_link;
-                return geometry;
-            };
-            clean_positions_and_normals(normal_binning, truncate) {
-                var positions = this.get_positions();
-                var normals = this.get_normals();
-                var nfloats = positions.length;
-                var clean_positions = new Float32Array(nfloats);
-                var clean_normals = new Float32Array(nfloats);
-                var clean_length = 0;
-                var tetrahedron_indices = this.crossing.compact_indices;
-                var vertices_per_tetrahedron = this.segments.vertices_per_instance;
-                var too_small = this.settings.invalid_coordinate + 1;
-                var maxes = null;
-                var mins = null;
-                for (var i=0; i<tetrahedron_indices.length; i++) {
-                    if (tetrahedron_indices[i] < 0) {
-                        break;  // sentinel: end of valid tetrahedron indices
-                    }
-                    var tetrahedron_start = 3 * i * vertices_per_tetrahedron;
-                    for (var vj=0; vj<vertices_per_tetrahedron; vj++) {
-                        var vertex_start = 3 * vj + tetrahedron_start;
-                        if (positions[vertex_start] > too_small) {
-                            if (!maxes) {
-                                maxes = [];
-                                mins = [];
-                                for (var k=0; k<3; k++) {
-                                    var p = positions[vertex_start + k];
-                                    maxes.push(p);
-                                    mins.push(p);
-                                }
-                            }
+                var tetrahedron_start = 3 * i * vertices_per_tetrahedron;
+                for (var vj=0; vj<vertices_per_tetrahedron; vj++) {
+                    var vertex_start = 3 * vj + tetrahedron_start;
+                    if (positions[vertex_start] > too_small) {
+                        if (!maxes) {
+                            maxes = [];
+                            mins = [];
                             for (var k=0; k<3; k++) {
-                                var copy_index = vertex_start + k;
-                                var p = positions[copy_index];
-                                maxes[k] = Math.max(maxes[k], p);
-                                mins[k] = Math.min(mins[k], p)
-                                clean_positions[clean_length] = p;
-                                clean_normals[clean_length] = normals[copy_index];
-                                clean_length++;
+                                var p = positions[vertex_start + k];
+                                maxes.push(p);
+                                mins.push(p);
                             }
                         }
-                    }
-                }
-                if (normal_binning && (clean_length > 0)) {
-                    // unify geometrically close normal values
-                    var key_to_normal = {};
-                    var denominators = [];
-                    for (var i=0; i<3; i++) {
-                        var d = maxes[i] - mins[i];
-                        if (d < 1e-17) {
-                            d = 1.0
-                        }
-                        denominators.push(d);
-                    }
-                    var position_bin_key = function (vertex_index) {
-                        var key = 0;
-                        var vertex_start = 3 * vertex_index;
                         for (var k=0; k<3; k++) {
-                            key = normal_binning * key;
-                            var coordinate = clean_positions[vertex_start + k];
-                            var k_offset = Math.floor(normal_binning * (coordinate - mins[k])/denominators[k]);
-                            key += k_offset;
-                        }
-                        return key;
-                    };
-                    var n_vertices = clean_length / 3;
-                    var vertex_to_key = {};
-                    var key_to_normal_sum = {};
-                    for (var vi=0; vi<n_vertices; vi++) {
-                        var key = position_bin_key(vi);
-                        vertex_to_key[vi] = key;
-                        var ns = key_to_normal_sum[key];
-                        if (!ns) {
-                            ns = [0, 0, 0];
-                        }
-                        var vertex_start = vi * 3;
-                        for (var k=0; k<3; k++) {
-                            ns[k] += clean_normals[vertex_start + k];
-                        }
-                        key_to_normal_sum[key] = ns;
-                    }
-                    // renormalize
-                    for (var k in key_to_normal_sum) {
-                        var ns = key_to_normal_sum[k];
-                        var n = 0;
-                        for (var k=0; k<3; k++) {
-                            n += ns[k] * ns[k];
-                        }
-                        if (n < 1e-10) {
-                            n = 1.0;
-                        }
-                        n = Math.sqrt(n);
-                        for (var k=0; k<3; k++) {
-                            ns[k] = ns[k] / n;
-                        }
-                        key_to_normal_sum[k] = ns;
-                    }
-                    // apply unified normals
-                    for (var vi=0; vi<n_vertices; vi++) {
-                        var vertex_start = vi * 3;
-                        var key = vertex_to_key[vi];
-                        var ns = key_to_normal_sum[key];
-                        for (var k=0; k<3; k++) {
-                            clean_normals[vertex_start + k] = ns[k];
+                            var copy_index = vertex_start + k;
+                            var p = positions[copy_index];
+                            maxes[k] = Math.max(maxes[k], p);
+                            mins[k] = Math.min(mins[k], p)
+                            clean_positions[clean_length] = p;
+                            clean_normals[clean_length] = normals[copy_index];
+                            clean_length++;
                         }
                     }
-                }
-                if (truncate) {
-                    // use slice (not aubarray) so the buffer is not shared (?)
-                    clean_positions = clean_positions.slice(0, clean_length);
-                    clean_normals = clean_normals.slice(0, clean_length);
-                }
-                return {
-                    positions: clean_positions,
-                    normals: clean_normals,
-                    length: clean_length,
-                    maxes: maxes,
-                    mins: mins,
                 }
             }
-            set_grid_limits(grid_mins, grid_maxes) {
-                this.crossing.set_grid_limits(grid_mins, grid_maxes);
-            };
-            set_threshold(value) {
-                this.settings.threshold = value;
-                this.crossing.set_threshold(value);
-                // xxxx must be after first run!
-                if (this.segments) {
-                    this.segments.set_threshold(value);
+            if (normal_binning && (clean_length > 0)) {
+                // unify geometrically close normal values
+                var key_to_normal = {};
+                var denominators = [];
+                for (var i=0; i<3; i++) {
+                    var d = maxes[i] - mins[i];
+                    if (d < 1e-17) {
+                        d = 1.0
+                    }
+                    denominators.push(d);
                 }
-            };
-            set_color_rotator(value) {
-                this.settings.color_rotator = value;
-                if (this.segments) {
-                    this.segments.set_color_rotator(value);
+                var position_bin_key = function (vertex_index) {
+                    var key = 0;
+                    var vertex_start = 3 * vertex_index;
+                    for (var k=0; k<3; k++) {
+                        key = normal_binning * key;
+                        var coordinate = clean_positions[vertex_start + k];
+                        var k_offset = Math.floor(normal_binning * (coordinate - mins[k])/denominators[k]);
+                        key += k_offset;
+                    }
+                    return key;
+                };
+                var n_vertices = clean_length / 3;
+                var vertex_to_key = {};
+                var key_to_normal_sum = {};
+                for (var vi=0; vi<n_vertices; vi++) {
+                    var key = position_bin_key(vi);
+                    vertex_to_key[vi] = key;
+                    var ns = key_to_normal_sum[key];
+                    if (!ns) {
+                        ns = [0, 0, 0];
+                    }
+                    var vertex_start = vi * 3;
+                    for (var k=0; k<3; k++) {
+                        ns[k] += clean_normals[vertex_start + k];
+                    }
+                    key_to_normal_sum[key] = ns;
                 }
-            };
-            get_positions(a) {
-                return this.segments.get_positions(a);
-            };
-            get_normals(a) {
-                return this.segments.get_normals(a);
-            };
-            get_colors(a) {
-                return this.segments.get_colors(a);
-            };
+                // renormalize
+                for (var k in key_to_normal_sum) {
+                    var ns = key_to_normal_sum[k];
+                    var n = 0;
+                    for (var k=0; k<3; k++) {
+                        n += ns[k] * ns[k];
+                    }
+                    if (n < 1e-10) {
+                        n = 1.0;
+                    }
+                    n = Math.sqrt(n);
+                    for (var k=0; k<3; k++) {
+                        ns[k] = ns[k] / n;
+                    }
+                    key_to_normal_sum[k] = ns;
+                }
+                // apply unified normals
+                for (var vi=0; vi<n_vertices; vi++) {
+                    var vertex_start = vi * 3;
+                    var key = vertex_to_key[vi];
+                    var ns = key_to_normal_sum[key];
+                    for (var k=0; k<3; k++) {
+                        clean_normals[vertex_start + k] = ns[k];
+                    }
+                }
+            }
+            if (truncate) {
+                // use slice (not aubarray) so the buffer is not shared (?)
+                clean_positions = clean_positions.slice(0, clean_length);
+                clean_normals = clean_normals.slice(0, clean_length);
+            }
+            return {
+                positions: clean_positions,
+                normals: clean_normals,
+                length: clean_length,
+                maxes: maxes,
+                mins: mins,
+            }
+        }
+        set_grid_limits(grid_mins, grid_maxes) {
+            this.crossing.set_grid_limits(grid_mins, grid_maxes);
         };
-
-        class webGL2SurfacePerspective {
-            // A view of the surface at a specified threshold and color rotation, etc.
-            // The underlying surface may be shared between many perspectives!!!
-            constructor(surface, options) {
-                this.surface = surface;
-                var ssettings = surface.settings;
-                this.settings = $.extend({
-                    threshold: ssettings.threshold,
-                    color_rotator: s.color_rotator,
-                }, options);
-                this.positions = null;
-                this.normals = null;
-                this.colors = null;
-                this.points_mesh = null;
-                this.reset();
-            };
-            get_points_mesh(THREE, colorize) {
-                this.surface.reset_perspectives();
-                this.check_voxels();
-                this.points_mesh = this.surface.crossing.get_points_mesh({THREE: THREE, colorize:colorize});
-                return this.points_mesh;
-            };
-            update_points_mesh(mesh) {
-                mesh = mesh || this.points_mesh;
-                this.check_voxels();
-                mesh.update_sphere_locations();
-            };
-            get_surface_geometry (THREE, clean, normal_binning) {
-                this.surface.reset_perspectives();
-                this.check_surface();
-                this.surface_geometry = this.surface.linked_three_geometry(THREE, clean, normal_binning);
-                return this.surface_geometry;
-            };
-            update_surface_geometry(geometry) {
-                geometry = geometry || this.surface_geometry;
-                this.surface.reset_perspectives();
-                this.check_surface();
-                geometry.check_update_link();
-            };
-            set_threshold(threshold) {
-                this.settings.threshold = threshold;
-                this.reset();
-            };
-            set_color_rotator(matrix) {
-                this.settings.color_rotator = matrix;
-                this.reset();
-            };
-            reset() {
-                this.voxels_ready = false;
-                this.surface_ready = false;
-                this.parameters_set = false;
-            };
-            check_parameters() {
-                // lazily set parameters just before execution.
-                if (!this.parameters_set) {
-                    // mark all (other) perspectives as invalid
-                    this.surface.reset_perspectives();
-                    this.surface.set_color_rotator(self.settings.color_rotator);
-                    this.surface.set_threshold(self.settings.threshold)
-                    this.parameters_set = true;
-                }
-            };
-            check_voxels() {
-                this.check_parameters();
-                if (!this.voxels_ready) {
-                    this.surface.crossing.get_compacted_feedbacks();
-                    this.voxels_ready = true;
-                }
-            };
-            check_surface() {
-                this.check_parameters();
-                if (!this.surface_ready) {
-                    this.surface.run();
-                    this.surface_ready = true;
-                    this.voxels_ready = true;  // surface.run automatically updates voxels too.
-                }
-            };
-            get_positions() {
-                this.check_surface();
-                this.positions = this.surface.get_positions(this.positions);
-                return this.positions;
-            };
-            get_normals() {
-                this.check_surface();
-                this.normals = this.surface.get_normals(this.normals);
-                return this.normals;
-            };
-            get_colors() {
-                this.check_surface();
-                this.colors = this.surface.get_colors(this.colors);
-                return this.colors;
-            };
+        set_threshold(value) {
+            this.settings.threshold = value;
+            this.crossing.set_threshold(value);
+            // xxxx must be after first run!
+            if (this.segments) {
+                this.segments.set_threshold(value);
+            }
         };
+        set_color_rotator(value) {
+            this.settings.color_rotator = value;
+            if (this.segments) {
+                this.segments.set_color_rotator(value);
+            }
+        };
+        get_positions(a) {
+            return this.segments.get_positions(a);
+        };
+        get_normals(a) {
+            return this.segments.get_normals(a);
+        };
+        get_colors(a) {
+            return this.segments.get_colors(a);
+        };
+    };
 
+    class webGL2SurfacePerspective {
+        // A view of the surface at a specified threshold and color rotation, etc.
+        // The underlying surface may be shared between many perspectives!!!
+        constructor(surface, options) {
+            this.surface = surface;
+            var ssettings = surface.settings;
+            this.settings = $.extend({
+                threshold: ssettings.threshold,
+                color_rotator: s.color_rotator,
+            }, options);
+            this.positions = null;
+            this.normals = null;
+            this.colors = null;
+            this.points_mesh = null;
+            this.reset();
+        };
+        get_points_mesh(THREE, colorize) {
+            this.surface.reset_perspectives();
+            this.check_voxels();
+            this.points_mesh = this.surface.crossing.get_points_mesh({THREE: THREE, colorize:colorize});
+            return this.points_mesh;
+        };
+        update_points_mesh(mesh) {
+            mesh = mesh || this.points_mesh;
+            this.check_voxels();
+            mesh.update_sphere_locations();
+        };
+        get_surface_geometry (THREE, clean, normal_binning) {
+            this.surface.reset_perspectives();
+            this.check_surface();
+            this.surface_geometry = this.surface.linked_three_geometry(THREE, clean, normal_binning);
+            return this.surface_geometry;
+        };
+        update_surface_geometry(geometry) {
+            geometry = geometry || this.surface_geometry;
+            this.surface.reset_perspectives();
+            this.check_surface();
+            geometry.check_update_link();
+        };
+        set_threshold(threshold) {
+            this.settings.threshold = threshold;
+            this.reset();
+        };
+        set_color_rotator(matrix) {
+            this.settings.color_rotator = matrix;
+            this.reset();
+        };
+        reset() {
+            this.voxels_ready = false;
+            this.surface_ready = false;
+            this.parameters_set = false;
+        };
+        check_parameters() {
+            // lazily set parameters just before execution.
+            if (!this.parameters_set) {
+                // mark all (other) perspectives as invalid
+                this.surface.reset_perspectives();
+                this.surface.set_color_rotator(self.settings.color_rotator);
+                this.surface.set_threshold(self.settings.threshold)
+                this.parameters_set = true;
+            }
+        };
+        check_voxels() {
+            this.check_parameters();
+            if (!this.voxels_ready) {
+                this.surface.crossing.get_compacted_feedbacks();
+                this.voxels_ready = true;
+            }
+        };
+        check_surface() {
+            this.check_parameters();
+            if (!this.surface_ready) {
+                this.surface.run();
+                this.surface_ready = true;
+                this.voxels_ready = true;  // surface.run automatically updates voxels too.
+            }
+        };
+        get_positions() {
+            this.check_surface();
+            this.positions = this.surface.get_positions(this.positions);
+            return this.positions;
+        };
+        get_normals() {
+            this.check_surface();
+            this.normals = this.surface.get_normals(this.normals);
+            return this.normals;
+        };
+        get_colors() {
+            this.check_surface();
+            this.colors = this.surface.get_colors(this.colors);
+            return this.colors;
+        };
+    };
+
+    // END DEDENT HERE
+
+    $.fn.webGL2surfaces3dopt = function (options) {
         return new WebGL2Surfaces3dOpt(options);
     };
 
