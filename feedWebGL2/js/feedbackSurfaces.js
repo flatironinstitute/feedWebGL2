@@ -396,6 +396,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         this.index_array, this.location_array, this.compact_locations, 3, location_fill
                     );
                 }
+                // compute compact locations and extrema
                 var mins = null;
                 var maxes = null;
                 var locs = this.compact_locations;
@@ -2564,6 +2565,20 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         input.change(update);
         update();
         return contours;
+    };
+
+    $.fn.webGL2surfaces_from_diagonals = function (options) {
+        // Simplified surface interpolation using voxel diagonals.
+        // This method may be better for fast high resolution renders
+        // because it generates half as many triangles, but if may look worse
+        // in low resolution because some triangles overlap and the interpolation
+        // is not as precise. (experimental.)
+        class WebGL2surfacesFromDiagonals {
+            constructor(options) {
+            };
+        };
+
+        return new WebGL2surfacesFromDiagonals(options);
     };
 
 })(jQuery);
