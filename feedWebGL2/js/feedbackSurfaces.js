@@ -754,7 +754,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         0, 1, 0,
                         0, 0, 1,
                     ],
-                    fragment_shader: noop_fragment_shader,
+                    fragment_shader: tetrahedra_fragment_shader,
                     epsilon: 1e-10,
                 }, options);
                 var s = this.settings;
@@ -1488,7 +1488,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
         `;};
 
-        var tetrahedra_fragment_shader = `#version 300 es
+        return new WebGL2TriangulateVoxels(options);
+    };
+
+    var tetrahedra_fragment_shader = `#version 300 es
         #ifdef GL_ES
             precision highp float;
         #endif
@@ -1497,11 +1500,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
         void main() {
             color = vec4(vColor, 1.0);
+            // DEBUGGING
+            color = vec4(1.0, 0, 0, 1.0);
         }
         `;
-
-        return new WebGL2TriangulateVoxels(options);
-    };
 
     $.fn.webGL2TriangulateVoxels.example = function (container) {
         var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
@@ -2485,9 +2487,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     $.fn.webGL2surfaces3dopt.simple_example = function (container, opt) {
         var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
 
-        if (!opt) {
-            throw new Error("'non optimized' surface implementation has been commented out.");
-        }
+        //if (!opt) {
+        //    throw new Error("'non optimized' surface implementation has been commented out.");
+        //}
 
         var context = container.feedWebGL2({
             gl: gl,
@@ -2497,21 +2499,21 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             0,0,0,
             0,0,0,
 
-            0,0,0,
-            0,1,0,
-            0,0,0,
+            1,1,1,
+            1,1,1,
+            1,1,1,
 
-            0,0,0,
-            0,-1,0,
-            0,0,0,
+            1,1,1,
+            1,1,1,
+            1,1,1,
         ]);
         var h = 0.5
         var ddz = 0.1
-        //var init = container.webGL2surfaces3d;
-        //if (opt) {
-        //    init = container.webGL2surfaces3dopt;
-        //}
-        var contours = container.webGL2surfaces3dopt(
+        var init = container.webGL2surfaces_from_diagonals;
+        if (opt) {
+            init = container.webGL2surfaces3dopt;
+        }
+        var contours = init(
             {
                 feedbackContext: context,
                 valuesArray: valuesArray,
@@ -2683,6 +2685,21 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.triangle_indices = triangle_indices;
             return triangle_indices;
         };
+        get_positions(triangle_positions) {
+            this.voxel_positions = this.segments.get_positions(this.voxel_positions);
+            triangle_positions = this.select_positions(this.triangle_indices, this.voxel_positions, triangle_positions);
+            return triangle_positions;
+        };
+        get_normals(triangle_normals) {
+            this.voxel_normals = this.segments.get_normals(this.voxel_normals);
+            triangle_normals = this.select_positions(this.triangle_indices, this.voxel_normals, triangle_normals);
+            return triangle_normals;
+        };
+        get_colors(triangle_colors) {
+            this.voxel_colors = this.segments.get_positions(this.voxel_colors);
+            triangle_colors = this.select_positions(this.triangle_indices, this.voxel_colors, triangle_colors);
+            return triangle_colors;
+        };
         select_positions(triangle_indices, positions, triangle_positions, fill_value) {
             fill_value = fill_value || -1;
             // assumes index_indicator now "points into" the positions array
@@ -2701,16 +2718,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var cursor = 0;
             for (var i=0; i<n_indices; i++) {
                 // position index is for a xyz vector ravelled in positions array.
-                var position_index = triangle_indices[i] * 3;
+                var voxel_index = triangle_indices[i];
+                var vertex_index = index_indicator[voxel_index]; // translate voxel id to compact location
+                var position_index = vertex_index * 3;  // position is ravelled xyz
                 triangle_positions[cursor] = positions[position_index];
                 cursor ++;
-                positions_index ++;
+                position_index ++;
                 triangle_positions[cursor] = positions[position_index];
                 cursor ++;
-                positions_index ++;
+                position_index ++;
                 triangle_positions[cursor] = positions[position_index];
                 cursor ++;
-                positions_index ++;
             }
             // fill in the remaining positions (degenerate triangles)
             while (cursor < buffersize) {
@@ -2718,7 +2736,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 cursor ++;
             }
             return triangle_positions
-        }
+        };
+        
+        clean_positions_and_normals(normal_binning, truncate) {
+            throw new Error("clean_positions_and_normals not yet implemented for diagonals");
+        };
     };
 
     $.fn.webGL2surfaces_from_diagonals = function (options) {
@@ -2729,11 +2751,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         [[0, 1, 1],
          [0, 0, 1]],
 
-        [[0, 1, 1],
-         [0, 1, 0]],
+        [[0, 1, 0],
+         [0, 1, 1]],
 
-        [[1, 0, 1],
-         [0, 0, 1]],
+        [[0, 0, 1],
+         [1, 0, 1]],
 
         [[1, 0, 1],
          [1, 0, 0]],
@@ -2741,8 +2763,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         [[1, 1, 0],
          [0, 1, 0]],
 
-        [[1, 1, 0],
-         [1, 0, 0]],
+        [[1, 0, 0],
+         [1, 1, 0]],
     ];
 
     $.fn.webGL2surfaces_from_diagonals.example = function(container) {
@@ -2794,11 +2816,20 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         );
         contours.run();
         var indices = contours.get_triangle_indices();
+        $("<div> triangle indices </div>").appendTo(container);
         for (var i=0; i<indices.length; i++) {
             if ((i % 3) == 0) {
                 $("<br/>").appendTo(container);
             }
             $("<span> " + indices[i] + "</span> ").appendTo(container);
+        }
+        var vertices = contours.get_positions();
+        $("<div> triangle vertices </div>").appendTo(container);
+        for (var i=0; i<vertices.length; i++) {
+            if ((i % 9) == 0) {
+                $("<br/>").appendTo(container);
+            }
+            $("<span> " + vertices[i].toFixed(2) + "</span> ").appendTo(container);
         }
         return contours;
     };
