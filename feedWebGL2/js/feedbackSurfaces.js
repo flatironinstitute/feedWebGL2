@@ -1578,8 +1578,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
     };
 
-    // BEGIN DEDENT HERE
-    //$.fn.webGL2surfaces3dopt = function (options) {
     // "optimized surfaces" by truncating buffer sizes
     // which may result in some data omission in dense cases.
     class WebGL2Surfaces3dOpt {
@@ -1705,27 +1703,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.radius = compacted.radius;
             this.mid_point = compacted.mid;
             if (!this.segments) {
-                var container = $(this.feedbackContext.canvas);
-                this.segments = container.webGL2TriangulateVoxels({
-                    feedbackContext: this.feedbackContext,
-                    indices: compacted.indices,
-                    front_corners: compacted.front_corners,
-                    back_corners: compacted.back_corners,
-                    num_rows: s.num_rows,
-                    num_cols: s.num_cols,
-                    num_layers: s.num_layers,
-                    num_blocks: s.num_blocks,
-                    rasterize: s.rasterize,
-                    dx: s.dx,
-                    dy: s.dy,
-                    dz: s.dz,
-                    translation: s.translation,
-                    threshold: s.threshold,
-                    invalid_coordinate: s.invalid_coordinate,
-                    location: s.location,
-                    samplers: this.samplers,
-                    color_rotator: s.color_rotator,
-                });
+                this.segments = this.get_segments(compacted);
             } else {
                 // reset buffer content
                 this.segments.index_buffer.copy_from_array(
@@ -1741,11 +1719,40 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.indices = compacted.indices;
             this.vertices_per_instance = this.segments.vertices_per_instance;
             this.segments.run();
+            this.run_postprocessing();
             var after_run_callback = this.settings.after_run_callback;
             if (after_run_callback) {
                 after_run_callback(this);
             }
             //var positions = segments.get_positions();
+        };
+        run_postprocessing() {
+            // do nothing here (for subclassing)
+        }
+        get_segments(compacted) {
+            var s = this.settings;
+            var container = $(this.feedbackContext.canvas);
+            this.segments = container.webGL2TriangulateVoxels({
+                feedbackContext: this.feedbackContext,
+                indices: compacted.indices,
+                front_corners: compacted.front_corners,
+                back_corners: compacted.back_corners,
+                num_rows: s.num_rows,
+                num_cols: s.num_cols,
+                num_layers: s.num_layers,
+                num_blocks: s.num_blocks,
+                rasterize: s.rasterize,
+                dx: s.dx,
+                dy: s.dy,
+                dz: s.dz,
+                translation: s.translation,
+                threshold: s.threshold,
+                invalid_coordinate: s.invalid_coordinate,
+                location: s.location,
+                samplers: this.samplers,
+                color_rotator: s.color_rotator,
+            });
+            return this.segments;
         };
         colorization(voxel_color_source, vertex_color_destination) {
             // apply voxel colors to vertices for active voxel indices
@@ -2067,7 +2074,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         };
     };
 
-    // END DEDENT HERE
 
     $.fn.webGL2surfaces3dopt = function (options) {
         return new WebGL2Surfaces3dOpt(options);
@@ -2571,18 +2577,230 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         return contours;
     };
 
-    $.fn.webGL2surfaces_from_diagonals = function (options) {
-        // Simplified surface interpolation using voxel diagonals.
-        // This method may be better for fast high resolution renders
-        // because it generates half as many triangles, but if may look worse
-        // in low resolution because some triangles overlap and the interpolation
-        // is not as precise. (experimental.)
-        class WebGL2surfacesFromDiagonals {
-            constructor(options) {
-            };
+    // Simplified surface interpolation using voxel diagonals.
+    // This method may be better for fast high resolution renders
+    // because it generates half as many triangles, but if may look worse
+    // in low resolution because some triangles overlap and the interpolation
+    // is not as precise. (experimental.)
+    class WebGL2SurfacesFromDiagonals extends WebGL2Surfaces3dOpt {
+        get_segments(compacted) {
+            var s = this.settings;
+            var container = $(this.feedbackContext.canvas);
+            this.segments = container.webGL2DiagonalInterpolation({
+                feedbackContext: this.feedbackContext,
+                indices: compacted.indices,
+                front_corners: compacted.front_corners,
+                back_corners: compacted.back_corners,
+                num_rows: s.num_rows,
+                num_cols: s.num_cols,
+                num_layers: s.num_layers,
+                num_blocks: s.num_blocks,
+                rasterize: s.rasterize,
+                dx: s.dx,
+                dy: s.dy,
+                dz: s.dz,
+                translation: s.translation,
+                threshold: s.threshold,
+                invalid_coordinate: s.invalid_coordinate,
+                location: s.location,
+                samplers: this.samplers,
+                color_rotator: s.color_rotator,
+            });
+            // compute corner offsets for triangle generation
+            var triangle_corner_offsets = [];
+            var row_offset = s.num_cols;
+            var layer_offset = s.num_cols * s.num_rows;
+            for (var i=0; i<triangle_corners.length; i++) {
+                var offsets = [];
+                var corners = triangle_corners[i]
+                for (var j=0; j<2; j++) {
+                    var corner = corners[j];
+                    var offset = corner[0] + corner[1] * row_offset + corner[2] * layer_offset;
+                    offsets.push(offset);
+                }
+                triangle_corner_offsets.push(offsets);
+            }
+            this.triangle_corner_offsets = triangle_corner_offsets;
+            return this.segments;
         };
+        run_postprocessing() {
+            // generate triangles for interpolated voxels.
+            this.get_triangle_indices();
+        }
+        get_triangle_indices() {
+            // determine vertex position indices for triangles for active triangles.
+            // index_indicator is negative where the position index is invalid.
+            var s = this.settings;
+            // warning: index_indicator is modified in place for non-negative entries such that
+            //   pi = index_indicator[voxel_index]
+            //   voxel_position = [positions[pi], positions[pi+1], positions[pi+2], ]
+            // this assumes index_indicator is only used as a sentinel until the next iteration.
+            var index_indicator = this.crossing.index_array;
+            var indices = this.segments.get_indices();
+            // maximum number
+            var max_length = triangle_corners.length * indices.length;
+            var triangle_indices = new Int32Array(max_length);
+            var row_offset = s.num_cols;
+            var layer_offset = s.num_cols * s.num_rows;
+            var block_offset = layer_offset * s.num_layers;
+            var triangle_corner_offsets = this.triangle_corner_offsets;
+            var triangle_cursor = 0;
+            for (var root_index=0; root_index<indices.length; root_index++) {
+                var root = indices[root_index];
+                if ((root >= 0) && (index_indicator[root] >= 0)) {
+                    // point index_indicator into the indices array
+                    index_indicator[root] = root_index;
+                    // root is the voxel index of an interpolated crossing voxel
+                    // make sure it is not on an outer boundary (wrapping around)
+                    var in_row = (Math.floor((root + 1)/row_offset) == Math.floor(root/row_offset));
+                    var in_layer = (Math.floor((root + row_offset)/layer_offset) == Math.floor(root/layer_offset));
+                    var in_block = (Math.floor((root + layer_offset)/block_offset) == Math.floor(root/block_offset));
+                    if (in_row && in_layer && in_block) {
+                        // root is not on an outer boundary
+                        // generate all triangles with valid corner indices
+                        for (var triangle_index=0; triangle_index<triangle_corner_offsets.length; triangle_index++) {
+                            var offsets = triangle_corner_offsets[triangle_index];
+                            var corner_index0 = root + offsets[0];
+                            var corner_index1 = root + offsets[1];
+                            if ((index_indicator[corner_index0] >= 0) && (index_indicator[corner_index1] >= 0)) {
+                                // valid triangle!
+                                triangle_indices[triangle_cursor] = root;
+                                triangle_cursor ++;
+                                triangle_indices[triangle_cursor] = corner_index0;
+                                triangle_cursor ++;
+                                triangle_indices[triangle_cursor] = corner_index1;
+                                triangle_cursor ++;
+                            }
+                        }
+                    }
+                }
+            }
+            if (triangle_cursor < max_length) {
+                triangle_indices = triangle_indices.slice(0, triangle_cursor);
+            }
+            this.index_indicator = index_indicator;
+            this.indices = indices;
+            this.triangle_indices = triangle_indices;
+            return triangle_indices;
+        };
+        select_positions(triangle_indices, positions, triangle_positions, fill_value) {
+            fill_value = fill_value || -1;
+            // assumes index_indicator now "points into" the positions array
+            var index_indicator = this.crossing.index_array;
+            var n_indices = triangle_indices.length;
+            var buffersize;
+            if (!triangle_positions) {
+                // Always allocate 6 triangles per possible index even if they are not all used
+                // because we are using BufferAttributes and they may be needed in the next iteration.
+                // Three floats per three vertices per six triangles for each index.
+                buffersize = 3 * 3 * 6 * this.indices.length;
+                var triangle_positions = new Float32Array( buffersize );
+            } else {
+                buffersize = triangle_positions.length;
+            }
+            var cursor = 0;
+            for (var i=0; i<n_indices; i++) {
+                // position index is for a xyz vector ravelled in positions array.
+                var position_index = triangle_indices[i] * 3;
+                triangle_positions[cursor] = positions[position_index];
+                cursor ++;
+                positions_index ++;
+                triangle_positions[cursor] = positions[position_index];
+                cursor ++;
+                positions_index ++;
+                triangle_positions[cursor] = positions[position_index];
+                cursor ++;
+                positions_index ++;
+            }
+            // fill in the remaining positions (degenerate triangles)
+            while (cursor < buffersize) {
+                triangle_positions[cursor] = fill_value;
+                cursor ++;
+            }
+            return triangle_positions
+        }
+    };
 
-        return new WebGL2surfacesFromDiagonals(options);
+    $.fn.webGL2surfaces_from_diagonals = function (options) {
+        return new WebGL2SurfacesFromDiagonals(options);
+    };
+
+    var triangle_corners = [
+        [[0, 1, 1],
+         [0, 0, 1]],
+
+        [[0, 1, 1],
+         [0, 1, 0]],
+
+        [[1, 0, 1],
+         [0, 0, 1]],
+
+        [[1, 0, 1],
+         [1, 0, 0]],
+
+        [[1, 1, 0],
+         [0, 1, 0]],
+
+        [[1, 1, 0],
+         [1, 0, 0]],
+    ];
+
+    $.fn.webGL2surfaces_from_diagonals.example = function(container) {
+        //s
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+        });
+        var valuesArray = new Float32Array([
+            0,0,0,
+            0,0,0,
+            0,0,0,
+
+            0,0,0,
+            0,1,0,
+            0,0,0,
+
+            0,0,0,
+            0,-1,0,
+            0,0,0,
+        ]);
+        var h = 0.5
+        var ddz = 0.1
+
+        var contours = container.webGL2surfaces_from_diagonals(
+            {
+                feedbackContext: context,
+                valuesArray: valuesArray,
+                num_rows: 3,
+                num_cols: 3,
+                num_layers: 3,
+                dx: [h, 0, 0],
+                dy: [0, h, 0],
+                dz: [ddz, 0.33*ddz, h],
+                translation: [-h, -h, -h],
+                //color: [h, h, h],  ??? not used ???
+                rasterize: true,
+                threshold: 0.3,
+                // only for "optimized"
+                shrink_factor: 0.8,
+                // rotate the color direction using unit matrix
+                color_rotator: [
+                    0, 0, 1,
+                    1, 0, 0,
+                    0, 1, 0,
+                ],
+            }
+        );
+        contours.run();
+        var indices = contours.get_triangle_indices();
+        for (var i=0; i<indices.length; i++) {
+            if ((i % 3) == 0) {
+                $("<br/>").appendTo(container);
+            }
+            $("<span> " + indices[i] + "</span> ").appendTo(container);
+        }
+        return contours;
     };
 
 })(jQuery);
