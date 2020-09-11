@@ -1035,9 +1035,16 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     vPosition = dx * vertex[0] + dy * vertex[1] + dz * vertex[2] + translation;
 
                     // compute normal
-                    vec3 d = vec3(a100 - a000, a010 - a000, a001 - a000);
+
+                    // first attempt:
+                    //vec3 d = vec3(a100 - a000, a010 - a000, a001 - a000);
                     // column major declaration
-                    mat3 Mtranspose = mat3 (p100 - p000, p010 - p000, p001 - p000);
+                    //mat3 Mtranspose = mat3 (p100 - p000, p010 - p000, p001 - p000);
+
+                    // second attempt:
+                    vec3 d = vec3(a111 - a000, a010 - a101, a001 - a110);
+                    // column major declaration
+                    mat3 Mtranspose = mat3 (p111 - p000, p010 - p101, p001 - p110);
                     mat3 M = transpose(Mtranspose);
                     mat3 Minv = inverse(M);
                     vec3 n = Minv * d;
@@ -2630,17 +2637,21 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.get_triangle_indices();
         }
         get_triangle_indices() {
+            debugger;
             // determine vertex position indices for triangles for active triangles.
             // index_indicator is negative where the position index is invalid.
             var s = this.settings;
+            var threshold = s.threshold;
+            var values = s.valuesArray;
             // warning: index_indicator is modified in place for non-negative entries such that
             //   pi = index_indicator[voxel_index]
             //   voxel_position = [positions[pi], positions[pi+1], positions[pi+2], ]
             // this assumes index_indicator is only used as a sentinel until the next iteration.
-            var index_indicator = this.crossing.index_array;
+            var index_indicator = this.crossing.index_array.slice(0); // make a copy...
             var indices = this.segments.get_indices();
-            // maximum number
-            var max_length = triangle_corners.length * indices.length;
+            // maximum number of triangle vertices (3 per triangle)
+            var max_length = 3 * triangle_corners.length * indices.length;
+            // ravelled triangle vertex indices
             var triangle_indices = new Int32Array(max_length);
             var row_offset = s.num_cols;
             var layer_offset = s.num_cols * s.num_rows;
@@ -2660,6 +2671,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     if (in_row && in_layer && in_block) {
                         // root is not on an outer boundary
                         // generate all triangles with valid corner indices
+                        var corner_value = values[root];
+                        var invert_triangles = (corner_value < threshold);
                         for (var triangle_index=0; triangle_index<triangle_corner_offsets.length; triangle_index++) {
                             var offsets = triangle_corner_offsets[triangle_index];
                             var corner_index0 = root + offsets[0];
@@ -2668,9 +2681,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                                 // valid triangle!
                                 triangle_indices[triangle_cursor] = root;
                                 triangle_cursor ++;
-                                triangle_indices[triangle_cursor] = corner_index0;
-                                triangle_cursor ++;
-                                triangle_indices[triangle_cursor] = corner_index1;
+                                if (invert_triangles) {
+                                    triangle_indices[triangle_cursor] = corner_index1;
+                                    triangle_cursor ++;
+                                    triangle_indices[triangle_cursor] = corner_index0;
+                                } else {
+                                    triangle_indices[triangle_cursor] = corner_index0;
+                                    triangle_cursor ++;
+                                    triangle_indices[triangle_cursor] = corner_index1;
+                                }
                                 triangle_cursor ++;
                             }
                         }
@@ -2696,14 +2715,14 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             return triangle_normals;
         };
         get_colors(triangle_colors) {
-            this.voxel_colors = this.segments.get_positions(this.voxel_colors);
+            this.voxel_colors = this.segments.get_colors(this.voxel_colors);
             triangle_colors = this.select_positions(this.triangle_indices, this.voxel_colors, triangle_colors);
             return triangle_colors;
         };
         select_positions(triangle_indices, positions, triangle_positions, fill_value) {
             fill_value = fill_value || -1;
             // assumes index_indicator now "points into" the positions array
-            var index_indicator = this.crossing.index_array;
+            var index_indicator = this.index_indicator;
             var n_indices = triangle_indices.length;
             var buffersize;
             if (!triangle_positions) {
