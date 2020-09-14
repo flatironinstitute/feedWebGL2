@@ -2629,13 +2629,59 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
                 triangle_corner_offsets.push(offsets);
             }
+            this.diagonal_offset = 1 + row_offset + layer_offset;
             this.triangle_corner_offsets = triangle_corner_offsets;
             return this.segments;
         };
         run_postprocessing() {
             // generate triangles for interpolated voxels.
             this.get_triangle_indices();
-        }
+            this._get_positions();
+            this._get_normals();
+            // this._get_colors();
+            this.fix_normals();
+        };
+        fix_normals() {
+            // reverse normal if it points opposite triangle face
+            var positions = this._triangle_positions;
+            var normals = this._triangle_normals;
+            for (var cursor=0; cursor<this._last_nondegenerate_position; cursor += 9) {
+                // compute triangle normal
+                var Px = positions[cursor];
+                var Py = positions[cursor+1];
+                var Pz = positions[cursor+2];
+                var Qx = positions[cursor+3];
+                var Qy = positions[cursor+4];
+                var Qz = positions[cursor+5];
+                var Rx = positions[cursor+6];
+                var Ry = positions[cursor+7];
+                var Rz = positions[cursor+8];
+                var Ax = Px - Qx;
+                var Ay = Py - Qy;
+                var Az = Pz - Qz;
+                var Bx = Px - Rx;
+                var By = Py - Ry;
+                var Bz = Pz - Rz;
+                // cross product 
+                var Sx = Ay * Bz - Az * By;
+                var Sy = Az * Bx - Ax * Bz;
+                var Sz = Ax * By - Ay * Bx;
+                // reverse vertex normal when it points away from triangle normal
+                for (var offset=0; offset<9; offset+=3) {
+                    var index = cursor + offset;
+                    var x = normals[index];
+                    var y = normals[index+1];
+                    var z = normals[index+2];
+                    var dot = x * Sx + y * Sy + z * Sz;
+                    if (dot < 0) {
+                        // reverse the normal orientation
+                        normals[index] = -x;
+                        normals[index+1] = -y;
+                        normals[index+2] = -z;
+                    }
+                }
+            }
+        };
         get_triangle_indices() {
             debugger;
             // determine vertex position indices for triangles for active triangles.
@@ -2658,6 +2704,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var block_offset = layer_offset * s.num_layers;
             var triangle_corner_offsets = this.triangle_corner_offsets;
             var triangle_cursor = 0;
+            var diagonal_offset = this.diagonal_offset;
             for (var root_index=0; root_index<indices.length; root_index++) {
                 var root = indices[root_index];
                 if ((root >= 0) && (index_indicator[root] >= 0)) {
@@ -2671,25 +2718,28 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     if (in_row && in_layer && in_block) {
                         // root is not on an outer boundary
                         // generate all triangles with valid corner indices
-                        var corner_value = values[root];
-                        var invert_triangles = (corner_value < threshold);
+                        // var diff0 = values[root + diagonal_offset] - threshold;
+                        // var invert_triangle = (diff0 < 0)
                         for (var triangle_index=0; triangle_index<triangle_corner_offsets.length; triangle_index++) {
                             var offsets = triangle_corner_offsets[triangle_index];
                             var corner_index0 = root + offsets[0];
                             var corner_index1 = root + offsets[1];
                             if ((index_indicator[corner_index0] >= 0) && (index_indicator[corner_index1] >= 0)) {
                                 // valid triangle!
+                                // var diff1 = values[corner_index0] - threshold;
+                                // var diff2 = values[corner_index1] - threshold;
+                                // var invert_triangle = ((diff0 * diff1 * diff2) < 0.0);
                                 triangle_indices[triangle_cursor] = root;
                                 triangle_cursor ++;
-                                if (invert_triangles) {
+                                //if (invert_triangle) {
                                     triangle_indices[triangle_cursor] = corner_index1;
                                     triangle_cursor ++;
                                     triangle_indices[triangle_cursor] = corner_index0;
-                                } else {
-                                    triangle_indices[triangle_cursor] = corner_index0;
-                                    triangle_cursor ++;
-                                    triangle_indices[triangle_cursor] = corner_index1;
-                                }
+                                //} else {
+                                //    triangle_indices[triangle_cursor] = corner_index0;
+                                //    triangle_cursor ++;
+                                //    triangle_indices[triangle_cursor] = corner_index1;
+                                //}
                                 triangle_cursor ++;
                             }
                         }
@@ -2704,21 +2754,67 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.triangle_indices = triangle_indices;
             return triangle_indices;
         };
-        get_positions(triangle_positions) {
+        _get_positions(triangle_positions) {
             this.voxel_positions = this.segments.get_positions(this.voxel_positions);
             triangle_positions = this.select_positions(this.triangle_indices, this.voxel_positions, triangle_positions);
+            // xxxx debug only
+            // triangle_positions = this.boxy_positions(this.triangle_indices);
+            this._triangle_positions = triangle_positions;
             return triangle_positions;
         };
-        get_normals(triangle_normals) {
+        get_positions(triangle_positions) {
+            return this._triangle_positions;
+        };
+        _get_normals(triangle_normals) {
             this.voxel_normals = this.segments.get_normals(this.voxel_normals);
             triangle_normals = this.select_positions(this.triangle_indices, this.voxel_normals, triangle_normals);
+            this._triangle_normals = triangle_normals;
             return triangle_normals;
+        };
+        get_normals(triangle_positions) {
+            return this._triangle_normals;
         };
         get_colors(triangle_colors) {
             this.voxel_colors = this.segments.get_colors(this.voxel_colors);
             triangle_colors = this.select_positions(this.triangle_indices, this.voxel_colors, triangle_colors);
+            this._triangle_colors = triangle_colors;
             return triangle_colors;
         };
+        boxy_positions(triangle_indices) {
+            // for debug/test only -- unadjusted box positions.
+            var s = this.settings;
+            var fill_value = -1;
+            var n_indices = triangle_indices.length;
+            //var index_indicator = this.index_indicator;
+            var buffersize = 3 * 3 * 6 * this.indices.length;
+            var triangle_positions = new Float32Array( buffersize );
+            var cursor = 0;
+            var row_offset = s.num_cols;
+            var layer_offset = s.num_cols * s.num_rows;
+            var block_offset = layer_offset * s.num_layers;
+            for (var i=0; i<n_indices; i++) {
+                // position index is for a xyz vector ravelled in positions array.
+                var voxel_index = triangle_indices[i];
+                //var vertex_index = index_indicator[voxel_index]; // translate voxel id to compact location
+                var block_ravelled_index = voxel_index % block_offset;
+                var layer_num = Math.floor(block_ravelled_index / layer_offset);
+                var layer_ravelled_index = block_ravelled_index % layer_offset;
+                var row_num = Math.floor(layer_ravelled_index / row_offset);
+                var col_num = layer_ravelled_index % row_offset;
+                triangle_positions[cursor] = col_num;
+                cursor ++;
+                triangle_positions[cursor] = row_num;
+                cursor ++;
+                triangle_positions[cursor] = layer_num;
+                cursor ++;
+            }
+            // fill in the remaining positions (degenerate triangles)
+            while (cursor < buffersize) {
+                triangle_positions[cursor] = fill_value;
+                cursor ++;
+            }
+            return triangle_positions;
+        }
         select_positions(triangle_indices, positions, triangle_positions, fill_value) {
             fill_value = fill_value || -1;
             // assumes index_indicator now "points into" the positions array
@@ -2749,6 +2845,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 triangle_positions[cursor] = positions[position_index];
                 cursor ++;
             }
+            this._last_nondegenerate_position = cursor;
             // fill in the remaining positions (degenerate triangles)
             while (cursor < buffersize) {
                 triangle_positions[cursor] = fill_value;
