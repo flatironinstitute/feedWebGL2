@@ -25,6 +25,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     dx: [1,0,0],
                     dy: [0,1,0],
                     dz: [0,0,1],
+                    // isosurface generation method "diagonal" or "tetrahedra"
+                    method: "tetrahedra",
                 }, options);
                 var s = this.settings;
                 var context = s.feedbackContext;
@@ -73,7 +75,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     throw new Error("buffer size must exactly match dimensions.")
                 }
                 var s = this.settings;
-                var surface =  $.fn.webGL2surfaces3dopt({
+                var init = $.fn.webGL2surfaces3dopt;
+                if (s.method == "diagonal") {
+                    init = $.fn.webGL2surfaces_from_diagonals;
+                }
+                var surface =  init({
                     feedbackContext: this.feedbackContext,
                     valuesArray: this.buffer,
                     num_rows: num_rows,
