@@ -296,11 +296,33 @@
                 this.uniforms = {};
                 for (var name in uniform_descriptions) {
                     var desc = uniform_descriptions[name];
+                    var vtype = desc.vtype;
+                    var default_value = desc.default_value;
+                    if (!vtype) {
+                        // try to infer vtype like "4fv" or "3iv"
+                        var dimension = desc.dimension;
+                        if (!dimension) {
+                            if (desc.is_matrix) {
+                                throw new Error("vtype or dimension required for matrix uniform");
+                            }
+                            dimension = default_value.length;
+                        }
+                        var type = desc.type || "float";
+                        var t_initial
+                        if (type == "float") {
+                            t_initial = "f";
+                        } else if (type == "int") {
+                            t_initial = "i";
+                        } else {
+                            throw new Error("unknown type: " + type);
+                        }
+                        vtype = ("" + dimension) + t_initial + "v";
+                    }
                     var uniform = null;
                     if (desc.is_matrix) {
-                        uniform = new MatrixUniform(this, name, desc.vtype, desc.default_value);
+                        uniform = new MatrixUniform(this, name, vtype, default_value);
                     } else {
-                        uniform = new VectorUniform(this, name, desc.vtype, desc.default_value);
+                        uniform = new VectorUniform(this, name, vtype, default_value);
                     }
                     this.uniforms[name] = uniform;
                 }
@@ -308,7 +330,10 @@
                 this.inputs = {};
                 var input_descriptions = this.settings.inputs;
                 for (var name in input_descriptions) {
-                    var desc = input_descriptions[name];
+                    var desc = $.extend({
+                        // default assumption input is per vertex (not instanceds)
+                        per_vertex: true,
+                    }, input_descriptions[name]);
                     var nc = desc.num_components;
                     var ty = desc.type;
                     var input = null;
