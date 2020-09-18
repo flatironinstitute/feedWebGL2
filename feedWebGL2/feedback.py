@@ -62,6 +62,10 @@ class FeedbackProgram(jp_proxy_widget.JSProxyWidget):
                 return Array.from(typed);
             };
 
+            element.change_uniform_vector = function(name, vector_value) {
+                element.feedback_runner.change_uniform(name, vector_value);
+            };
+
             element.html("Feedback program initialized");
         """, context=context, program=program, runner=runner)
 
@@ -69,6 +73,9 @@ class FeedbackProgram(jp_proxy_widget.JSProxyWidget):
         self.element.feedback_runner.run().sync_value()
         self.run_count += 1
         self.element.html("program run: " + repr(self.run_count))
+
+    def change_uniform_vector(self, name, vector_value):
+        self.element.change_uniform_vector(name, list(vector_value))
     
     def get_feedback(self, name):
         return self.element.get_feedback(name).sync_value()
