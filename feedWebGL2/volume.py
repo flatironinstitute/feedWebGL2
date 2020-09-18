@@ -39,8 +39,9 @@ def load_requirements(widget=None, silent=True, additional=()):
     widget.load_js_files(all_requirements)
     dual_canvas.load_requirements(widget, silent=silent)
     if not silent:
-        widget.element.html("<div>Requirements for <b>chart_ipynb</b> have been loaded.</div>")
+        widget.element.html("<div>Requirements for <b>volume viewer</b> have been loaded.</div>")
         display(widget)
+    REQUIREMENTS_LOADED = True
 
 class Volume32(jp_proxy_widget.JSProxyWidget):
 
@@ -51,17 +52,25 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         self.options = None
         self.data = None
 
-    def set_options(self, num_rows, num_cols, num_layers, threshold=0, shrink_factor=0.2):
+    def set_options(
+            self, num_rows, num_cols, num_layers, 
+            threshold=0, shrink_factor=0.2, method="tetrahedra",
+            ):
+        methods = ("tetrahedra", "diagonal")
+        assert method in methods, "method must be in " + repr(methods)
         options = jp_proxy_widget.clean_dict(
             num_rows=num_rows, num_cols=num_cols, num_layers=num_layers, 
-            threshold=threshold, shrink_factor=shrink_factor
+            threshold=threshold, shrink_factor=shrink_factor, method=method,
         )
         self.options = options
         self.js_init("""
             element.V = element.volume32(options);
         """, options=options)
 
-    def load_3d_numpy_array(self, ary, threshold=None, shrink_factor=None, chunksize=10000000):
+    def load_3d_numpy_array(
+            self, ary, 
+            threshold=None, shrink_factor=None, chunksize=10000000, method="tetrahedra",
+            ):
         if not self.rendered:
             display(self)
         if threshold is None:
@@ -71,7 +80,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         if shrink_factor is None:
             shrink_factor = self.shrink_heuristic(*ary.shape)
         ary32 = np.array(ary, dtype=np.float32)
-        self.set_options(num_rows, num_cols, num_layers, threshold=threshold, shrink_factor=shrink_factor)
+        self.set_options(
+            num_rows, num_cols, num_layers, 
+            threshold=threshold, shrink_factor=shrink_factor, method=method)
         self.data = ary32
         ary_bytes = bytearray(ary32.tobytes())
         nbytes = len(ary_bytes)
@@ -199,9 +210,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
                 swatch.arrow(location1=tcenter, location2=(tcenter + 0.2 * normal), lineWidth=2, color=color, head_length=0.02)
         swatch.fit(0.6)
 
-def display_isosurface(for_array, threshold=None, save=False):
+def display_isosurface(for_array, threshold=None, save=False, method="tetrahedra"):
     W = Volume32()
-    W.load_3d_numpy_array(for_array, threshold=threshold)
+    W.load_3d_numpy_array(for_array, threshold=threshold, method=method)
     W.build()
     if save:
         return W

@@ -1,0 +1,3 @@
+include README.md
+recursive-include feedWebGL2/js *.*
+recursive-include feedWebGL2/js_lib *.*

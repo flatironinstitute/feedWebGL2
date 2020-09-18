@@ -2,6 +2,8 @@
 // jQuery plugin for webGL feedback programs.
 
 // xxxx should provide logic for releasing structures.
+// xxxx should support array of texture 
+// https://stackoverflow.com/questions/19592850/how-to-bind-an-array-of-textures-to-a-webgl-shader-uniform
 
 (function($) {
     $.fn.feedWebGL2 = function (options) {
@@ -63,6 +65,16 @@
                     }
                 }
             };
+            lose_context() {
+                // Lose the webGL context. This should release resources on the GPU?
+                // xxxx could explicitly dispose of resources recursively....
+                this.canvas = null;
+                this.buffers = null;
+                this.programs = null;
+                this.error = "Web context has been forced lost by API call lose_context.";
+                this.gl.getExtension('WEBGL_lose_context').loseContext();
+                this.gl = null;
+            };
             fresh_name(prefix) {
                 this.counter += 1;
                 return prefix + this.counter;
@@ -98,6 +110,7 @@
                 // where the sentinel is negative the from_buffer is degenerate
                 // pack non-degenerate entries into to_buffer
                 // KISS implementation for now (no sub-buffer copies)
+                // 
                 fill = fill || 0;
                 var limit = to_buffer.length;
                 var to_index = 0;
@@ -109,6 +122,7 @@
                         from_index += num_components;
                     } else {
                         // copy
+                        //sentinel[i] = to_index; // don't do this it breaks something!
                         for (var j=0; j<num_components; j++) {
                             to_buffer[to_index] = from_buffer[from_index];
                             from_index ++;
@@ -282,11 +296,33 @@
                 this.uniforms = {};
                 for (var name in uniform_descriptions) {
                     var desc = uniform_descriptions[name];
+                    var vtype = desc.vtype;
+                    var default_value = desc.default_value;
+                    if (!vtype) {
+                        // try to infer vtype like "4fv" or "3iv"
+                        var dimension = desc.dimension;
+                        if (!dimension) {
+                            if (desc.is_matrix) {
+                                throw new Error("vtype or dimension required for matrix uniform");
+                            }
+                            dimension = default_value.length;
+                        }
+                        var type = desc.type || "float";
+                        var t_initial
+                        if (type == "float") {
+                            t_initial = "f";
+                        } else if (type == "int") {
+                            t_initial = "i";
+                        } else {
+                            throw new Error("unknown type: " + type);
+                        }
+                        vtype = ("" + dimension) + t_initial + "v";
+                    }
                     var uniform = null;
                     if (desc.is_matrix) {
-                        uniform = new MatrixUniform(this, name, desc.vtype, desc.default_value);
+                        uniform = new MatrixUniform(this, name, vtype, default_value);
                     } else {
-                        uniform = new VectorUniform(this, name, desc.vtype, desc.default_value);
+                        uniform = new VectorUniform(this, name, vtype, default_value);
                     }
                     this.uniforms[name] = uniform;
                 }
@@ -294,7 +330,10 @@
                 this.inputs = {};
                 var input_descriptions = this.settings.inputs;
                 for (var name in input_descriptions) {
-                    var desc = input_descriptions[name];
+                    var desc = $.extend({
+                        // default assumption input is per vertex (not instanceds)
+                        per_vertex: true,
+                    }, input_descriptions[name]);
                     var nc = desc.num_components;
                     var ty = desc.type;
                     var input = null;
@@ -423,6 +462,11 @@
                 var feedback = this.allocated_feedbacks[name];
                 return feedback.get_array(optionalPreAllocatedArrBuffer);
             };
+            copy_feedback_to_buffer(from_feedback_name, to_buffer_name) {
+                var feedback = this.allocated_feedbacks[from_feedback_name];
+                var buffer = this.program.context.get_buffer(to_buffer_name);
+                feedback.copy_into_buffer(buffer);
+            };
             feedback_vectors(name) {
                 var feedback = this.allocated_feedbacks[name];
                 return feedback.get_vectors();
@@ -506,7 +550,24 @@
                 // xxxxx is this needed?                
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            }
+            };
+            reload_array(array) {
+                // reload the texture with new array values
+                var gl = this.context.gl;
+                var target = gl.TEXTURE_2D;
+                var level = 0;
+                var xoffset = 0;
+                var yoffset = 0;
+                var height = this.height;
+                var width = this.width;
+                var format = gl[this.format];
+                var gl_type = gl[this.typ];
+                var srcData = array;
+                var srcOffset = 0;
+                // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
+                gl.bindTexture(target, this.gl_texture);
+                gl.texSubImage2D(target, level, xoffset, yoffset, width, height, format, gl_type, srcData, srcOffset);
+            };
         };
 
         class FeedbackVariable {

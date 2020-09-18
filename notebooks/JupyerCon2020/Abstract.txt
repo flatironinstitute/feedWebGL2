@@ -1,0 +1,27 @@
+Using WebGL2 Transform Feedback in Jupiter Widgets for advanced computations and graphics
+
+Aaron Watters
+Flatiron Institute
+New York City
+
+Hello, my name is Aaron Watters and I am a 
+Senior software engineer with the Flatiron Institute of the 
+Simons Foundation in New York City.
+
+This talk describes how WebGL2 makes it possible to use
+The GPU of a standard computer to do highly parallel computations.
+By making use a of a feature called Transform/Feedback
+A programmer can capture outputs from a GPU computation
+And either send them into additional GPU processing stages
+Or extract the data for other general uses.
+
+The talk also describes support libraries I built which simplify
+The process of building transform/feedback processing stages
+And how transform/feedback stages can be created and controlled
+From within a Jupiter notebook
+
+The talk describes the implementation of the marching tetrahedra
+Method for generating 3 dimensional isosurfaces from dense arrays
+As a concrete example usage of transform/feedback.
+The marching tetrahedra method is implemented in two stages which
+Feed directly into the standard three.js rendering pipline.
