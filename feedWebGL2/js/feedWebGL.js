@@ -483,12 +483,20 @@
                 this.num_elements = null;
             };
             copy_from_array(array) {
+                // try to convert untyped array to float 32 implicitly
+                if (!array.BYTES_PER_ELEMENT) {
+                    array = new Float32Array(array);
+                }
                 var gl = this.context.gl;
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
                 gl.bufferSubData(gl.ARRAY_BUFFER, 0, array, 0, this.num_elements);
                 gl.bindBuffer(gl.ARRAY_BUFFER, null);
             };
             initialize_from_array(array) {
+                // try to convert untyped array to float 32 implicitly
+                if (!array.BYTES_PER_ELEMENT) {
+                    array = new Float32Array(array);
+                }
                 if (this.bytes_per_element != array.BYTES_PER_ELEMENT) {
                     throw new Error("byte per element must match " + this.bytes_per_element + " <> " + array.BYTES_PER_ELEMENT);
                 }
