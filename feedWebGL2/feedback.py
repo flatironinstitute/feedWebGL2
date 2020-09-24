@@ -41,15 +41,27 @@ def load_requirements(widget=None, silent=True, additional=()):
 
 class FeedbackProgram(jp_proxy_widget.JSProxyWidget):
 
-    run_count = 0
+    #run_count = 0
 
     def __init__(self, context, program, runner, *pargs, **kwargs):
         super(FeedbackProgram, self).__init__(*pargs, **kwargs)
         load_requirements(self)
         self.element.html("Uninitialized Feedback Program Widget.")
         self.js_init("""
-            element.canvas = $('<canvas width="100" height="100"></canvas>');
+            //debugger;
+            var width = context.width || 100;
+            var height = context.height || width;
+            element.canvas = $(`<canvas width="${width}" height="${height}">Oh no! Your browser doesn't support canvas!</canvas>`);
             element.gl = element.canvas[0].getContext("webgl2");
+            if (context.show) {
+                element.empty();
+                element.canvas.css("background", "#cdcdcd");
+                element.canvas.appendTo(element);
+                runner.rasterize = true; // alway rasterize if show is true.
+                // disable face culling
+                //element.gl.disable(element.gl.CULL_FACE);
+                element.gl.enable(element.gl.DEPTH_TEST);
+            }
             var context_description = $.extend({
                 gl: element.gl,
             }, context);
@@ -66,19 +78,45 @@ class FeedbackProgram(jp_proxy_widget.JSProxyWidget):
                 element.feedback_runner.change_uniform(name, vector_value);
             };
 
-            element.html("Feedback program initialized");
+            element.run_count = 0;
+
+            element.run_feedback_program = function() {
+                element.run_count += 1;
+                if (context.show) {
+                    // xxxx should make these settings adjustable...
+                    var gl = element.gl;
+                    gl.viewport(0, 0, width, height);
+                    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+                } else {
+                    element.html("Program run: " +  element.run_count)
+                }
+                return element.feedback_runner.run();    
+            };
+
+            element.change_buffer = function(buffer_name, array) {
+                var buffer = element.feedback_context.get_buffer(buffer_name);
+                buffer.copy_from_array(array);
+            };
+
+            if (!context.show) {
+                element.html("Feedback program initialized");
+            }
         """, context=context, program=program, runner=runner)
 
     def run(self):
-        self.element.feedback_runner.run().sync_value()
-        self.run_count += 1
-        self.element.html("program run: " + repr(self.run_count))
+        self.element.run_feedback_program()
+        #self.run_count += 1
+        #self.element.html("program run: " + repr(self.run_count))
 
     def change_uniform_vector(self, name, vector_value):
         self.element.change_uniform_vector(name, list(vector_value))
     
     def get_feedback(self, name):
         return self.element.get_feedback(name).sync_value()
+
+    def change_buffer(self, buffer_name, array):
+        self.element.change_buffer(buffer_name, array)
 
 # These are placeholders -- eventually replace them with better validators
 Context = dict
