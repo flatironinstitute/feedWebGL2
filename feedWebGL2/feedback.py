@@ -48,7 +48,7 @@ class FeedbackProgram(jp_proxy_widget.JSProxyWidget):
         load_requirements(self)
         self.element.html("Uninitialized Feedback Program Widget.")
         self.js_init("""
-            //debugger;
+            debugger;
             var width = context.width || 100;
             var height = context.height || width;
             element.canvas = $(`<canvas width="${width}" height="${height}">Oh no! Your browser doesn't support canvas!</canvas>`);
@@ -100,7 +100,7 @@ class FeedbackProgram(jp_proxy_widget.JSProxyWidget):
             };
 
             if (!context.show) {
-                element.html("Feedback program initialized");
+                element.html("Feedback program initialized xxx");
             }
         """, context=context, program=program, runner=runner)
 
@@ -130,5 +130,9 @@ Uniforms = dict
 Uniform = dict
 Inputs = dict
 Input = dict
+Sampler = dict
+Samplers = dict
+Texture = dict
+Textures = dict
 BufferLocation = dict
 
