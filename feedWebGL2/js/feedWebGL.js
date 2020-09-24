@@ -540,6 +540,10 @@
                 this.gl_texture = context.gl.createTexture();
             };
             load_array(array, width, height) {
+                // try to convert untyped array to float 32 implicitly
+                if (!array.BYTES_PER_ELEMENT) {
+                    array = new Float32Array(array);
+                }
                 if (width) {
                     this.width = width;
                 };
@@ -560,6 +564,10 @@
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
             };
             reload_array(array) {
+                // try to convert untyped array to float 32 implicitly
+                if (!array.BYTES_PER_ELEMENT) {
+                    array = new Float32Array(array);
+                }
                 // reload the texture with new array values
                 var gl = this.context.gl;
                 var target = gl.TEXTURE_2D;
