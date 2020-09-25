@@ -563,6 +563,26 @@
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
             };
+            reload_from_buffer(feedback_buffer) {
+                // without leaving the GPU load buffer contents to the texture.
+                // bind the buffer to the gl.PIXEL_UNPACK_BUFFER
+                var gl = this.context.gl;
+                gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, feedback_buffer.buffer);
+                var target = gl.TEXTURE_2D;
+                var level = 0;
+                var xoffset = 0;
+                var yoffset = 0;
+                var height = this.height;
+                var width = this.width;
+                var format = gl[this.format];
+                var gl_type = gl[this.typ];
+                var offset = 0;
+                // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
+                gl.bindTexture(target, this.gl_texture);
+                //texSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, GLintptr offset)
+                gl.texSubImage2D(target, level, xoffset, yoffset, width, height, format, gl_type, offset);
+                gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+            };
             reload_array(array) {
                 // try to convert untyped array to float 32 implicitly
                 if (!array.BYTES_PER_ELEMENT) {
