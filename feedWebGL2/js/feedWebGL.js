@@ -474,18 +474,19 @@
         };
 
         class FeedbackBuffer {
-            constructor(context, name, bytes_per_element) {
+            constructor(context, name, bytes_per_element, array_type) {
                 this.context = context;
                 this.name = name;
                 this.bytes_per_element = bytes_per_element || 4;
                 this.buffer = context.gl.createBuffer();
+                this.array_type = array_type || Float32Array;
                 this.byte_size = null;
                 this.num_elements = null;
             };
             copy_from_array(array) {
-                // try to convert untyped array to float 32 implicitly
+                // try to convert untyped array implicitly
                 if (!array.BYTES_PER_ELEMENT) {
-                    array = new Float32Array(array);
+                    array = new this.array_type(array);
                 }
                 var gl = this.context.gl;
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
@@ -493,9 +494,9 @@
                 gl.bindBuffer(gl.ARRAY_BUFFER, null);
             };
             initialize_from_array(array) {
-                // try to convert untyped array to float 32 implicitly
+                // try to convert untyped array implicitly
                 if (!array.BYTES_PER_ELEMENT) {
-                    array = new Float32Array(array);
+                    array = new this.array_type(array);
                 }
                 if (this.bytes_per_element != array.BYTES_PER_ELEMENT) {
                     throw new Error("byte per element must match " + this.bytes_per_element + " <> " + array.BYTES_PER_ELEMENT);
@@ -525,6 +526,20 @@
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
                 gl.bufferData(gl.ARRAY_BUFFER, this.byte_size, gl.DYNAMIC_COPY);  //  ?? dynamic copy??
                 gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            };
+            get_slice(start, end) {
+                var item_length = end - start;
+                var byte_length = item_length * this.bytes_per_element;
+                var gl = this.context.gl;
+                var target = gl.ARRAY_BUFFER;
+                var srcByteOffset = start * this.bytes_per_element;
+                var dstData = new this.array_type(item_length);
+                var dstOffset = 0;
+                gl.bindBuffer(target, this.buffer);
+                // ??? byte_length or item_length here?
+                gl.getBufferSubData(target, srcByteOffset, dstData, dstOffset, byte_length);
+                gl.bindBuffer(target, null);
+                return dstData
             };
         };
 
