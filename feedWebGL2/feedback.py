@@ -100,7 +100,7 @@ class FeedbackProgram(jp_proxy_widget.JSProxyWidget):
             };
 
             if (!context.show) {
-                element.html("Feedback program initialized xxx");
+                element.html("Feedback program initialized");
             }
         """, context=context, program=program, runner=runner)
 
