@@ -2046,8 +2046,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             if (!this.parameters_set) {
                 // mark all (other) perspectives as invalid
                 this.surface.reset_perspectives();
-                this.surface.set_color_rotator(self.settings.color_rotator);
-                this.surface.set_threshold(self.settings.threshold)
+                this.surface.set_color_rotator(this.settings.color_rotator);
+                this.surface.set_threshold(this.settings.threshold)
                 this.parameters_set = true;
             }
         };
