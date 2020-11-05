@@ -116,7 +116,9 @@ class FeedbackProgram(jp_proxy_widget.JSProxyWidget):
         return self.element.get_feedback(name).sync_value()
 
     def change_buffer(self, buffer_name, array):
-        self.element.change_buffer(buffer_name, array)
+        array = np.array(array)
+        sequence = array.ravel().tolist()
+        self.element.change_buffer(buffer_name, sequence)
 
 # These are placeholders -- eventually replace them with better validators
 Context = dict
