@@ -425,467 +425,468 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     };
 
     $.fn.webGL2crossingVoxels = function(options) {
+        return new WebGL2CrossingVoxels(options);
+    };
 
-        class WebGL2CrossingVoxels {
-            constructor(options) {
-                this.settings = $.extend({
-                    feedbackContext: null,    // the underlying FeedbackContext context to use
-                    valuesArray: null,   // the array buffer of values to contour
-                    num_rows: null,
-                    num_cols: null,
-                    num_layers: 1,  // default to "flat"
-                    num_blocks: 1,  // for physics simulations data may come in multiple blocks
-                    grid_min: [0, 0, 0],
-                    grid_max: [-1, -1, -1],  // disabled grid coordinate filtering (invalid limits)
-                    rasterize: false,
-                    threshold: 0,  // value at contour
-                    // when getting compact arrays
-                    // shrink the array sizes by this factor.
-                    shrink_factor: 0.2,
-                    // grid coordinate convention.
-                    location: "std",
-                    // samplers are prepared by caller if needed.  Descriptors provided by caller.
-                    samplers: {},
-                    // invalid marker
-                    location_fill: -1e12,
-                    // coordinate vectors
-                    dx: [1, 0, 0],
-                    dy: [0, 1, 0],
-                    dz: [0, 0, 1],
-                    fragment_shader: noop_fragment_shader,
-                }, options);
 
-                var s = this.settings;
-                this.feedbackContext = s.feedbackContext;
-                var nvalues = s.valuesArray.length;
-                var nvoxels = s.num_rows * s.num_cols * s.num_layers * s.num_blocks;
-                if (nvalues != nvoxels) {
-                    // for now strict checking
-                    throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
-                }
-                // allocate and load buffer with a fresh name
-                this.buffer = this.feedbackContext.buffer()
-                this.buffer.initialize_from_array(s.valuesArray);
-                var buffername = this.buffer.name;
+    class WebGL2CrossingVoxels {
+        constructor(options) {
+            this.settings = $.extend({
+                feedbackContext: null,    // the underlying FeedbackContext context to use
+                valuesArray: null,   // the array buffer of values to contour
+                num_rows: null,
+                num_cols: null,
+                num_layers: 1,  // default to "flat"
+                num_blocks: 1,  // for physics simulations data may come in multiple blocks
+                grid_min: [0, 0, 0],
+                grid_max: [-1, -1, -1],  // disabled grid coordinate filtering (invalid limits)
+                rasterize: false,
+                threshold: 0,  // value at contour
+                // when getting compact arrays
+                // shrink the array sizes by this factor.
+                shrink_factor: 0.2,
+                // grid coordinate convention.
+                location: "std",
+                // samplers are prepared by caller if needed.  Descriptors provided by caller.
+                samplers: {},
+                // invalid marker
+                location_fill: -1e12,
+                // coordinate vectors
+                dx: [1, 0, 0],
+                dy: [0, 1, 0],
+                dz: [0, 0, 1],
+                fragment_shader: noop_fragment_shader,
+            }, options);
 
-                var vertex_shader;
-                if (s.location == "std") {
-                    vertex_shader = crossingVoxelsShader(locate_std_decl);
-                } else if (s.location="polar_scaled") {
-                    vertex_shader = crossingVoxelsShader(locate_polar_scaled_decl);
-                } else {
-                    throw new Error("unknown grid location type: " + s.location);
-                }
+            var s = this.settings;
+            this.feedbackContext = s.feedbackContext;
+            var nvalues = s.valuesArray.length;
+            var nvoxels = s.num_rows * s.num_cols * s.num_layers * s.num_blocks;
+            if (nvalues != nvoxels) {
+                // for now strict checking
+                throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
+            }
+            // allocate and load buffer with a fresh name
+            this.buffer = this.feedbackContext.buffer()
+            this.buffer.initialize_from_array(s.valuesArray);
+            var buffername = this.buffer.name;
 
-                this.program = this.feedbackContext.program({
-                    vertex_shader: vertex_shader,
-                    fragment_shader: this.settings.fragment_shader,
-                    feedbacks: {
-                        index: {type: "int"},
-                        location: {num_components: 3},
-                        front_corners: {num_components: 4},
-                        back_corners: {num_components: 4},
-                    },
-                });
+            var vertex_shader;
+            if (s.location == "std") {
+                vertex_shader = crossingVoxelsShader(locate_std_decl);
+            } else if (s.location="polar_scaled") {
+                vertex_shader = crossingVoxelsShader(locate_polar_scaled_decl);
+            } else {
+                throw new Error("unknown grid location type: " + s.location);
+            }
 
-                var inputs = {};
-                var num_voxels = add_corner_offset_inputs(s, nvalues, buffername, inputs);
+            this.program = this.feedbackContext.program({
+                vertex_shader: vertex_shader,
+                fragment_shader: this.settings.fragment_shader,
+                feedbacks: {
+                    index: {type: "int"},
+                    location: {num_components: 3},
+                    front_corners: {num_components: 4},
+                    back_corners: {num_components: 4},
+                },
+            });
 
-                /*
-                // set up input parameters
-                //  indexing is [ix, iy, iz] -- z is fastest
-                //var x_offset = 1;
-                var z_offset = 1;
-                var y_offset = s.num_cols;
-                //var z_offset = s.num_cols * s.num_rows;
-                var x_offset = s.num_cols * s.num_rows;
-                var num_voxels = nvalues - (x_offset + y_offset + z_offset);
+            var inputs = {};
+            var num_voxels = add_corner_offset_inputs(s, nvalues, buffername, inputs);
 
-                var inputs = {};
-                var add_input = function (ix, iy, iz) {
-                    var name = (("a" + ix) + iy) + iz;
-                    var dx = [0, x_offset][ix];
-                    var dy = [0, y_offset][iy];
-                    var dz = [0, z_offset][iz];
-                    inputs[name] = {
-                        per_vertex: true,
-                        num_components: 1,
-                        from_buffer: {
-                            name: buffername,
-                            skip_elements: dx + dy + dz,
-                        }
+            /*
+            // set up input parameters
+            //  indexing is [ix, iy, iz] -- z is fastest
+            //var x_offset = 1;
+            var z_offset = 1;
+            var y_offset = s.num_cols;
+            //var z_offset = s.num_cols * s.num_rows;
+            var x_offset = s.num_cols * s.num_rows;
+            var num_voxels = nvalues - (x_offset + y_offset + z_offset);
+
+            var inputs = {};
+            var add_input = function (ix, iy, iz) {
+                var name = (("a" + ix) + iy) + iz;
+                var dx = [0, x_offset][ix];
+                var dy = [0, y_offset][iy];
+                var dz = [0, z_offset][iz];
+                inputs[name] = {
+                    per_vertex: true,
+                    num_components: 1,
+                    from_buffer: {
+                        name: buffername,
+                        skip_elements: dx + dy + dz,
                     }
-                };
-                add_input(0,0,0);
-                add_input(0,0,1);
-                add_input(0,1,0);
-                add_input(0,1,1);
-                add_input(1,0,0);
-                add_input(1,0,1);
-                add_input(1,1,0);
-                add_input(1,1,1);
-                */
+                }
+            };
+            add_input(0,0,0);
+            add_input(0,0,1);
+            add_input(0,1,0);
+            add_input(0,1,1);
+            add_input(1,0,0);
+            add_input(1,0,1);
+            add_input(1,1,0);
+            add_input(1,1,1);
+            */
 
-                this.runner = this.program.runner({
-                    num_instances: 1,
-                    vertices_per_instance: num_voxels,
-                    rasterize: s.rasterize,
-                    uniforms: {
-                        // number of rows
-                        uRowSize: {
-                            vtype: "1iv",
-                            default_value: [s.num_cols],
-                        },
-                        // numver of columns
-                        uColSize: {
-                            vtype: "1iv",
-                            default_value: [s.num_rows],
-                        },
-                        // number of layers
-                        uLayerSize: {
-                            vtype: "1iv",
-                            default_value: [s.num_layers],
-                        },
-                        // threshold value
-                        uValue: {
-                            vtype: "1fv",
-                            default_value: [s.threshold],
-                        },
-                        u_grid_min: {
-                            vtype: "3fv",
-                            default_value: s.grid_min,
-                        },
-                        u_grid_max: {
-                            vtype: "3fv",
-                            default_value: s.grid_max,
-                        },
+            this.runner = this.program.runner({
+                num_instances: 1,
+                vertices_per_instance: num_voxels,
+                rasterize: s.rasterize,
+                uniforms: {
+                    // number of rows
+                    uRowSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_cols],
                     },
-                    inputs: inputs,
-                    samplers: s.samplers,
-                });
-                this.front_corners_array = null;
-                this.back_corners_array = null;
-                this.index_array = null;
-                this.compact_length = null;
-            };
-            run() {
-                this.runner.install_uniforms();
-                this.runner.run();
-            };
-            get_sphere_mesh(options) {
-                // must be run after get_compacted_feedbacks has run at least once.
-                var settings = $.extend({
-                    THREE: null,   // required THREE instance
-                    material: null, // material to use
-                    radius: 1,  // shared radius for spheres
-                    width_segments: 10,
-                    height_segments: 10,}, options);
-                settings.locations = this.compact_locations;
-                return $.fn.webGL2crossingVoxels.spheresMesh(settings);
-            };
-            get_points_mesh(options) {
-                // must be run after get_compacted_feedbacks has run at least once.
-                var that = this;
-                var settings = $.extend({
-                    THREE: null,   // required THREE instance
-                    size: null,
-                    colorize: false,
-                }, options);
-                settings.locations = this.compact_locations;
-                settings.center = this.compacted_feedbacks.mid;
-                settings.radius = this.compacted_feedbacks.radius;
+                    // numver of columns
+                    uColSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_rows],
+                    },
+                    // number of layers
+                    uLayerSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_layers],
+                    },
+                    // threshold value
+                    uValue: {
+                        vtype: "1fv",
+                        default_value: [s.threshold],
+                    },
+                    u_grid_min: {
+                        vtype: "3fv",
+                        default_value: s.grid_min,
+                    },
+                    u_grid_max: {
+                        vtype: "3fv",
+                        default_value: s.grid_max,
+                    },
+                },
+                inputs: inputs,
+                samplers: s.samplers,
+            });
+            this.front_corners_array = null;
+            this.back_corners_array = null;
+            this.index_array = null;
+            this.compact_length = null;
+        };
+        run() {
+            this.runner.install_uniforms();
+            this.runner.run();
+        };
+        get_sphere_mesh(options) {
+            // must be run after get_compacted_feedbacks has run at least once.
+            var settings = $.extend({
+                THREE: null,   // required THREE instance
+                material: null, // material to use
+                radius: 1,  // shared radius for spheres
+                width_segments: 10,
+                height_segments: 10,}, options);
+            settings.locations = this.compact_locations;
+            return $.fn.webGL2crossingVoxels.spheresMesh(settings);
+        };
+        get_points_mesh(options) {
+            // must be run after get_compacted_feedbacks has run at least once.
+            var that = this;
+            var settings = $.extend({
+                THREE: null,   // required THREE instance
+                size: null,
+                colorize: false,
+            }, options);
+            settings.locations = this.compact_locations;
+            settings.center = this.compacted_feedbacks.mid;
+            settings.radius = this.compacted_feedbacks.radius;
+            if (settings.colorize) {
+                settings.colors = this.get_location_colors();
+            }
+            var result = $.fn.webGL2crossingVoxels.pointsMesh(settings);
+            result.update_sphere_locations = function(locations, colors) {
+                locations = locations || that.compact_locations;
+                var geometry = result.geometry;
+                geometry.attributes.position.array = locations;
+                geometry.attributes.position.needsUpdate = true;
                 if (settings.colorize) {
-                    settings.colors = this.get_location_colors();
+                    colors = colors || that.get_location_colors();
+                    geometry.attributes.color.array = colors;
+                    geometry.attributes.color.needsUpdate = true;
                 }
-                var result = $.fn.webGL2crossingVoxels.pointsMesh(settings);
-                result.update_sphere_locations = function(locations, colors) {
-                    locations = locations || that.compact_locations;
-                    var geometry = result.geometry;
-                    geometry.attributes.position.array = locations;
-                    geometry.attributes.position.needsUpdate = true;
-                    if (settings.colorize) {
-                        colors = colors || that.get_location_colors();
-                        geometry.attributes.color.array = colors;
-                        geometry.attributes.color.needsUpdate = true;
-                    }
-                    var c = that.compacted_feedbacks.mid;
-                    var r = that.compacted_feedbacks.radius;
-                    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(c[0], c[1], c[2]), r);
-                };
-                result.update_sphere_locations();
-                return result;
+                var c = that.compacted_feedbacks.mid;
+                var r = that.compacted_feedbacks.radius;
+                geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(c[0], c[1], c[2]), r);
             };
-            get_compacted_feedbacks(location_only) {
-                var s = this.settings;
-                this.run();
-                var location_fill = this.settings.location_fill;
-                var rn = this.runner;
-                if (!location_only) {
-                    this.front_corners_array = rn.feedback_array(
-                        "front_corners",
-                        this.front_corners_array,
-                    );
-                    this.back_corners_array = rn.feedback_array(
-                        "back_corners",
-                        this.back_corners_array,
-                    );
-                    // xxxx locations are not always needed -- could optimize.
-                    this.location_array = rn.feedback_array(
-                        "location",
-                        this.location_array,
-                    );
-                } else {
-                    this.location_array = rn.feedback_array(
-                        "location",
-                        this.location_array,
-                    );
-                }
-                this.index_array = rn.feedback_array(
-                    "index",
-                    this.index_array,
+            result.update_sphere_locations();
+            return result;
+        };
+        get_compacted_feedbacks(location_only) {
+            var s = this.settings;
+            this.run();
+            var location_fill = this.settings.location_fill;
+            var rn = this.runner;
+            if (!location_only) {
+                this.front_corners_array = rn.feedback_array(
+                    "front_corners",
+                    this.front_corners_array,
                 );
-                if (this.compact_length === null) {
-                    // allocate arrays to size limit
-                    this.compact_length = Math.floor(
-                        this.settings.shrink_factor * this.index_array.length
-                    );
-                    this.compact_front_corners = new Float32Array(4 * this.compact_length);
-                    this.compact_back_corners = new Float32Array(4 * this.compact_length);
-                    this.compact_indices = new Int32Array(this.compact_length);
-                    this.compact_locations = new Float32Array(3 * this.compact_length);
-                }
-                // compact the arrays
-                this.compact_indices = this.feedbackContext.filter_degenerate_entries(
-                    this.index_array, this.index_array, this.compact_indices, 1, -1
+                this.back_corners_array = rn.feedback_array(
+                    "back_corners",
+                    this.back_corners_array,
                 );
-                if (!location_only) {
-                    this.compact_front_corners = this.feedbackContext.filter_degenerate_entries(
-                        this.index_array, this.front_corners_array, this.compact_front_corners, 4, -1
-                    );
-                    this.compact_back_corners = this.feedbackContext.filter_degenerate_entries(
-                        this.index_array, this.back_corners_array, this.compact_back_corners, 4, -1
-                    );
-                    // xxxx locations are not always needed -- could optimize.
-                    this.compact_locations = this.feedbackContext.filter_degenerate_entries(
-                        this.index_array, this.location_array, this.compact_locations, 3, location_fill
-                    );
-                } else {
-                    this.compact_locations = this.feedbackContext.filter_degenerate_entries(
-                        this.index_array, this.location_array, this.compact_locations, 3, location_fill
-                    );
-                }
-                // compute compact locations and extrema
-                var mins = null;
-                var maxes = null;
-                var locs = this.compact_locations;
-                var indices = this.compact_indices;
-                if ((indices.length>0) && (indices[0]>=0)) {
-                    mins = [locs[0], locs[1], locs[2]];
-                    maxes = [locs[0], locs[1], locs[2]];
-                    for (var i=0; i<indices.length; i++) {
-                        if (indices[i]<0) {
-                            break;
-                        }
-                        for (var k=0; k<3; k++) {
-                            var v = locs[i*3 + k];
-                            mins[k] = Math.min(mins[k], v);
-                            maxes[k] = Math.max(maxes[k], v);
-                        }
-                    }
-                } else {
-                    mins = [0,0,0];
-                    maxes = [0,0,0];
-                }
-                var n2 = 0;
-                var mid = [];
-                if (mins) {
-                    // increase the maxes by offset in each dim
-                    maxes = this.vsum(maxes, s.dx);
-                    maxes = this.vsum(maxes, s.dy);
-                    maxes = this.vsum(maxes, s.dz);
-                    n2 = this.vdistance2(mins, maxes);
-                    for (var k=0; k<3; k++) {
-                        mid.push(0.5 * (mins[k] + maxes[k]));
-                        //n2 += (mins[k] - maxes[k]) ** 2;
-                        var d = (mins[k] - maxes[k]);
-                        n2 += d * d;
-                    }
-                }
-                this.compacted_feedbacks = {
-                    mid: mid,
-                    radius: 0.5 * Math.sqrt(n2),
-                    mins: mins,
-                    maxes: maxes,
-                    indices: this.compact_indices, 
-                    front_corners: this.compact_front_corners,
-                    back_corners: this.compact_back_corners,
-                    locations: this.compact_locations,
-                };
-                return this.compacted_feedbacks;
-            };
-            // XXX should get vector ops from somewhere else.
-            vdistance2(v1, v2) {
-                var result = 0.0;
-                if ((v1) && (v2)) {
-                    for (var k=0; k<3; k++) {
-                        var d = v1[k] - v2[k];
-                        result += d * d;
-                    }
-                }
-                return result;
-            };
-            vsum(v1, v2) {
-                var result = [];
-                for (var k=0; k<3; k++) {
-                    result.push(v1[k] + v2[k]);
-                }
-                return result;
-            };
-            get_location_colors() {
-                var indices = this.compact_indices;
-                var locations = this.compact_locations;
-                var feedbacks = this.compacted_feedbacks;
-                var mins = feedbacks.mins;
-                var maxes = feedbacks.maxes;
-                var colors = this.compact_colors;
-                if (!colors) {
-                    colors = new Float32Array(locations.length);
-                    this.compact_colors = colors;
-                }
-                if ((!indices) || (indices[0] < 0)) {
-                    return colors;  // no points: do nothing
-                }
-                var diffs = [];
-                var base_intensity = 0.2;
-                for (var j=0; j<3; j++) {
-                    var d = maxes[j] - mins[j];
-                    if (d < 1e-9) {
-                        d = 1.0;
-                    }
-                    diffs.push(d / (1 - base_intensity));
-                }
+                // xxxx locations are not always needed -- could optimize.
+                this.location_array = rn.feedback_array(
+                    "location",
+                    this.location_array,
+                );
+            } else {
+                this.location_array = rn.feedback_array(
+                    "location",
+                    this.location_array,
+                );
+            }
+            this.index_array = rn.feedback_array(
+                "index",
+                this.index_array,
+            );
+            if (this.compact_length === null) {
+                // allocate arrays to size limit
+                this.compact_length = Math.floor(
+                    this.settings.shrink_factor * this.index_array.length
+                );
+                this.compact_front_corners = new Float32Array(4 * this.compact_length);
+                this.compact_back_corners = new Float32Array(4 * this.compact_length);
+                this.compact_indices = new Int32Array(this.compact_length);
+                this.compact_locations = new Float32Array(3 * this.compact_length);
+            }
+            // compact the arrays
+            this.compact_indices = this.feedbackContext.filter_degenerate_entries(
+                this.index_array, this.index_array, this.compact_indices, 1, -1
+            );
+            if (!location_only) {
+                this.compact_front_corners = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.front_corners_array, this.compact_front_corners, 4, -1
+                );
+                this.compact_back_corners = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.back_corners_array, this.compact_back_corners, 4, -1
+                );
+                // xxxx locations are not always needed -- could optimize.
+                this.compact_locations = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.location_array, this.compact_locations, 3, location_fill
+                );
+            } else {
+                this.compact_locations = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.location_array, this.compact_locations, 3, location_fill
+                );
+            }
+            // compute compact locations and extrema
+            var mins = null;
+            var maxes = null;
+            var locs = this.compact_locations;
+            var indices = this.compact_indices;
+            if ((indices.length>0) && (indices[0]>=0)) {
+                mins = [locs[0], locs[1], locs[2]];
+                maxes = [locs[0], locs[1], locs[2]];
                 for (var i=0; i<indices.length; i++) {
                     if (indices[i]<0) {
                         break;
                     }
-                    for (var j=0; j<3; j++) {
-                        var ij = i * 3 + j;
-                        colors[ij] = base_intensity + (locations[ij] - mins[j])/diffs[j];
+                    for (var k=0; k<3; k++) {
+                        var v = locs[i*3 + k];
+                        mins[k] = Math.min(mins[k], v);
+                        maxes[k] = Math.max(maxes[k], v);
                     }
                 }
-                return colors;
-            };
-            reset_three_camera(camera, radius_multiple, orbit_control) {
-                // adjust three.js camera to look at current voxels
-                var cf = this.compacted_feedbacks;
-                if ((!cf) || (!cf.mins)) {
-                    // no points -- punt
-                    return;
-                }
-                var cx = cf.mid[0];
-                var cy = cf.mid[1];
-                var cz = cf.mid[2];
-                radius_multiple = radius_multiple || 3;
-                camera.position.x = cx;
-                camera.position.y = cy;
-                camera.position.z = cz + radius_multiple * cf.radius;
-                camera.lookAt(cf.mid[0], cf.mid[1], cf.mid[2]);
-                if (orbit_control) {
-                    orbit_control.center.x = cx;
-                    orbit_control.center.y = cy;
-                    orbit_control.center.z = cz;
-                }
-                return camera;
+            } else {
+                mins = [0,0,0];
+                maxes = [0,0,0];
             }
-            set_threshold(value) {
-                this.runner.change_uniform("uValue", [value]);
+            var n2 = 0;
+            var mid = [];
+            if (mins) {
+                // increase the maxes by offset in each dim
+                maxes = this.vsum(maxes, s.dx);
+                maxes = this.vsum(maxes, s.dy);
+                maxes = this.vsum(maxes, s.dz);
+                n2 = this.vdistance2(mins, maxes);
+                for (var k=0; k<3; k++) {
+                    mid.push(0.5 * (mins[k] + maxes[k]));
+                    //n2 += (mins[k] - maxes[k]) ** 2;
+                    var d = (mins[k] - maxes[k]);
+                    n2 += d * d;
+                }
+            }
+            this.compacted_feedbacks = {
+                mid: mid,
+                radius: 0.5 * Math.sqrt(n2),
+                mins: mins,
+                maxes: maxes,
+                indices: this.compact_indices, 
+                front_corners: this.compact_front_corners,
+                back_corners: this.compact_back_corners,
+                locations: this.compact_locations,
             };
-            set_grid_limits(grid_mins, grid_maxes) {
-                this.runner.change_uniform("u_grid_min", grid_mins);
-                this.runner.change_uniform("u_grid_max", grid_maxes);
-            };
+            return this.compacted_feedbacks;
         };
-
-        var crossingVoxelsShader = function(grid_location_declaration) {
-            return `#version 300 es
-
-        // global length of rows
-        uniform int uRowSize;
-
-        // global number of columnss
-        uniform int uColSize;
-
-        // global number of layers (if values are in multiple blocks, else 0)
-        uniform int uLayerSize;
-        
-        // global contour threshold
-        uniform float uValue;
-
-        // global grid thresholds
-        //  (I tried integers but it didn't work, couldn't debug...)
-        uniform vec3 u_grid_min, u_grid_max;
-
-        // per mesh function values at voxel corners
-        in float a000, a001, a010, a011, a100, a101, a110, a111;
-
-        // corners feedbacks
-        out vec4 front_corners, back_corners;
-
-        // location feedback
-        out vec3 location;
-
-        // index feedback
-        flat out int index;
-
-        ${std_sizes_declarations}
-        ${grid_location_declaration}
-
-        void main() {
-            // default to invalid index indicating the voxel does not cross the value.
-            index = -1;
-            front_corners = vec4(a000, a001, a010, a011);
-            back_corners = vec4(a100, a101, a110, a111);
-
-            ${get_sizes_macro("gl_VertexID")}
-            //location = location_offset;
-            vec3 rescaled = rescale_offset(vec3(0,0,0));
-            //location = grid_location(vec3(0,0,0));
-            location = grid_xyz(rescaled);
-
-            bool voxel_ok = true;
-            if (u_grid_min[0] < u_grid_max[0]) {
-                // voxel coordinate filtering is enabled
-                voxel_ok = ( 
-                    (u_grid_min[0] <= rescaled[0]) && (rescaled[0] < u_grid_max[0]) &&
-                    (u_grid_min[1] <= rescaled[1]) && (rescaled[1] < u_grid_max[1]) &&
-                    (u_grid_min[2] <= rescaled[2]) && (rescaled[2] < u_grid_max[2]) );
+        // XXX should get vector ops from somewhere else.
+        vdistance2(v1, v2) {
+            var result = 0.0;
+            if ((v1) && (v2)) {
+                for (var k=0; k<3; k++) {
+                    var d = v1[k] - v2[k];
+                    result += d * d;
+                }
             }
+            return result;
+        };
+        vsum(v1, v2) {
+            var result = [];
+            for (var k=0; k<3; k++) {
+                result.push(v1[k] + v2[k]);
+            }
+            return result;
+        };
+        get_location_colors() {
+            var indices = this.compact_indices;
+            var locations = this.compact_locations;
+            var feedbacks = this.compacted_feedbacks;
+            var mins = feedbacks.mins;
+            var maxes = feedbacks.maxes;
+            var colors = this.compact_colors;
+            if (!colors) {
+                colors = new Float32Array(locations.length);
+                this.compact_colors = colors;
+            }
+            if ((!indices) || (indices[0] < 0)) {
+                return colors;  // no points: do nothing
+            }
+            var diffs = [];
+            var base_intensity = 0.2;
+            for (var j=0; j<3; j++) {
+                var d = maxes[j] - mins[j];
+                if (d < 1e-9) {
+                    d = 1.0;
+                }
+                diffs.push(d / (1 - base_intensity));
+            }
+            for (var i=0; i<indices.length; i++) {
+                if (indices[i]<0) {
+                    break;
+                }
+                for (var j=0; j<3; j++) {
+                    var ij = i * 3 + j;
+                    colors[ij] = base_intensity + (locations[ij] - mins[j])/diffs[j];
+                }
+            }
+            return colors;
+        };
+        reset_three_camera(camera, radius_multiple, orbit_control) {
+            // adjust three.js camera to look at current voxels
+            var cf = this.compacted_feedbacks;
+            if ((!cf) || (!cf.mins)) {
+                // no points -- punt
+                return;
+            }
+            var cx = cf.mid[0];
+            var cy = cf.mid[1];
+            var cz = cf.mid[2];
+            radius_multiple = radius_multiple || 3;
+            camera.position.x = cx;
+            camera.position.y = cy;
+            camera.position.z = cz + radius_multiple * cf.radius;
+            camera.lookAt(cf.mid[0], cf.mid[1], cf.mid[2]);
+            if (orbit_control) {
+                orbit_control.center.x = cx;
+                orbit_control.center.y = cy;
+                orbit_control.center.z = cz;
+            }
+            return camera;
+        }
+        set_threshold(value) {
+            this.runner.change_uniform("uValue", [value]);
+        };
+        set_grid_limits(grid_mins, grid_maxes) {
+            this.runner.change_uniform("u_grid_min", grid_mins);
+            this.runner.change_uniform("u_grid_max", grid_maxes);
+        };
+    };
 
-            // Dont tile last column/row/layer which wraps around
-            if ((voxel_ok) && 
-                (i_col_num < (uRowSize - 1)) && 
-                (i_row_num < (uColSize - 1)) &&
-                (i_depth_num < (uLayerSize - 1))) {
-                float m = front_corners[0];
-                float M = front_corners[0];
-                vec4 corners = front_corners;
-                for (int j=0; j<2; j++) {
-                    for (int i=0; i<4; i++) {
-                        float c = corners[i];
-                        m = min(c, m);
-                        M = max(c, M);
-                    }
-                    corners = back_corners;
+    var crossingVoxelsShader = function(grid_location_declaration) {
+        return `#version 300 es
+
+    // global length of rows
+    uniform int uRowSize;
+
+    // global number of columnss
+    uniform int uColSize;
+
+    // global number of layers (if values are in multiple blocks, else 0)
+    uniform int uLayerSize;
+    
+    // global contour threshold
+    uniform float uValue;
+
+    // global grid thresholds
+    //  (I tried integers but it didn't work, couldn't debug...)
+    uniform vec3 u_grid_min, u_grid_max;
+
+    // per mesh function values at voxel corners
+    in float a000, a001, a010, a011, a100, a101, a110, a111;
+
+    // corners feedbacks
+    out vec4 front_corners, back_corners;
+
+    // location feedback
+    out vec3 location;
+
+    // index feedback
+    flat out int index;
+
+    ${std_sizes_declarations}
+    ${grid_location_declaration}
+
+    void main() {
+        // default to invalid index indicating the voxel does not cross the value.
+        index = -1;
+        front_corners = vec4(a000, a001, a010, a011);
+        back_corners = vec4(a100, a101, a110, a111);
+
+        ${get_sizes_macro("gl_VertexID")}
+        //location = location_offset;
+        vec3 rescaled = rescale_offset(vec3(0,0,0));
+        //location = grid_location(vec3(0,0,0));
+        location = grid_xyz(rescaled);
+
+        bool voxel_ok = true;
+        if (u_grid_min[0] < u_grid_max[0]) {
+            // voxel coordinate filtering is enabled
+            voxel_ok = ( 
+                (u_grid_min[0] <= rescaled[0]) && (rescaled[0] < u_grid_max[0]) &&
+                (u_grid_min[1] <= rescaled[1]) && (rescaled[1] < u_grid_max[1]) &&
+                (u_grid_min[2] <= rescaled[2]) && (rescaled[2] < u_grid_max[2]) );
+        }
+
+        // Dont tile last column/row/layer which wraps around
+        if ((voxel_ok) && 
+            (i_col_num < (uRowSize - 1)) && 
+            (i_row_num < (uColSize - 1)) &&
+            (i_depth_num < (uLayerSize - 1))) {
+            float m = front_corners[0];
+            float M = front_corners[0];
+            vec4 corners = front_corners;
+            for (int j=0; j<2; j++) {
+                for (int i=0; i<4; i++) {
+                    float c = corners[i];
+                    m = min(c, m);
+                    M = max(c, M);
                 }
-                if ((m <= uValue) && (M > uValue)) {
-                    // the pixel crosses the threshold
-                    index = gl_VertexID;
-                }
+                corners = back_corners;
+            }
+            if ((m <= uValue) && (M > uValue)) {
+                // the pixel crosses the threshold
+                index = gl_VertexID;
             }
         }
-        `;};
-        return new WebGL2CrossingVoxels(options);
-    };
+    }
+    `;};
 
     $.fn.webGL2crossingVoxels.pointsMesh = function (options) {
         var settings = $.extend({
