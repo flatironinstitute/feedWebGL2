@@ -151,6 +151,279 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     ${grid_location_decl}
     `;
 
+    $.fn.webGL2voxelSorter = function(options) {
+        class WebGL2voxelSorter {
+            constructor(options) {
+                this.settings = $.extend({
+                    valuesArray: null,   // the array buffer of values to contour
+                    num_rows: null,
+                    num_cols: null,
+                    num_layers: 1,  // default to "flat"
+                    num_blocks: 1,  // for physics simulations data may come in multiple blocks
+                }, options);
+
+                // generate stats in a temporary context.
+                var feedbackContext = $.fn.feedWebGL2({});
+                // generate stats...
+                var s = this.settings;
+                var nvalues = s.valuesArray.length;
+                var nvoxels = s.num_rows * s.num_cols * s.num_layers * s.num_blocks;
+                if (nvalues != nvoxels) {
+                    // for now strict checking
+                    throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
+                }
+                // allocate and load buffer with a fresh name
+                var buffer = feedbackContext.buffer()
+                buffer.initialize_from_array(s.valuesArray);
+                var buffername = buffer.name;
+
+                var program = feedbackContext.program({
+                    vertex_shader: voxelSorterShader,
+                    feedbacks: {
+                        index: {type: "int"},
+                        front_corners: {num_components: 4},
+                        back_corners: {num_components: 4},
+                        //min_corner: {num_components: 1},
+                        //max_corner: {num_components: 1},
+                        corner_extrema: {num_components: 2},
+                    },
+                });
+                var inputs = {};
+                var num_voxels = add_corner_offset_inputs(s, nvalues, buffername, inputs);
+
+                var runner = program.runner({
+                    num_instances: 1,
+                    vertices_per_instance: num_voxels,
+                    uniforms: {
+                        // number of rows
+                        uRowSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_cols],
+                        },
+                        // numver of columns
+                        uColSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_rows],
+                        },
+                        // number of layers
+                        uLayerSize: {
+                            vtype: "1iv",
+                            default_value: [s.num_layers],
+                        },
+                    },
+                    inputs: inputs,
+                });
+                runner.run();
+                // get all feedbacks from GPU into Javascript context
+                var indices0 = runner.feedback_array("index");
+                var front_corners0 = runner.feedback_array("front_corners");
+                var back_corners0 = runner.feedback_array("back_corners");
+                //var min_corners0 = runner.feedback_array("min_corner");
+                //var max_corners0 = runner.feedback_array("max_corner");
+                var extrema = runner.feedback_array("corner_extrema");
+                // unpack extrema for convenience
+                var min_corners0 = new Float32Array(num_voxels);
+                var max_corners0 = new Float32Array(num_voxels);
+                var extrema_index = 0;
+                for (var i=0; i<num_voxels; i++) {
+                    min_corners0[i] = extrema[extrema_index];
+                    extrema_index ++;
+                    max_corners0[i] = extrema[extrema_index];
+                    extrema_index ++;
+                }
+
+                // compactiffy to remove invalid entries
+                var indices = feedbackContext.filter_degenerate_entries(indices0, indices0, null, 1, -1, true);
+                var front_corners = feedbackContext.filter_degenerate_entries(indices0, front_corners0, null, 4, -1, true);
+                var back_corners = feedbackContext.filter_degenerate_entries(indices0, back_corners0, null, 4, -1, true);
+                var min_corners = feedbackContext.filter_degenerate_entries(indices0, min_corners0, null, 1, -1, true);
+                var max_corners = feedbackContext.filter_degenerate_entries(indices0, max_corners0, null, 1, -1, true);
+
+                // sort indices by max_corner
+                var sorter_len = max_corners.length;
+                var max_corner_indices = new Uint32Array(sorter_len);
+                for (var i=0; i<sorter_len; i++) {
+                    max_corner_indices[i] = i;
+                }
+                var compare = function (i, j) {
+                    return max_corners[i] - max_corners[j];
+                }
+                max_corner_indices.sort(compare);
+
+                // make all feedbacks conform to index order
+                var conform = function (buffer, num_components) {
+                    var len = buffer.length;
+                    var to_buffer = new (buffer.constructor)(len);
+                    var buffer_index = 0;
+                    for (var sort_index=0; sort_index<sorter_len; sort_index++) {
+                        var copy_index = max_corner_indices[sort_index] * num_components;
+                        for (var i=0; i<num_components; i++) {
+                            to_buffer[buffer_index] = buffer[copy_index];
+                            copy_index ++;
+                            buffer_index ++;
+                        }
+                    }
+                    return to_buffer;
+                };
+                this.indices = conform(indices, 1);
+                this.front_corners = conform(front_corners, 4);
+                this.back_corners = conform(back_corners, 4);
+                this.min_corners = conform(min_corners, 1);
+                this.max_corners = conform(max_corners, 1);
+                // sanity check: max_corners should be sorted
+                max_corners = this.max_corners;
+                for (var i=0; i<sorter_len-1; i++) {
+                    if (max_corners[i] > max_corners[i+1]) {
+                        throw new Error("Max corner conformation failed: " + [i, max_corners[i], max_corners[i+1]]);
+                    }
+                }
+
+                // dispose of temporary context (all generated data is in Javascript space, free up GPU)
+                feedbackContext.lose_context();
+                feedbackContext = program = runner = null;
+            };
+        };
+
+        return new WebGL2voxelSorter(options);
+    };
+
+    var voxelSorterShader = `#version 300 es
+    // global length of rows
+    uniform int uRowSize;
+
+    // global number of columnss
+    uniform int uColSize;
+
+    // global number of layers (if values are in multiple blocks, else 0)
+    uniform int uLayerSize;
+
+    // per mesh function values at voxel corners
+    in float a000, a001, a010, a011, a100, a101, a110, a111;
+
+    // corners feedbacks
+    out vec4 front_corners, back_corners;
+
+    // min/max corner feedback
+    out vec2 corner_extrema;  // [min, max] of corner values.
+
+    // index feedback
+    flat out int index;
+
+    ${std_sizes_declarations}
+
+    void main() {
+        // default to invalid index indicating the voxel is not in the interior.
+        index = -1;
+        front_corners = vec4(a000, a001, a010, a011);
+        back_corners = vec4(a100, a101, a110, a111);
+        //min_corner = 0.0;
+        //max_corner = 0.0;
+        corner_extrema = vec2(0.0, 0.0);
+        ${get_sizes_macro("gl_VertexID")}
+        // Dont tile last column/row/layer which wraps around
+        bool voxel_ok = (
+            (i_col_num < (uRowSize - 1)) && 
+            (i_row_num < (uColSize - 1)) &&
+            (i_depth_num < (uLayerSize - 1))
+        );
+        if (voxel_ok) {
+            // the voxel is interior
+            index = gl_VertexID;
+            float m = front_corners[0];
+            float M = front_corners[0];
+            vec4 corners = front_corners;
+            for (int j=0; j<2; j++) {
+                for (int i=0; i<4; i++) {
+                    float c = corners[i];
+                    m = min(c, m);
+                    M = max(c, M);
+                }
+                corners = back_corners;
+            }
+            //min_corner = m;
+            //max_corner = M;
+            corner_extrema = vec2(m, M);
+        }
+    }
+    `;
+
+    var add_corner_offset_inputs = function(s, nvalues, buffername, inputs) {
+        // add input parameters for voxel corners as indexed into ravelled buffer.
+        // return highest index of interior voxel.
+        //  indexing is [ix, iy, iz] -- z is fastest
+        //var x_offset = 1;
+        var z_offset = 1;
+        var y_offset = s.num_cols;
+        //var z_offset = s.num_cols * s.num_rows;
+        var x_offset = s.num_cols * s.num_rows;
+        var num_voxels = nvalues - (x_offset + y_offset + z_offset);
+
+        var add_input = function (ix, iy, iz) {
+            var name = (("a" + ix) + iy) + iz;
+            var dx = [0, x_offset][ix];
+            var dy = [0, y_offset][iy];
+            var dz = [0, z_offset][iz];
+            inputs[name] = {
+                per_vertex: true,
+                num_components: 1,
+                from_buffer: {
+                    name: buffername,
+                    skip_elements: dx + dy + dz,
+                }
+            }
+        };
+        add_input(0,0,0);
+        add_input(0,0,1);
+        add_input(0,1,0);
+        add_input(0,1,1);
+        add_input(1,0,0);
+        add_input(1,0,1);
+        add_input(1,1,0);
+        add_input(1,1,1);
+        return num_voxels;
+    };
+
+    $.fn.webGL2voxelSorter.example = function (container) {
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+        });
+        var valuesArray = new Float32Array([
+            2,1,0,
+            1,1,0,
+            0,0,0,
+
+            1,1,0,
+            1,1,0,
+            0,0,0,
+
+            0,0,0,
+            0,0,0,
+            0,0,0,
+        ]);
+        var sorter = container.webGL2voxelSorter({
+            valuesArray: valuesArray,
+            num_rows: 3,
+            num_cols: 3,
+            num_layers: 3,
+        });
+        var indices = sorter.indices;
+        var front_corners = sorter.front_corners;
+        var back_corners = sorter.back_corners;
+        var minc = sorter.min_corners;
+        var maxc = sorter.max_corners;
+        var ci = 0;
+        for (var i=0; i<indices.length; i++) {
+            $("<br/>").appendTo(container);
+            $("<span> " + indices[i] + " m" + minc[i] + " M" + maxc[i] + " </span>").appendTo(container);
+            for (var j=0; j<4; j++) {
+                $("<span> " + front_corners[ci] + " " + back_corners[ci] + " </span>").appendTo(container);
+                ci ++;
+            }
+        }
+    };
+
     $.fn.webGL2crossingVoxels = function(options) {
 
         class WebGL2CrossingVoxels {
@@ -215,6 +488,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     },
                 });
 
+                var inputs = {};
+                var num_voxels = add_corner_offset_inputs(s, nvalues, buffername, inputs);
+
+                /*
                 // set up input parameters
                 //  indexing is [ix, iy, iz] -- z is fastest
                 //var x_offset = 1;
@@ -247,6 +524,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 add_input(1,0,1);
                 add_input(1,1,0);
                 add_input(1,1,1);
+                */
 
                 this.runner = this.program.runner({
                     num_instances: 1,
