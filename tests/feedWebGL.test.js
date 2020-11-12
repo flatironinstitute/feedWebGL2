@@ -3,6 +3,26 @@
 // var index = require('../dist/index');
 import feedWebGL_is_loaded from "../dist/index";
 
+var EXAMPLE_SHADER = `#version 300 es
+// per mesh input
+in vec3 input_vertex;
+
+// feedbacks out
+out vec3 output_vertex;
+
+// non-feedback out
+out vec3 vcolor;
+
+void main() {
+    output_vertex[0] = input_vertex[1];
+    output_vertex[1] = input_vertex[0];
+    output_vertex[2] = input_vertex[2] -0.11;
+    vcolor = abs(normalize(output_vertex));
+    gl_Position.xyz = output_vertex;
+    gl_Position[3] = 1.0;
+}
+`;
+
 describe('testing feedWebGL', () => {
 
     it('loads the feedWebGL index', () => {
@@ -328,17 +348,19 @@ describe('testing feedWebGL', () => {
         var shader = "bogus shader for smoke-testing only";
         var options = {
             vertex_shader: shader,
+            compile_now: false,
         };
         var program = context.program(options);
         var roptions = {
             num_instances: 1000000,
             inputs: {
                 "location": {
+                    per_vertex: false,  // mesh input
                     num_components: 3,
                 },
                 "scale": {},  // implicitly just one component
                 "point_offset":  {
-                    per_vertex: true,  // repeat for every mesh
+                    //per_vertex: true,  // repeat for every mesh (implicit)
                     num_components: 3,
                 },
             },
