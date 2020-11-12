@@ -282,6 +282,22 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 feedbackContext.lose_context();
                 feedbackContext = program = runner = null;
             };
+
+            threshold_start_index(threshold) {
+                // determine the least index in max_corners of the where max_corners[index] >= threshold
+                var max_corners = this.max_corners;
+                var low_index = 0;
+                var high_index = max_corners.length;
+                while (low_index < high_index) {
+                    var test_index = Math.floor(0.5 * (low_index + high_index));
+                    if (max_corners[test_index] < threshold) {
+                        low_index = test_index;
+                    } else {
+                        high_index = test_index;
+                    }
+                }
+                return high_index;
+            };
         };
 
         return new WebGL2voxelSorter(options);
@@ -428,7 +444,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         return new WebGL2CrossingVoxels(options);
     };
 
-
     class WebGL2CrossingVoxels {
         constructor(options) {
             this.settings = $.extend({
@@ -458,6 +473,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 fragment_shader: noop_fragment_shader,
             }, options);
 
+            this.initialize();
+        }
+
+        initialize() {
             var s = this.settings;
             this.feedbackContext = s.feedbackContext;
             var nvalues = s.valuesArray.length;
@@ -493,41 +512,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
             var inputs = {};
             var num_voxels = add_corner_offset_inputs(s, nvalues, buffername, inputs);
-
-            /*
-            // set up input parameters
-            //  indexing is [ix, iy, iz] -- z is fastest
-            //var x_offset = 1;
-            var z_offset = 1;
-            var y_offset = s.num_cols;
-            //var z_offset = s.num_cols * s.num_rows;
-            var x_offset = s.num_cols * s.num_rows;
-            var num_voxels = nvalues - (x_offset + y_offset + z_offset);
-
-            var inputs = {};
-            var add_input = function (ix, iy, iz) {
-                var name = (("a" + ix) + iy) + iz;
-                var dx = [0, x_offset][ix];
-                var dy = [0, y_offset][iy];
-                var dz = [0, z_offset][iz];
-                inputs[name] = {
-                    per_vertex: true,
-                    num_components: 1,
-                    from_buffer: {
-                        name: buffername,
-                        skip_elements: dx + dy + dz,
-                    }
-                }
-            };
-            add_input(0,0,0);
-            add_input(0,0,1);
-            add_input(0,1,0);
-            add_input(0,1,1);
-            add_input(1,0,0);
-            add_input(1,0,1);
-            add_input(1,1,0);
-            add_input(1,1,1);
-            */
 
             this.runner = this.program.runner({
                 num_instances: 1,
