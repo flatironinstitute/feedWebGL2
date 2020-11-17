@@ -819,8 +819,9 @@
                     gl.vertexAttribPointer(this.position, this.num_components,
                         gl.FLOAT, false, this.byte_stride, this.byte_offset);
                 } else if (this.type == "int") {
+                    // no "normalize" argument!
                     gl.vertexAttribIPointer(this.position, this.num_components,
-                        gl.INT, false, this.byte_stride, this.byte_offset);
+                        gl.INT, this.byte_stride, this.byte_offset);
                 } else {
                     throw new Error("only int and float types are supported for attributes.");
                 }
