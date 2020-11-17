@@ -55,12 +55,14 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
     def set_options(
             self, num_rows, num_cols, num_layers, 
             threshold=0, shrink_factor=0.2, method="tetrahedra",
+            sorted=False,
             ):
         methods = ("tetrahedra", "diagonal")
         assert method in methods, "method must be in " + repr(methods)
         options = jp_proxy_widget.clean_dict(
             num_rows=num_rows, num_cols=num_cols, num_layers=num_layers, 
             threshold=threshold, shrink_factor=shrink_factor, method=method,
+            sorted=sorted,
         )
         self.options = options
         self.js_init("""
@@ -70,6 +72,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
     def load_3d_numpy_array(
             self, ary, 
             threshold=None, shrink_factor=None, chunksize=10000000, method="tetrahedra",
+            sorted=False,
             ):
         if not self.rendered:
             display(self)
@@ -82,7 +85,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         ary32 = np.array(ary, dtype=np.float32)
         self.set_options(
             num_rows, num_cols, num_layers, 
-            threshold=threshold, shrink_factor=shrink_factor, method=method)
+            threshold=threshold, shrink_factor=shrink_factor, method=method,
+            sorted=sorted,
+            )
         self.data = ary32
         ary_bytes = bytearray(ary32.tobytes())
         nbytes = len(ary_bytes)
@@ -210,9 +215,12 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
                 swatch.arrow(location1=tcenter, location2=(tcenter + 0.2 * normal), lineWidth=2, color=color, head_length=0.02)
         swatch.fit(0.6)
 
-def display_isosurface(for_array, threshold=None, save=False, method="tetrahedra"):
+def display_isosurface(
+        for_array, threshold=None, save=False, method="tetrahedra",
+        sorted=False
+        ):
     W = Volume32()
-    W.load_3d_numpy_array(for_array, threshold=threshold, method=method)
+    W.load_3d_numpy_array(for_array, threshold=threshold, method=method, sorted=sorted)
     W.build()
     if save:
         return W
