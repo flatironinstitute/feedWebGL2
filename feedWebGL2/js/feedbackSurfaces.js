@@ -1019,6 +1019,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.compact_length = Math.floor(
                 this.settings.shrink_factor * this.sorter.indices.length
             );
+            // extended length for selection processing.
+            this.compact_length = Math.min(this.compact_length, this.sorter.indices.length);
+            this.extended_length = Math.min(4 * this.compact_length, this.sorter.indices.length);
 
             var vertex_shader;
             if (s.location == "std") {
@@ -1066,7 +1069,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
             this.runner = this.program.runner({
                 num_instances: 1,
-                vertices_per_instance: this.compact_length,
+                vertices_per_instance: this.extended_length,
                 rasterize: s.rasterize,
                 uniforms: {
                     // number of rows
@@ -1102,10 +1105,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 samplers: s.samplers,
             });
 
-            this.front_corners_array = new Float32Array(4 * this.compact_length);
-            this.back_corners_array = new Float32Array(4 * this.compact_length);
-            this.index_array = new Int32Array(this.compact_length);
-            this.location_array = new Float32Array(3 * this.compact_length);
+            this.front_corners_array = new Float32Array(4 * this.extended_length);
+            this.back_corners_array = new Float32Array(4 * this.extended_length);
+            this.index_array = new Int32Array(this.extended_length);
+            this.location_array = new Float32Array(3 * this.extended_length);
 
             this.compact_front_corners = new Float32Array(4 * this.compact_length);
             this.compact_back_corners = new Float32Array(4 * this.compact_length);
@@ -1117,8 +1120,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var threshold = this.settings.threshold;
             var threshold_start = this.sorter.threshold_start_index(threshold);
             //var run_size = Math.min(this.sorter.indices.length - start_index, this.compact_length);
-            var run_size = this.compact_length;
-            var max_start = this.sorter.indices.length - this.compact_length;
+            var run_size = this.extended_length;
+            var max_start = this.sorter.indices.length - run_size;
             var start_index = Math.min(max_start, threshold_start);
             var runner = this.runner;
             //runner.vertices_per_instance = run_size;
