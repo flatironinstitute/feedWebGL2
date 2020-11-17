@@ -27,6 +27,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     dz: [0,0,1],
                     // isosurface generation method "diagonal" or "tetrahedra"
                     method: "tetrahedra",
+                    sorted: false,
                 }, options);
                 var s = this.settings;
                 var context = s.feedbackContext;
@@ -93,6 +94,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     dy: s.dy,
                     dz: s.dz,
                     translation: [0,0,0],
+                    sorted: s.sorted,
                 });
                 //surface.set_grid_limits(this.grid_mins, this.grid_maxes);
                 this.surface = surface;
@@ -172,7 +174,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
                 var g = new THREE.SphereGeometry(0.5, 6,6);
                 var m = new THREE.MeshNormalMaterial();
-                //m.wireframe = true;
+                m.wireframe = true;
                 var c = new THREE.Mesh(g, m);
                 c.position.set(...this.ijk);
                 this.ijk_mesh = c;
