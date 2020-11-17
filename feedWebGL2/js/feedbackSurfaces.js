@@ -288,7 +288,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var max_corners = this.max_corners;
                 var low_index = 0;
                 var high_index = max_corners.length;
-                while (low_index < high_index) {
+                while ((low_index + 1) < high_index) {
                     var test_index = Math.floor(0.5 * (low_index + high_index));
                     if (max_corners[test_index] < threshold) {
                         low_index = test_index;
@@ -602,10 +602,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             result.update_sphere_locations();
             return result;
         };
-        get_compacted_feedbacks(location_only) {
-            var s = this.settings;
+        get_feedbacks(location_only) {
             this.run();
-            var location_fill = this.settings.location_fill;
             var rn = this.runner;
             if (!location_only) {
                 this.front_corners_array = rn.feedback_array(
@@ -631,6 +629,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 "index",
                 this.index_array,
             );
+        };
+        get_compacted_feedbacks(location_only) {
+            this.get_feedbacks(location_only);
+            var s = this.settings;
+            var location_fill = this.settings.location_fill;
             if (this.compact_length === null) {
                 // allocate arrays to size limit
                 this.compact_length = Math.floor(
@@ -785,6 +788,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             return camera;
         }
         set_threshold(value) {
+            this.settings.threshold = value;
             this.runner.change_uniform("uValue", [value]);
         };
         set_grid_limits(grid_mins, grid_maxes) {
@@ -966,6 +970,291 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             num_layers: 3, 
             threshold: 0.5,
             shrink_factor: 0.8,
+        });
+        var compacted = crossing.get_compacted_feedbacks();
+        var indices = compacted.indices;
+        var front_corners = compacted.front_corners;
+        var back_corners = compacted.back_corners;
+        var ci = 0;
+        for (var i=0; i<indices.length; i++) {
+            $("<br/>").appendTo(container);
+            $("<span> " + indices[i] + " </span>").appendTo(container);
+            for (var j=0; j<4; j++) {
+                $("<span> " + front_corners[ci] + " " + back_corners[ci] + " </span>").appendTo(container);
+                ci ++;
+            }
+        }
+    };
+
+    $.fn.webGL2sortedVoxels = function(options) {
+        return new WebGL2SortedVoxels(options);
+    };
+
+    class WebGL2SortedVoxels extends WebGL2CrossingVoxels  {
+        initialize() {
+            var s = this.settings;
+            this.feedbackContext = s.feedbackContext;
+            //var nvalues = s.valuesArray.length;
+            this.sorter = $.fn.webGL2voxelSorter({
+                valuesArray: s.valuesArray,
+                num_rows: s.num_rows,
+                num_cols: s.num_cols,
+                num_layers: s.num_layers,
+                num_blocks: s.num_blocks,
+            });
+            // load buffers with sorter output arrays
+            this.indices_buffer = this.feedbackContext.buffer();
+            //this.front_corners_buffer = this.feedbackContext.buffer();
+            //this.back_corners_buffer = this.feedbackContext.buffer();
+            this.min_corners_buffer = this.feedbackContext.buffer();
+            this.max_corners_buffer = this.feedbackContext.buffer();
+
+            this.indices_buffer.initialize_from_array(this.sorter.indices);
+            //this.front_corners_buffer.initialize_from_array(this.sorter.front_corners);
+            //this.back_corners_buffer.initialize_from_array(this.sorter.back_corners);
+            this.min_corners_buffer.initialize_from_array(this.sorter.min_corners);
+            this.max_corners_buffer.initialize_from_array(this.sorter.max_corners);
+            
+            // allocate arrays to size limit
+            this.compact_length = Math.floor(
+                this.settings.shrink_factor * this.sorter.indices.length
+            );
+
+            var vertex_shader;
+            if (s.location == "std") {
+                vertex_shader = sortedVoxelsShader(locate_std_decl);
+            } else if (s.location="polar_scaled") {
+                vertex_shader = sortedVoxelsShader(locate_polar_scaled_decl);
+            } else {
+                throw new Error("unknown grid location type: " + s.location);
+            }
+
+            this.program = this.feedbackContext.program({
+                vertex_shader: vertex_shader,
+                fragment_shader: this.settings.fragment_shader,
+                feedbacks: {
+                    index: {type: "int"},
+                    location: {num_components: 3},
+                },
+            });
+            var inputs = {};
+            inputs.index_in = {
+                per_vertex: true,
+                num_components: 1,
+                type: "int",
+                from_buffer: {
+                    name: this.indices_buffer.name,
+                    skip_elements: 0,  // adjust for each run
+                }
+            };
+            inputs.maxcorner = {
+                per_vertex: true,
+                num_components: 1,
+                from_buffer: {
+                    name: this.max_corners_buffer.name,
+                    skip_elements: 0,  // adjust for each run
+                }
+            };
+            inputs.mincorner = {
+                per_vertex: true,
+                num_components: 1,
+                from_buffer: {
+                    name: this.min_corners_buffer.name,
+                    skip_elements: 0,  // adjust for each run
+                }
+            };
+
+            this.runner = this.program.runner({
+                num_instances: 1,
+                vertices_per_instance: this.compact_length,
+                rasterize: s.rasterize,
+                uniforms: {
+                    // number of rows
+                    uRowSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_cols],
+                    },
+                    // numver of columns
+                    uColSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_rows],
+                    },
+                    // number of layers
+                    uLayerSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_layers],
+                    },
+                    // threshold value
+                    uValue: {
+                        vtype: "1fv",
+                        default_value: [s.threshold],
+                    },
+                    u_grid_min: {
+                        vtype: "3fv",
+                        default_value: s.grid_min,
+                    },
+                    u_grid_max: {
+                        vtype: "3fv",
+                        default_value: s.grid_max,
+                    },
+                },
+                inputs: inputs,
+                samplers: s.samplers,
+            });
+
+            this.front_corners_array = new Float32Array(4 * this.compact_length);
+            this.back_corners_array = new Float32Array(4 * this.compact_length);
+            this.index_array = new Int32Array(this.compact_length);
+            this.location_array = new Float32Array(3 * this.compact_length);
+
+            this.compact_front_corners = new Float32Array(4 * this.compact_length);
+            this.compact_back_corners = new Float32Array(4 * this.compact_length);
+            this.compact_indices = new Int32Array(this.compact_length);
+            this.compact_locations = new Float32Array(3 * this.compact_length);
+        };
+        run() {
+            debugger;
+            var threshold = this.settings.threshold;
+            var threshold_start = this.sorter.threshold_start_index(threshold);
+            //var run_size = Math.min(this.sorter.indices.length - start_index, this.compact_length);
+            var run_size = this.compact_length;
+            var max_start = this.sorter.indices.length - this.compact_length;
+            var start_index = Math.min(max_start, threshold_start);
+            var runner = this.runner;
+            //runner.vertices_per_instance = run_size;
+            runner.inputs.index_in.bindBuffer(this.indices_buffer, start_index);
+            runner.inputs.maxcorner.bindBuffer(this.max_corner_buffer, start_index);
+            runner.inputs.mincorner.bindBuffer(this.min_corner_buffer, start_index);
+            this.runner.install_uniforms();
+            this.runner.run();
+            this.run_size = run_size;
+            this.run_start_index = start_index;
+        };
+        get_feedbacks(location_only) {
+            this.run();
+            var rn = this.runner;
+            // set index default to invalid voxel
+            var index_array = this.index_array;
+            for (var i=0; i<index_array.length; i++) {
+                index_array[i] = -1;
+            }
+            this.index_array = rn.feedback_array(
+                "index",
+                index_array,
+            );
+            this.location_array = rn.feedback_array(
+                "location",
+                this.location_array,
+            );
+            if (!location_only) {
+                var front_corners_array = this.front_corners_array;
+                var back_corners_array = this.back_corners_array;
+                var front_corners_src = this.sorter.front_corners;
+                var back_corners_src = this.sorter.back_corners;
+                var start_index = this.run_start_index;
+                var run_size = this.run_size;
+                var corners_index = 0;
+                for (var out_index=0; out_index<run_size; out_index++) {
+                    var corners_src = 4 * (out_index + start_index);
+                    for (var corner_coord=0; corner_coord<4; corner_coord++) {
+                        front_corners_array[corners_index] = front_corners_src[corners_src];
+                        back_corners_array[corners_index] = back_corners_src[corners_src];
+                        corners_index ++;
+                        corners_src ++;
+                    }
+                }
+            }
+        }
+    };
+    var sortedVoxelsShader = function(grid_location_declaration) {
+        return `#version 300 es
+
+        // global length of rows
+        uniform int uRowSize;
+    
+        // global number of columnss
+        uniform int uColSize;
+    
+        // global number of layers (if values are in multiple blocks, else 0)
+        uniform int uLayerSize;
+        
+        // global contour threshold
+        uniform float uValue;
+    
+        // global grid thresholds
+        //  (I tried integers but it didn't work, couldn't debug...)
+        uniform vec3 u_grid_min, u_grid_max;
+
+        // index input
+        in int index_in;
+
+        // voxel value extrema
+        in float maxcorner, mincorner;
+    
+        // location feedback
+        out vec3 location;
+    
+        // index feedback
+        flat out int index;
+
+        ${std_sizes_declarations}
+        ${grid_location_declaration}
+
+        void main() {
+            ${get_sizes_macro("index_in")}
+            // default to invalid index indicating the voxel does not cross the value.
+            index = -1;
+            vec3 rescaled = rescale_offset(vec3(0,0,0));
+            location = grid_xyz(rescaled);
+            bool voxel_ok = true;
+            if (u_grid_min[0] < u_grid_max[0]) {
+                // voxel coordinate filtering is enabled
+                voxel_ok = ( 
+                    (u_grid_min[0] <= rescaled[0]) && (rescaled[0] < u_grid_max[0]) &&
+                    (u_grid_min[1] <= rescaled[1]) && (rescaled[1] < u_grid_max[1]) &&
+                    (u_grid_min[2] <= rescaled[2]) && (rescaled[2] < u_grid_max[2]) );
+            }
+            if (voxel_ok) {
+                voxel_ok = (mincorner <= uValue) && (maxcorner >= uValue);
+            }
+            if ((voxel_ok) && 
+                (i_col_num < (uRowSize - 1)) && 
+                (i_row_num < (uColSize - 1)) &&
+                (i_depth_num < (uLayerSize - 1))) {
+                // position is valid.
+                index = index_in;
+            }
+        }
+        `;
+    }
+
+    $.fn.webGL2sortedVoxels.example = function (container) {
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+        });
+        var valuesArray = new Float32Array([
+            0,0,0,
+            0,0,0,
+            0,0,0,
+
+            0,0,0,
+            0,1,0,
+            0,0,0,
+
+            0,0,0,
+            0,0,0,
+            0,0,0,
+        ]);
+        var crossing = container.webGL2sortedVoxels({
+            feedbackContext: context,
+            valuesArray: valuesArray,
+            num_rows: 3,
+            num_cols: 3,
+            num_layers: 3, 
+            threshold: 0.5,
+            shrink_factor: 1.0,
         });
         var compacted = crossing.get_compacted_feedbacks();
         var indices = compacted.indices;
@@ -1915,7 +2204,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 set_up_sampler("ColumnScale", s.num_cols+1);
                 set_up_sampler("LayerScale", s.num_layers+1);
             }
-            this.crossing = container.webGL2crossingVoxels({
+            debugger;
+            var crossing_maker = container.webGL2crossingVoxels;
+            if (s.sorted) {
+                var crossing_maker = container.webGL2sortedVoxels;
+            }
+            this.crossing = crossing_maker({
                 feedbackContext: this.feedbackContext,
                 valuesArray: s.valuesArray,
                 num_rows: s.num_rows,
