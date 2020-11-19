@@ -49,6 +49,12 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         super(Volume32, self).__init__(*pargs, **kwargs)
         load_requirements(self)
         self.element.html("Uninitialized Volume widget.")
+        self.js_init("""
+            element.ready_sync = function (message) {
+                element.html(message);
+                return true;
+            };
+        """)
         self.options = None
         self.data = None
 
@@ -68,6 +74,10 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         self.js_init("""
             element.V = element.volume32(options);
         """, options=options)
+
+    def sync(self, message="Volume widget is ready"):
+        "Wait for the widget to initialize before proceeding. Widget must be displayed!"
+        self.element.ready_sync(message).sync_value()
 
     def load_3d_numpy_array(
             self, ary, 
