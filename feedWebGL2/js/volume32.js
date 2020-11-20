@@ -369,16 +369,23 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.sync_button = $("<button>sync</button>").appendTo(button_area);
                 this.sync_button.click(function() { that.redraw(true); });
 
-                var auto_sync = $("<span> auto</span>").appendTo(button_area)
+                var auto_sync = $("<span> Auto</span>").appendTo(button_area)
                 this.sync_check = $('<input type="checkbox" checked/>').appendTo(auto_sync);
                 this.sync_check.change(function() {
                     that.redraw();
                 });
 
-                var wires = $("<span> wires</span>").appendTo(button_area)
+                var wires = $("<span> Wires</span>").appendTo(button_area)
                 this.wires_check = $('<input type="checkbox"/>').appendTo(wires);
                 this.wires_check.change(function() {
                     that.redraw();
+                });
+
+                var track = $("<span> Track</span>").appendTo(button_area)
+                this.track_check = $('<input type="checkbox"/>').appendTo(track);
+                this.tracking = false;
+                this.track_check.change(function() {
+                    that.tracking = that.track_check.is(":checked");
                 });
 
                 // threshold slider
@@ -412,6 +419,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.show_info();
                 this.animate()
             };
+            set_tracking(onoff) {
+                this.tracking = onoff;
+                this.track_check.prop("checked", onoff);
+                this.dragging_slice = null;
+            }
             set_threshold(value) {
                 value = value || this.bmin
                 value = Math.min(this.bmax, Math.max(this.bmin, value));
@@ -539,9 +551,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // max boundaries
                 frame.frame_rect({x: grid_maxes[0], y:0, w:d0-grid_maxes[0], h:d1, color:"rgba(255,255,255,0.5)"});
                 frame.frame_rect({x: 0, y:grid_maxes[1], w:d0, h:d1-grid_maxes[1], color:"rgba(255,255,255,0.5)"});
-                // boundary draggers
-                var Mins = frame.rect({x: grid_mins[0], y: grid_mins[1], w:-20, h:-20, color:"black", name:"Mins"})
-                var Maxes = frame.rect({x: grid_maxes[0], y: grid_maxes[1], w:20, h:20, color:"black", name:"Maxes"})
 
                 this.container.fit(null, 10);
 
@@ -549,6 +558,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var that = this;
 
                 var click = function(event) {
+                    volume.set_tracking(false);
                     //cl("click: " + event.canvas_name);
                     if (volume.dragging_slice == that) {
                         //cl("click: let mouse up handler deal with it...");
@@ -558,24 +568,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     volume.dragging_slice = null;
                     // if the event is in bounds, set the ijk and the threshold and redraw
                     that.set_ijk(event);
-                    /*
-                    var frame_location = that.frame.event_model_location(event);
-                    var x = Math.floor(frame_location.x);
-                    var y = Math.floor(frame_location.y);
-                    if ((x >= 0) && (x < d0) && (y >= 0) && (y < d1)) {
-                        debugger;
-                        that.volume.ijk[i0] = x;
-                        that.volume.ijk[i1] = y;
-                        //that.volume.threshold = 0.5 * (mins[y][x] + maxes[y][x]);
-                        var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
-                        that.volume.set_threshold(threshold)
-                        that.volume.redraw();
-                    }*/
                 };
                 event_rect.on("click", click);
 
                 //this.dragging = null;
                 var mouse_down = function(event) {
+                    volume.set_tracking(false);
                     var name = event.canvas_name;
                     if ((name=="Mins") || (name=="Maxes")) {
                         //cl("mouse_down dragging: " + name);
@@ -587,10 +585,19 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         volume.dragging_slice = null;
                     }
                 };
-                Mins.on("mousedown", mouse_down);
-                Maxes.on("mousedown", mouse_down);
+                if (!volume.tracking) {
+                    // boundary draggers
+                    var Mins = frame.rect({x: grid_mins[0], y: grid_mins[1], w:-20, h:-20, color:"black", name:"Mins"})
+                    var Maxes = frame.rect({x: grid_maxes[0], y: grid_maxes[1], w:20, h:20, color:"black", name:"Maxes"})
+                    Mins.on("mousedown", mouse_down);
+                    Maxes.on("mousedown", mouse_down);
+                }
 
                 var mouse_move = function(event) {
+                    if (volume.tracking) {
+                        that.set_ijk(event);
+                        return;
+                    }
                     if (volume.dragging_slice == that) {
                         var frame_location = that.frame.event_model_location(event);
                         var x = Math.round(frame_location.x);
