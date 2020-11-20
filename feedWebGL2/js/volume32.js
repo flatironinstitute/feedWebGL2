@@ -451,6 +451,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
         };
 
+        var cross_hairs_normal = "rgba(0,0,0,0.5)";
+        var cross_hairs_cutt = "rgba(255,0,0,1)";
+
         class Slicer32 {
             constructor(volume, dimensions, container, side) {
                 this.volume = volume;
@@ -482,7 +485,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.frame_factor = side * 1.0 / maxdim;
                 this.maxdim = maxdim;
                 this.dragging = null;
-                this.cross_hairs_color = "rgba(0,0,0,0.5)";
+                this.cross_hairs_color = cross_hairs_normal;
                 this.draw_frame();
             }
             draw_frame() {
@@ -524,8 +527,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // highlight ijk point
                 var hx = this.volume.ijk[i0] + 0.5;
                 var hy = this.volume.ijk[i1] + 0.5;
-                frame.line({x1:0, y1:hy, x2:d0, y2:hy, color:this.cross_hairs_color});
-                frame.line({x1:hx, y1:0, x2:hx, y2:d1, color:this.cross_hairs_color});
+                frame.line({x1:0, y1:hy, x2:d0, y2:hy, color:this.cross_hairs_color, lineWidth:2});
+                frame.line({x1:hx, y1:0, x2:hx, y2:d1, color:this.cross_hairs_color, lineWidth:2});
                 frame.frame_circle({x: hx, y:hy, r:0.25, color:"rgba(255,255,255,0.7)"});
                 frame.frame_circle({x: hx, y:hy, r:0.25, color:"black", fill:false});
 
