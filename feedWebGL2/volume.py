@@ -61,7 +61,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
     def set_options(
             self, num_rows, num_cols, num_layers, 
             threshold=0, shrink_factor=0.2, method="tetrahedra",
-            sorted=False,
+            sorted=True,
             ):
         methods = ("tetrahedra", "diagonal")
         assert method in methods, "method must be in " + repr(methods)
@@ -82,7 +82,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
     def load_3d_numpy_array(
             self, ary, 
             threshold=None, shrink_factor=None, chunksize=10000000, method="tetrahedra",
-            sorted=False,
+            sorted=True,
             ):
         if not self.rendered:
             display(self)
@@ -227,7 +227,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
 
 def display_isosurface(
         for_array, threshold=None, save=False, method="tetrahedra",
-        sorted=False
+        sorted=True
         ):
     W = Volume32()
     W.load_3d_numpy_array(for_array, threshold=threshold, method=method, sorted=sorted)
