@@ -502,6 +502,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 frame.reset_frame();
                 var event_rect = frame.frame_rect({x:-1, y:-1, w:d0+1, h:d1+1, color:"rgba(0,0,0,0)", name:"event_rect"})
                 var slice_info = this.volume.array_slice(this.volume.ijk, this.dimensions);
+                this.slice_info = slice_info;
                 this.container.name_image_data(self.name, slice_info.bytes, slice_info.cols, slice_info.rows, blue, yellow);
                 var ff = this.frame_factor;
                 frame.named_image({image_name: self.name, x:0, y:0, w:ff*slice_info.cols, h:ff*slice_info.rows})
@@ -556,6 +557,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     //cl("click: resetting ijk");
                     volume.dragging_slice = null;
                     // if the event is in bounds, set the ijk and the threshold and redraw
+                    that.set_ijk(event);
+                    /*
                     var frame_location = that.frame.event_model_location(event);
                     var x = Math.floor(frame_location.x);
                     var y = Math.floor(frame_location.y);
@@ -567,7 +570,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
                         that.volume.set_threshold(threshold)
                         that.volume.redraw();
-                    }
+                    }*/
                 };
                 event_rect.on("click", click);
 
@@ -626,6 +629,25 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // attach to mouseout jQuery event (not canvas event)
                 //this.container.on("mouseout", mouse_up);
             };
+            set_ijk(event) {
+                // set the ijk focus and the threshold and redraw
+                var that = this;
+                var frame_location = that.frame.event_model_location(event);
+                var x = Math.floor(frame_location.x);
+                var y = Math.floor(frame_location.y);
+                var [d0, d1] = this.shape;
+                if ((x >= 0) && (x < d0) && (y >= 0) && (y < d1)) {
+                    var [i0, i1] = that.dimensions;
+                    that.volume.ijk[i0] = x;
+                    that.volume.ijk[i1] = y;
+                    //that.volume.threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+                    var mins = that.slice_info.mins;
+                    var maxes = that.slice_info.maxes;
+                    var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+                    that.volume.set_threshold(threshold)
+                    that.volume.redraw();
+                }
+            }
         };
 
         return new Volume32(options);
