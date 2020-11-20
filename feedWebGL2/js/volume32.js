@@ -108,7 +108,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var gM = this.grid_maxes;
                 var maxes = [gM[2], gM[1], gM[0]];
                 this.surface.set_grid_limits(mins, maxes);
-            }
+            };
             initialize_surface_display(container) {
                 if (!this.surface) {
                     this.set_up_surface();
@@ -482,6 +482,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.frame_factor = side * 1.0 / maxdim;
                 this.maxdim = maxdim;
                 this.dragging = null;
+                this.cross_hairs_color = "rgba(0,0,0,0.5)";
                 this.draw_frame();
             }
             draw_frame() {
@@ -521,10 +522,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     }
                 }
                 // highlight ijk point
-                var hx = this.volume.ijk[i0];
-                var hy = this.volume.ijk[i1];
-                frame.frame_circle({x: hx+0.5, y:hy+0.5, r:0.25, color:"rgba(255,255,255,0.7)"});
-                frame.frame_circle({x: hx+0.5, y:hy+0.5, r:0.25, color:"black", fill:false});
+                var hx = this.volume.ijk[i0] + 0.5;
+                var hy = this.volume.ijk[i1] + 0.5;
+                frame.line({x1:0, y1:hy, x2:d0, y2:hy, color:this.cross_hairs_color});
+                frame.line({x1:hx, y1:0, x2:hx, y2:d1, color:this.cross_hairs_color});
+                frame.frame_circle({x: hx, y:hy, r:0.25, color:"rgba(255,255,255,0.7)"});
+                frame.frame_circle({x: hx, y:hy, r:0.25, color:"black", fill:false});
 
                 // min boundaries
                 frame.frame_rect({x: grid_mins[0], y:0, w:-grid_mins[0], h:d1, color:"rgba(255,255,255,0.5)"});
