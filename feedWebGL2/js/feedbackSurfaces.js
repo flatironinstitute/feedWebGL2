@@ -630,6 +630,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.index_array,
             );
         };
+        full_index_indicator_array() {
+            // make a fresh copy of indicator_array[index]==index only if index is crossing
+            // otherwise indicator_array[i] < 0 indicates not crossing.
+            return this.index_array.slice(0);  // for this implementation, just copy...
+        };
         get_compacted_feedbacks(location_only) {
             this.get_feedbacks(location_only);
             var s = this.settings;
@@ -1168,6 +1173,22 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
             }
         }
+        full_index_indicator_array() {
+            // make a fresh copy of indicator_array[index]==index only if index is crossing
+            // otherwise indicator_array[i] < 0 indicates not crossing.
+            var result =  this.sorter.indices.slice(0);
+            for (var i=0; i<result.length; i++) {
+                result[i] = -1;  // default to not crossing
+            }
+            var index_array = this.index_array;
+            for (var i=0; i<index_array.length; i++) {
+                var index = index_array[i];
+                if (index >= 0) {
+                    result[index] = index;
+                }
+            }
+            return result;
+        };
     };
     var sortedVoxelsShader = function(grid_location_declaration) {
         return `#version 300 es
@@ -2177,6 +2198,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     0, 1, 0,
                     0, 0, 1,
                 ],
+                // use sorted voxel implementation by default.
+                sorted: true,
             }, options);
             this.check_geometry();
             var s = this.settings;
@@ -3203,6 +3226,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         };
         fix_normals() {
             // reverse normal if it points opposite triangle face
+            // xxx this operation could be done on the gpu if it is a bottleneck xxx
             var positions = this._triangle_positions;
             var normals = this._triangle_normals;
             for (var cursor=0; cursor<this._last_nondegenerate_position; cursor += 9) {
@@ -3243,7 +3267,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
         };
         get_triangle_indices() {
-            debugger;
             // determine vertex position indices for triangles for active triangles.
             // index_indicator is negative where the position index is invalid.
             var s = this.settings;
@@ -3253,7 +3276,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             //   pi = index_indicator[voxel_index]
             //   voxel_position = [positions[pi], positions[pi+1], positions[pi+2], ]
             // this assumes index_indicator is only used as a sentinel until the next iteration.
-            var index_indicator = this.crossing.index_array.slice(0); // make a copy...
+            var index_indicator = this.crossing.full_index_indicator_array(); // make a copy...
             var indices = this.segments.get_indices();
             // maximum number of triangle vertices (3 per triangle)
             var max_length = 3 * triangle_corners.length * indices.length;
@@ -3264,7 +3287,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var block_offset = layer_offset * s.num_layers;
             var triangle_corner_offsets = this.triangle_corner_offsets;
             var triangle_cursor = 0;
-            var diagonal_offset = this.diagonal_offset;
+            //var diagonal_offset = this.diagonal_offset;
             for (var root_index=0; root_index<indices.length; root_index++) {
                 var root = indices[root_index];
                 if ((root >= 0) && (index_indicator[root] >= 0)) {
