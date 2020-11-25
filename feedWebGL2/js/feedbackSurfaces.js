@@ -397,6 +397,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         return deindexer;
     };
 
+    // expose indexer externally
+    $.fn.webGL2voxelSorter.get_indexer = get_indexer;
+
     var select_connected_voxels = function(voxel_indices, seed_xyzblock, target) {
         // transitive closure on adjacent voxels
         var settings = target.settings;
@@ -440,6 +443,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             var test_xyzblock = [ix, iy, iz, block_index];
                             var test_index = indexer(test_xyzblock);
                             var test = index_tester[test_index];
+                            // DEBUG
+                            //if (vcount < 10) {
+                            //    var yesno = test ? "YES " : "NO  ";
+                            //    var value = settings.valuesArray[test_index];
+                            //    console.log(yesno + [vcount, ix, iy, iz] + " : " + [test_index, value]);
+                            //}
+                            // END DEBUG
                             if ((test) || (test===0)) {
                                 var v = visited[test_index];
                                 var h = horizon[test_index];
