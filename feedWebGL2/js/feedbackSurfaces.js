@@ -285,6 +285,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
             threshold_start_index(threshold) {
                 // determine the least index in max_corners of the where max_corners[index] >= threshold
+                // (binary search)
                 var max_corners = this.max_corners;
                 var low_index = 0;
                 var high_index = max_corners.length;
@@ -362,6 +363,115 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         }
     }
     `;
+
+    var get_indexer = function (num_cols, num_rows, num_layers) {
+        var y_offset = num_cols;
+        var x_offset = y_offset * num_rows;
+        var block_offset = x_offset * num_layers;
+        var indexer = function(xyzblock) {
+            var [x_index, y_index, z_index, block_index] = xyzblock
+            var index = x_index * x_offset + y_index * y_offset + z_index + block_offset * block_index;
+            return index;
+        };
+        return indexer;
+    };
+
+    var get_deindexer = function (num_cols, num_rows, num_layers) {
+        var y_offset = num_cols;
+        var x_offset = y_offset * num_rows;
+        var block_offset = x_offset * num_layers;
+        var deindexer = function(index) {
+            var block_index = 0;
+            var block_rem = index;
+            if (block_offset) {
+                var block_index = Math.floor(index / block_offset);
+                var block_rem = index % block_offset;
+            }
+            var x_index = Math.floor(block_rem / x_offset);
+            var x_rem = block_rem % x_offset;
+            var y_index = Math.floor(x_rem, y_offset);
+            var z_index = x_rem % y_offset;
+            var xyzblock = [x_index, y_index, z_index, block_index];
+            return xyzblock;
+        };
+        return deindexer;
+    };
+
+    var select_connected_voxels = function(voxel_indices, seed_xyzblock, target) {
+        // transitive closure on adjacent voxels
+        var settings = target.settings;
+        var index_tester = {};
+        for (var i=0; i<voxel_indices.length; i++) {
+            var index = voxel_indices[i];
+            if (index >= 0) {
+                index_tester[index] = true;
+            }
+        }
+        var indexer = get_indexer(settings.num_cols, settings.num_rows, settings.num_layers);
+        //var deindexer = get_deindexer(settings.num_cols, settings.num_rows, settings.num_layers);
+        var seed_index = indexer(seed_xyzblock);
+        var horizon = {}
+        horizon[seed_index] = [seed_index, seed_xyzblock];
+        var count = 1;
+        var total = 0;
+        var visited = {};
+        while (count>0) {
+            count = 0;
+            var vcount = 0;
+            var next_horizon = {};
+            for (var key in horizon) {
+                var [index, xyzblock] = horizon[key];
+                // boundary case can be missing in crossing voxels
+                if (index_tester[index]) {   
+                    visited[index] = index;
+                    vcount ++;
+                }
+                var [x_index, y_index, z_index, block_index] = xyzblock;
+                var hi_x = x_index + 1;
+                var hi_y = y_index + 1;
+                var hi_z = z_index + 1;
+                var lo_x = Math.max(0, x_index-1);
+                var lo_y = Math.max(0, y_index-1);
+                var lo_z = Math.max(0, z_index-1);
+                // xxxx for now don't follow block! ????
+                for (var ix=lo_x; ix<=hi_x; ix++) {
+                    for (var iy=lo_y; iy<=hi_y; iy++) {
+                        for (var iz=lo_z; iz<=hi_z; iz++) {
+                            var test_xyzblock = [ix, iy, iz, block_index];
+                            var test_index = indexer(test_xyzblock);
+                            var test = index_tester[test_index];
+                            if ((test) || (test===0)) {
+                                var v = visited[test_index];
+                                var h = horizon[test_index];
+                                if ((!h) && (!v) && (v!==0)) {
+                                    next_horizon[test_index] = [test_index, test_xyzblock]
+                                    count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            horizon = next_horizon;
+            total += vcount;
+            if (total > voxel_indices.length) {
+                throw new Error("Iteration sanity check failed. Infinite loop? " + total);
+            }
+        }
+        var result_indices = voxel_indices.slice();
+        for (var i=0; i<voxel_indices.length; i++) {
+            var index = voxel_indices[i];
+            if ((index >= 0) && (visited[index])) {
+                // connected.
+                result_indices[i] = index;
+            } else {
+                // not connected
+                result_indices[i] = -1;
+            }
+        }
+        target.connected_voxel_count = total;
+        return result_indices;
+    };
 
     var add_corner_offset_inputs = function(s, nvalues, buffername, inputs) {
         // add input parameters for voxel corners as indexed into ravelled buffer.
@@ -635,6 +745,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // otherwise indicator_array[i] < 0 indicates not crossing.
             return this.index_array.slice(0);  // for this implementation, just copy...
         };
+        set_seed(xyz_block) {
+            this.settings.seed_xyzblock = xyz_block;
+        };
         get_compacted_feedbacks(location_only) {
             this.get_feedbacks(location_only);
             var s = this.settings;
@@ -648,6 +761,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.compact_back_corners = new Float32Array(4 * this.compact_length);
                 this.compact_indices = new Int32Array(this.compact_length);
                 this.compact_locations = new Float32Array(3 * this.compact_length);
+            }
+            // if the seed is defined, trace connected voxels
+            this.connected_voxel_count = null;
+            if (s.seed_xyzblock) {
+                this.index_array = select_connected_voxels(this.index_array, s.seed_xyzblock, this);
             }
             // compact the arrays
             this.compact_indices = this.feedbackContext.filter_degenerate_entries(
@@ -1121,7 +1239,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.compact_locations = new Float32Array(3 * this.compact_length);
         };
         run() {
-            debugger;
             var threshold = this.settings.threshold;
             var threshold_start = this.sorter.threshold_start_index(threshold);
             //var run_size = Math.min(this.sorter.indices.length - start_index, this.compact_length);
@@ -2230,7 +2347,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 set_up_sampler("ColumnScale", s.num_cols+1);
                 set_up_sampler("LayerScale", s.num_layers+1);
             }
-            debugger;
             var crossing_maker = container.webGL2crossingVoxels;
             if (s.sorted) {
                 var crossing_maker = container.webGL2sortedVoxels;
@@ -2257,6 +2373,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.segments = null;
             // named perspectives which share this underlying surface data structure
             this.named_perspectives = {};
+        };
+        connected_voxel_count() {
+            debugger;
+            return this.crossing.connected_voxel_count;
         };
         get_perspective(name, options) {
             options = options || {};
@@ -2289,6 +2409,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
             }
         }
+        set_seed (xyz_block) {
+            this.crossing.set_seed(xyz_block);
+        };
         run () {
             var s = this.settings;
             var compacted = this.crossing.get_compacted_feedbacks();
