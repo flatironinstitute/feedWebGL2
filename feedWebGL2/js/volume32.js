@@ -388,6 +388,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     that.tracking = that.track_check.is(":checked");
                 });
 
+                var cut = $("<span> CUT</span>").appendTo(button_area)
+                this.cut_check = $('<input type="checkbox"/>').appendTo(cut);
+                this.cutting = false;
+                this.cut_check.change(function() {
+                    that.cutting = that.cut_check.is(":checked");
+                });
+
                 // threshold slider
                 var slider =  $("<div/>").appendTo(container);
                 slider.css("background-image", "linear-gradient(to right, blue, yellow)");
@@ -402,7 +409,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var update = function () {
                     var threshold = + slider.slider("option", "value");
                     that.info.html("SLIDE TO: " + threshold);
-                    that.threshold = threshold;
+                    if (that.threshold != threshold) {
+                        that.threshold = threshold;
+                        that.cut_check.prop("checked", false);
+                        that.cutting = false;
+                    }
                     //that.update_volume();
                     that.redraw();
                 };
@@ -438,12 +449,23 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 crossing.reset_three_camera(this.voxel_camera, shift, this.voxelControls);
             };
             show_info() {
-                this.info.html("ijk: " + this.ijk + ", threshold: " + this.threshold.toExponential(2))
+                var connected = this.surface.connected_voxel_count();
+                var cinfo = "";
+                if (connected !== null) {
+                    cinfo = " [" + connected + "]";
+                }
+                this.info.html("ijk: " + this.ijk + ", threshold: " + this.threshold.toExponential(2) + cinfo);
             };
             update_volume() {
                 var surface = this.surface;
                 this.set_limits();
                 surface.set_threshold(this.threshold);
+                var xyz_block = null;
+                if (this.cutting) {
+                    var [i, j, k] = this.ijk;
+                    xyz_block = [i, j, k, 0];
+                }
+                surface.set_seed(xyz_block);
                 surface.run();
                 this.voxel_mesh.update_sphere_locations(surface.crossing.compact_locations);
                 var wires = this.wires_check.is(":checked");
@@ -652,11 +674,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     that.volume.ijk[i0] = x;
                     that.volume.ijk[i1] = y;
                     //that.volume.threshold = 0.5 * (mins[y][x] + maxes[y][x]);
-                    var mins = that.slice_info.mins;
-                    var maxes = that.slice_info.maxes;
-                    var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+                    //var mins = that.slice_info.mins;
+                    //var maxes = that.slice_info.maxes;
+                    //var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+                    var threshold = that.volume.array_value(that.volume.ijk);
                     that.volume.set_threshold(threshold)
-                    that.volume.redraw();
+                    //that.volume.redraw(); redraw is triggered by set_threshold
                 }
             }
         };
@@ -703,7 +726,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
             }
         }
-        debugger;
         var V = container.volume32({
             valuesArray: valuesArray,
             num_rows: num_rows,
