@@ -456,6 +456,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var surface = this.surface;
                 this.set_limits();
                 surface.set_threshold(this.threshold);
+                var xyz_block = null;
+                if (this.cutting) {
+                    debugger;
+                    var [i, j, k] = this.ijk;
+                    xyz_block = [k, j, i, 0];
+                }
+                surface.set_seed(xyz_block);
                 surface.run();
                 this.voxel_mesh.update_sphere_locations(surface.crossing.compact_locations);
                 var wires = this.wires_check.is(":checked");
@@ -474,7 +481,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.show_info();
             };
         };
-        
+
         var cross_hairs_normal = "rgba(0,0,0,0.5)";
         var cross_hairs_cut = "rgba(255,0,0,1)";
 
