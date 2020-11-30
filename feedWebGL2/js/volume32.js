@@ -381,6 +381,20 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     that.redraw();
                 });
 
+                var track = $("<span> Track</span>").appendTo(button_area)
+                this.track_check = $('<input type="checkbox"/>').appendTo(track);
+                this.tracking = false;
+                this.track_check.change(function() {
+                    that.tracking = that.track_check.is(":checked");
+                });
+
+                var cut = $("<span> CUT</span>").appendTo(button_area)
+                this.cut_check = $('<input type="checkbox"/>').appendTo(cut);
+                this.cutting = false;
+                this.cut_check.change(function() {
+                    that.cutting = that.cut_check.is(":checked");
+                });
+
                 // threshold slider
                 var slider =  $("<div/>").appendTo(container);
                 slider.css("background-image", "linear-gradient(to right, blue, yellow)");
@@ -395,7 +409,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var update = function () {
                     var threshold = + slider.slider("option", "value");
                     that.info.html("SLIDE TO: " + threshold);
-                    that.threshold = threshold;
+                    //that.threshold = threshold;
+                    if (that.threshold != threshold) {
+                        that.threshold = threshold;
+                        that.cut_check.prop("checked", false);
+                        that.cutting = false;
+                    }
                     //that.update_volume();
                     that.redraw();
                 };
@@ -411,6 +430,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
                 this.show_info();
                 this.animate()
+            };
+            set_tracking(onoff) {
+                this.tracking = onoff;
+                this.track_check.prop("checked", onoff);
+                this.dragging_slice = null;
             };
             set_threshold(value) {
                 value = value || this.bmin
@@ -450,6 +474,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.show_info();
             };
         };
+        
+        var cross_hairs_normal = "rgba(0,0,0,0.5)";
+        var cross_hairs_cut = "rgba(255,0,0,1)";
 
         class Slicer32 {
             constructor(volume, dimensions, container, side) {
@@ -482,9 +509,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.frame_factor = side * 1.0 / maxdim;
                 this.maxdim = maxdim;
                 this.dragging = null;
-                this.cross_hairs_color = "rgba(0,0,0,0.5)";
+                //this.cross_hairs_color = "rgba(0,0,0,0.5)";
                 this.draw_frame();
-            }
+            };
+
             draw_frame() {
                 var d0, d1, i0, i1;
                 var volume = this.volume;
@@ -524,8 +552,14 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // highlight ijk point
                 var hx = this.volume.ijk[i0] + 0.5;
                 var hy = this.volume.ijk[i1] + 0.5;
-                frame.line({x1:0, y1:hy, x2:d0, y2:hy, color:this.cross_hairs_color});
-                frame.line({x1:hx, y1:0, x2:hx, y2:d1, color:this.cross_hairs_color});
+                var cccolor = cross_hairs_normal;
+                if (volume.tracking) {
+                    cccolor = cross_hairs_cut;
+                }
+                frame.line({x1:0, y1:hy, x2:d0, y2:hy, color:cccolor, lineWidth:2});
+                frame.line({x1:hx, y1:0, x2:hx, y2:d1, color:cccolor, lineWidth:2});
+                //frame.line({x1:0, y1:hy, x2:d0, y2:hy, color:this.cross_hairs_color});
+                //frame.line({x1:hx, y1:0, x2:hx, y2:d1, color:this.cross_hairs_color});
                 frame.frame_circle({x: hx, y:hy, r:0.25, color:"rgba(255,255,255,0.7)"});
                 frame.frame_circle({x: hx, y:hy, r:0.25, color:"black", fill:false});
 
@@ -545,6 +579,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var that = this;
 
                 var click = function(event) {
+                    volume.set_tracking(false);
                     //cl("click: " + event.canvas_name);
                     if (volume.dragging_slice == that) {
                         //cl("click: let mouse up handler deal with it...");
@@ -552,6 +587,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     }
                     //cl("click: resetting ijk");
                     volume.dragging_slice = null;
+                    that.set_ijk(event);
+                    /*
                     // if the event is in bounds, set the ijk and the threshold and redraw
                     var frame_location = that.frame.event_model_location(event);
                     var x = Math.floor(frame_location.x);
@@ -564,7 +601,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
                         that.volume.set_threshold(threshold)
                         that.volume.redraw();
-                    }
+                    } */
                 };
                 event_rect.on("click", click);
 
@@ -585,6 +622,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 Maxes.on("mousedown", mouse_down);
 
                 var mouse_move = function(event) {
+                    if (volume.tracking) {
+                        that.set_ijk(event);
+                        return;
+                    }
                     if (volume.dragging_slice == that) {
                         var frame_location = that.frame.event_model_location(event);
                         var x = Math.round(frame_location.x);
@@ -622,6 +663,26 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 //this.container.on_canvas_event("mouseout", mouse_up);
                 // attach to mouseout jQuery event (not canvas event)
                 //this.container.on("mouseout", mouse_up);
+            };
+            set_ijk(event) {
+                // set the ijk focus and the threshold and redraw
+                var that = this;
+                var frame_location = that.frame.event_model_location(event);
+                var x = Math.floor(frame_location.x);
+                var y = Math.floor(frame_location.y);
+                var [d0, d1] = this.shape;
+                if ((x >= 0) && (x < d0) && (y >= 0) && (y < d1)) {
+                    var [i0, i1] = that.dimensions;
+                    that.volume.ijk[i0] = x;
+                    that.volume.ijk[i1] = y;
+                    //that.volume.threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+                    //var mins = that.slice_info.mins;
+                    //var maxes = that.slice_info.maxes;
+                    //var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+                    var threshold = that.volume.array_value(that.volume.ijk);
+                    that.volume.set_threshold(threshold)
+                    //that.volume.redraw(); redraw is triggered by set_threshold
+                }
             };
         };
 
