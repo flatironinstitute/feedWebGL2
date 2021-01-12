@@ -102,7 +102,6 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         ary_bytes = bytearray(ary32.tobytes())
         nbytes = len(ary_bytes)
         self.js_init("""
-            debugger;
             var uint8array = new Uint8Array(length);
             element.build_status = function(msg) {
                 element.html(msg);
@@ -157,6 +156,42 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         positions = float32array(positions_hex)
         normals = float32array(normals_hex)
         return (positions, normals)
+
+    def dump_to_binary_stl(self, filename="volume.stl", verbose=True):
+        if verbose:
+            print("Dumping volume snapshot as binary STL to " + filename)
+        (positions, normals) = self.triangles_and_normals()
+        if verbose:
+            print("Dumping ", len(positions), "triangles.")
+        file = open(filename, "wb")
+        typ = np.dtype(np.float32, "<") # little endian float32
+        ityp = np.dtype(np.int32, "<") # little endian int32
+        #b = np.array(positions[0,0,0], dtype=typ).tobytes()
+        #len(b), b, positions[0,0,0]
+        header = (b'BINARY STL HEADER STRING :: ' * 20)[:80]
+        ntriangles = len(positions)
+        ntriangles_bytes = np.array(ntriangles, dtype=ityp).tobytes()
+        file.write(header)
+        file.write(ntriangles_bytes)
+        trailer = b'\x00\x00'
+        def dump_triple(triple):
+            assert triple.shape == (3,)
+            for i in range(3):
+                xi = triple[i]
+                bi = np.array(xi, dtype=typ).tobytes()
+                file.write(bi)
+        for itriangle in range(ntriangles):
+            if verbose and (itriangle % 10000) == 0:
+                print (itriangle)
+            normal = normals[itriangle][0]
+            dump_triple(normal)
+            for ivertex in range(3):
+                vertex = positions[itriangle][ivertex]
+                dump_triple(vertex)
+            file.write(trailer)
+        file.close()
+        if verbose:
+            print ("wrote binary STL to " + repr(filename))
 
     shrink_multiple = 4.0
     shrink_max = 0.7
