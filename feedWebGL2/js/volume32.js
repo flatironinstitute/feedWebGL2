@@ -63,7 +63,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.surface_display = null;
                 this.surface = null;
                 // intial slicing indices
-                this.ijk = [0,0,0];
+                this.kji = [0,0,0];
             };
             set_up_surface() {
                 //debugger;
@@ -176,8 +176,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var m = new THREE.MeshNormalMaterial();
                 m.wireframe = true;
                 var c = new THREE.Mesh(g, m);
-                c.position.set(...this.ijk);
-                this.ijk_mesh = c;
+                c.position.set(...this.kji);
+                this.kji_mesh = c;
                 scene.add(c);
 
                 //renderer.render( scene, camera );
@@ -214,27 +214,27 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var that = this;
                 requestAnimationFrame(function () { that.animate(); });
             }
-            array_value(ijk) {
+            array_value(kji) {
                 // index into the values array at col_i row_j layer_k
                 var nc, nr, nl;
                 [nc, nr, nl] = this.shape;
-                var i = ijk[0];
-                var j = ijk[1];
-                var k = ijk[2];
-                if ((i<0) || (i>nc)) {
-                    throw new Error("bad column " + ijk + " :: " + nc);
+                var k = kji[0];
+                var j = kji[1];
+                var i = kji[2];
+                if ((k<0) || (k>nc)) {
+                    throw new Error("bad column " + kji + " :: " + nc);
                 }
                 if ((j<0) || (j>nr)) {
-                    throw new Error("bad row " + ijk + " :: " + nr);
+                    throw new Error("bad row " + kji + " :: " + nr);
                 }
-                if ((i<0) || (k>nl)) {
-                    throw new Error("bad layer " + ijk + " :: " + nl);
+                if ((i<0) || (i>nl)) {
+                    throw new Error("bad layer " + kji + " :: " + nl);
                 }
-                var ravelled_index = i + nc * (j + nr * k);
+                var ravelled_index = k + nc * (j + nr * i);
                 return this.buffer[ravelled_index];
             };
-            array_slice(ijk, dimensions) {
-                // 2d slice along dimensions including ijk
+            array_slice(kji, dimensions) {
+                // 2d slice along dimensions including kji
                 var d0 = dimensions[0];  // column dimension
                 var d1 = dimensions[1];  // row dimension
                 var n0 = this.shape[d0];
@@ -243,15 +243,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var result = [];
                 var mins = [];
                 var maxes = [];
-                var ijk_clone = ijk.slice();
-                var vmax = this.array_value(ijk);
+                var kji_clone = kji.slice();
+                var vmax = this.array_value(kji);
                 var vmin = vmax;
                 for (var loc1=0; loc1<n1; loc1++) {
                     var row = [];
                     for (var loc0=0; loc0<n0; loc0++) {
-                        ijk_clone[d0] = loc0;
-                        ijk_clone[d1] = loc1;
-                        var v = this.array_value(ijk_clone);
+                        kji_clone[d0] = loc0;
+                        kji_clone[d1] = loc1;
+                        var v = this.array_value(kji_clone);
                         vmax = Math.max(vmax, v);
                         vmin = Math.min(vmin, v);
                         row.push(v);
@@ -470,7 +470,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 crossing.reset_three_camera(this.voxel_camera, shift, this.voxelControls);
             };
             show_info() {
-                this.info.html("ijk: " + this.ijk + ", threshold: " + this.threshold.toExponential(2))
+                var index_order = [this.kji[2], this.kji[1], this.kji[0], ];
+                this.info.html("indices: " + index_order + ", threshold: " + this.threshold.toExponential(2))
             };
             update_volume() {
                 var surface = this.surface;
@@ -479,8 +480,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var xyz_block = null;
                 if (this.cutting) {
                     debugger;
-                    var [i, j, k] = this.ijk;
-                    xyz_block = [k, j, i, 0];
+                    var [k, j, i] = this.kji;
+                    xyz_block = [i, j, k, 0];  // ???
                 }
                 surface.set_seed(xyz_block);
                 surface.run();
@@ -494,7 +495,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     sync = this.sync_check.is(':checked');
                 }
                 this.slice_displays.map(x => x.draw_frame());
-                this.ijk_mesh.position.set(...this.ijk);
+                this.kji_mesh.position.set(...this.kji);
                 if (sync) {
                     this.update_volume();
                 }
@@ -514,7 +515,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.side = side;
                 var d0, d1;
                 [d0, d1] = dimensions;
-                var names = ["Z", "Y", "X"];
+                //var names = ["Z", "Y", "X"];
+                var names = ["K", "J", "I"];
                 this.name = "slice(" + d0 + "," + d1 + ")";
                 this.hname = names[d0];
                 this.vname = names[d1];
@@ -553,7 +555,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var yellow = [255,255,0,255]
                 frame.reset_frame();
                 var event_rect = frame.frame_rect({x:-1, y:-1, w:d0+1, h:d1+1, color:"rgba(0,0,0,0)", name:"event_rect"})
-                var slice_info = this.volume.array_slice(this.volume.ijk, this.dimensions);
+                var slice_info = this.volume.array_slice(this.volume.kji, this.dimensions);
                 this.container.name_image_data(self.name, slice_info.bytes, slice_info.cols, slice_info.rows, blue, yellow);
                 var ff = this.frame_factor;
                 frame.named_image({image_name: self.name, x:0, y:0, w:ff*slice_info.cols, h:ff*slice_info.rows})
@@ -576,9 +578,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         }
                     }
                 }
-                // highlight ijk point
-                var hx = this.volume.ijk[i0] + 0.5;
-                var hy = this.volume.ijk[i1] + 0.5;
+                // highlight kji point
+                var hx = this.volume.kji[i0] + 0.5;
+                var hy = this.volume.kji[i1] + 0.5;
                 var cccolor = cross_hairs_normal;
                 if (volume.tracking) {
                     cccolor = cross_hairs_cut;
@@ -612,23 +614,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         //cl("click: let mouse up handler deal with it...");
                         return;
                     }
-                    //cl("click: resetting ijk");
+                    //cl("click: resetting kji");
                     volume.dragging_slice = null;
-                    that.set_ijk(event);
-                    /*
-                    // if the event is in bounds, set the ijk and the threshold and redraw
-                    var frame_location = that.frame.event_model_location(event);
-                    var x = Math.floor(frame_location.x);
-                    var y = Math.floor(frame_location.y);
-                    if ((x >= 0) && (x < d0) && (y >= 0) && (y < d1)) {
-                        debugger;
-                        that.volume.ijk[i0] = x;
-                        that.volume.ijk[i1] = y;
-                        //that.volume.threshold = 0.5 * (mins[y][x] + maxes[y][x]);
-                        var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
-                        that.volume.set_threshold(threshold)
-                        that.volume.redraw();
-                    } */
+                    that.set_kji(event);
                 };
                 event_rect.on("click", click);
 
@@ -650,7 +638,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
                 var mouse_move = function(event) {
                     if (volume.tracking) {
-                        that.set_ijk(event);
+                        that.set_kji(event);
                         return;
                     }
                     if (volume.dragging_slice == that) {
@@ -691,8 +679,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // attach to mouseout jQuery event (not canvas event)
                 //this.container.on("mouseout", mouse_up);
             };
-            set_ijk(event) {
-                // set the ijk focus and the threshold and redraw
+            set_kji(event) {
+                // set the kji focus and the threshold and redraw
                 var that = this;
                 var frame_location = that.frame.event_model_location(event);
                 var x = Math.floor(frame_location.x);
@@ -700,13 +688,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var [d0, d1] = this.shape;
                 if ((x >= 0) && (x < d0) && (y >= 0) && (y < d1)) {
                     var [i0, i1] = that.dimensions;
-                    that.volume.ijk[i0] = x;
-                    that.volume.ijk[i1] = y;
+                    that.volume.kji[i0] = x;
+                    that.volume.kji[i1] = y;
                     //that.volume.threshold = 0.5 * (mins[y][x] + maxes[y][x]);
                     //var mins = that.slice_info.mins;
                     //var maxes = that.slice_info.maxes;
                     //var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
-                    var threshold = that.volume.array_value(that.volume.ijk);
+                    var threshold = that.volume.array_value(that.volume.kji);
                     that.volume.set_threshold(threshold)
                     //that.volume.redraw(); redraw is triggered by set_threshold
                 }
