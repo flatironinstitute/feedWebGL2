@@ -1,7 +1,7 @@
 /*
 // jQuery plugin encapsulating a 3d volume viewer
 //
-// Uses jp_doodle, three.js, feedWebGL2
+// Uses jp_doodle, three.js, feedWebGL2, feedbackSurface.js
 
 Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 */
@@ -66,7 +66,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.ijk = [0,0,0];
             };
             set_up_surface() {
-                debugger;
+                //debugger;
                 var shape = this.shape;
                 var num_cols, num_rows, num_layers;
                 [num_cols, num_rows, num_layers] = shape;
@@ -189,7 +189,23 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.voxelControls.userZoom = false;
                 this.voxelClock = new THREE.Clock();
             };
+            dispose() {
+                // call this when the object is no longer in use.  It tries to free up memory.
+                try {
+                    this.feedbackContext.lose_context();
+                } catch (e) {};
+                this.voxel_renderer.renderLists.dispose();
+                this.surface_renderer.renderLists.dispose();
+                for (var name in this) {
+                    this[name] = null;
+                }
+            }
             animate() {
+                var container = this.container;
+                if (!container[0].isConnected) {
+                    console.log("Terminating volume animation because container is disconnected.");
+                    return this.dispose();
+                }
                 var delta = this.voxelClock.getDelta();
                 this.voxelControls.update(delta);
                 this.voxel_renderer.render(this.voxel_scene, this.voxel_camera);
@@ -294,6 +310,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             build_scaffolding(container, width) {
                 // create standard layout for 3 slices, voxel dots and contours
                 var that = this;
+                this.container = container;
+                if (!container[0].isConnected) {
+                    throw new Error("scaffolding must be built on a connected DOM element.")
+                }
                 var contour_side = width * 0.5;
                 var slice_side = contour_side * 0.5;
                 container.empty();
