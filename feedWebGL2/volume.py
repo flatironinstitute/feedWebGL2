@@ -89,12 +89,12 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         if threshold is None:
             threshold = 0.5 * (ary.min() + ary.max());
         self.element.html("Loading shape: " + repr(ary.shape) + " " + repr([threshold, shrink_factor]))
-        (num_layers, num_cols, num_rows) = ary.shape
+        (num_layers, num_rows, num_cols) = ary.shape
         if shrink_factor is None:
             shrink_factor = self.shrink_heuristic(*ary.shape)
         ary32 = np.array(ary, dtype=np.float32)
         self.set_options(
-            num_rows, num_cols, num_layers, 
+            num_rows=num_rows, num_cols=num_cols, num_layers=num_layers, 
             threshold=threshold, shrink_factor=shrink_factor, method=method,
             sorted=sorted,
             )
@@ -205,7 +205,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         assert self.data is not None, "data must be provided"
         self.element.html("building")
         self.element.V.build_scaffolding(self.get_element(), width)
-        self.element.V.focus_volume()
+        self.element.V.zoom_out()
 
     def doodle_diagram(
         self, 

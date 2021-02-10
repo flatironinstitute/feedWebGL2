@@ -43,7 +43,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 assert_positive(s.num_rows);
                 assert_positive(s.num_cols);
                 assert_positive(s.num_layers);
-                this.shape = [s.num_rows, s.num_cols, s.num_layers];
+                //this.shape = [s.num_rows, s.num_cols, s.num_layers];
+                this.shape = [s.num_cols, s.num_rows, s.num_layers];
                 this.grid_mins = [0, 0, 0];
                 this.grid_maxes = this.shape.slice();
                 this.dragging_slice = null;
@@ -383,6 +384,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
                 // button area
                 var button_area = $("<div/>").appendTo(container);
+                this.zoom_out_button = $("<button>Zoom out</button>").appendTo(button_area);
+                this.zoom_out_button.click(function() { that.zoom_out(); });
+
                 this.focus_button = $("<button>Focus</button>").appendTo(button_area);
                 this.focus_button.click(function() { that.focus_volume(); });
 
@@ -462,8 +466,19 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.threshold = value;
                 this.threshold_slider.slider("option", "value", value);
             };
+            zoom_out() {
+                // xxx this will not work right if dx, dy, dz are not default valued!
+                var s = this.settings;
+                var cz = 0.5 * (s.num_cols - 1);
+                var cy = 0.5 * (s.num_rows - 1);
+                var cx = 0.5 * (s.num_layers - 1);
+                var r = Math.max(cx, cy, cz)  * 2 + 2;
+                var crossing = this.surface.crossing;
+                var shift = 2.0;
+                crossing.reset_three_camera(this.surface_camera, shift, null, r, cx, cy, cz);
+                crossing.reset_three_camera(this.voxel_camera, shift, this.voxelControls, r, cx, cy, cz);
+            }
             focus_volume() {
-                var surface = this.surface;
                 var crossing = this.surface.crossing;
                 var shift = 2.0;
                 crossing.reset_three_camera(this.surface_camera, shift);
@@ -479,7 +494,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 surface.set_threshold(this.threshold);
                 var xyz_block = null;
                 if (this.cutting) {
-                    debugger;
+                    debugger;ƒ
                     var [k, j, i] = this.kji;
                     xyz_block = [i, j, k, 0];  // ???
                 }
@@ -563,8 +578,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     min_x:0, min_y:0, max_x:this.shape[0], max_y:this.shape[1],
                     x_anchor: 0, y_anchor:0, max_tick_count:3,
                 });
-                frame.text({x:-0.1*m, y:d1 * 0.5, align:"right", text: this.vname})
-                frame.text({y:-0.1*m, x:d0 * 0.5, text: this.hname, degrees:-90})
+                var font =  "normal 20px Courier"
+                frame.text({x:-0.1*m, y:d1 * 0.5, align:"right", text: this.vname, font:font})
+                frame.text({y:-0.1*m, x:d0 * 0.5, text: this.hname, degrees:-90, font:font})
                 // circles marking crossing pixels
                 var threshold = this.volume.threshold;
                 var mins = slice_info.mins;
