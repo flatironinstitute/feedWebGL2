@@ -898,21 +898,24 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
             return colors;
         };
-        reset_three_camera(camera, radius_multiple, orbit_control) {
+        reset_three_camera(camera, radius_multiple, orbit_control, radius, cx, cy, cz) {
             // adjust three.js camera to look at current voxels
-            var cf = this.compacted_feedbacks;
-            if ((!cf) || (!cf.mins)) {
-                // no points -- punt
-                return;
+            if (!radius) {
+                var cf = this.compacted_feedbacks;
+                if ((!cf) || (!cf.mins)) {
+                    // no points -- punt
+                    return;
+                }
+                cx = cf.mid[0];
+                cy = cf.mid[1];
+                cz = cf.mid[2];
+                radius = cf.radius;
             }
-            var cx = cf.mid[0];
-            var cy = cf.mid[1];
-            var cz = cf.mid[2];
             radius_multiple = radius_multiple || 3;
             camera.position.x = cx;
             camera.position.y = cy;
-            camera.position.z = cz + radius_multiple * cf.radius;
-            camera.lookAt(cf.mid[0], cf.mid[1], cf.mid[2]);
+            camera.position.z = cz + radius_multiple * radius;
+            camera.lookAt(cx, cy, cz);
             if (orbit_control) {
                 orbit_control.center.x = cx;
                 orbit_control.center.y = cy;
