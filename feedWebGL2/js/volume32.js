@@ -15,6 +15,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.settings = $.extend({
                     feedbackContext: null,    // the underlying FeedbackContext context to use
                     valuesArray: null,   // the array buffer of values to contour
+                    // stream lines settings
+                    stream_lines_parameters: null,
                     num_rows: null,
                     num_cols: null,
                     num_layers: 1,  // default to "flat"
@@ -195,8 +197,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 try {
                     this.feedbackContext.lose_context();
                 } catch (e) {};
-                this.voxel_renderer.renderLists.dispose();
-                this.surface_renderer.renderLists.dispose();
+                try {
+                    this.voxel_renderer.renderLists.dispose();
+                } catch (e) {};
+                try {
+                    this.surface_renderer.renderLists.dispose();
+                } catch (e) {};
                 for (var name in this) {
                     this[name] = null;
                 }
@@ -396,7 +402,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var auto_sync = $("<span> auto</span>").appendTo(button_area)
                 this.sync_check = $('<input type="checkbox" checked/>').appendTo(auto_sync);
                 this.sync_check.change(function() {
-                    that.redraw();
+                    var sync = that.sync_check.is(':checked');
+                    if (sync) {
+                        var threshold = that.array_value(that.volume.kji);
+                        that.set_threshold(threshold);
+                        that.redraw();
+                    }
                 });
 
                 var wires = $("<span> wires</span>").appendTo(button_area)
@@ -710,8 +721,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     //var mins = that.slice_info.mins;
                     //var maxes = that.slice_info.maxes;
                     //var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
-                    var threshold = that.volume.array_value(that.volume.kji);
-                    that.volume.set_threshold(threshold)
+                    var sync = that.volume.sync_check.is(':checked');
+                    if (sync) {
+                        var threshold = that.volume.array_value(that.volume.kji);
+                        that.volume.set_threshold(threshold);
+                    }
                     //that.volume.redraw(); redraw is triggered by set_threshold
                 }
             };
