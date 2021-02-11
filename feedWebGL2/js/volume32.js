@@ -67,9 +67,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.surface = null;
                 // intial slicing indices
                 this.kji = [0,0,0];
+                // for debugging
+                this.dump_events = false;
             };
             set_up_surface() {
-                //debugger;
                 var shape = this.shape;
                 var num_cols, num_rows, num_layers;
                 [num_cols, num_rows, num_layers] = shape;
@@ -404,7 +405,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.sync_check.change(function() {
                     var sync = that.sync_check.is(':checked');
                     if (sync) {
-                        var threshold = that.array_value(that.volume.kji);
+                        var threshold = that.array_value(that.kji);
                         that.set_threshold(threshold);
                         that.redraw();
                     }
@@ -505,7 +506,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 surface.set_threshold(this.threshold);
                 var xyz_block = null;
                 if (this.cutting) {
-                    debugger;ƒ
                     var [k, j, i] = this.kji;
                     xyz_block = [i, j, k, 0];  // ???
                 }
@@ -572,10 +572,22 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var d0, d1, i0, i1;
                 var volume = this.volume;
                 var frame = this.frame;
+                var that = this;
                 [i0, i1] = this.dimensions;
                 [d0, d1] = this.shape;
                 var grid_mins = [volume.grid_mins[i0], volume.grid_mins[i1]];
                 var grid_maxes = [volume.grid_maxes[i0], volume.grid_maxes[i1]];
+                if (volume.dragging_slice == that) {
+                    // update the min/max marker rects
+                    this.Mins.change({x: grid_mins[0], y: grid_mins[1]});
+                    this.Maxes.change({x: grid_maxes[0], y: grid_maxes[1]});
+                    this.m0.change({x: grid_mins[0], y:0, w:-grid_mins[0], h:d1,});
+                    this.m1.change({x: 0, y:grid_mins[1], w:d0, h:-grid_mins[1],});
+                    this.M0.change({x: grid_maxes[0], y:0, w:d0-grid_maxes[0], h:d1,});
+                    this.M1.change({x: 0, y:grid_maxes[1], w:d0, h:d1-grid_maxes[1],});
+                    // don't replot the dragging frame
+                    return;
+                }
                 var m = this.maxdim;
                 var blue = [0,0,255,255]
                 var yellow = [255,255,0,255]
@@ -620,21 +632,32 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 frame.frame_circle({x: hx, y:hy, r:0.25, color:"black", fill:false});
 
                 // min boundaries
-                frame.frame_rect({x: grid_mins[0], y:0, w:-grid_mins[0], h:d1, color:"rgba(255,255,255,0.5)"});
-                frame.frame_rect({x: 0, y:grid_mins[1], w:d0, h:-grid_mins[1], color:"rgba(255,255,255,0.5)"});
+                this.m0 = frame.frame_rect({x: grid_mins[0], y:0, w:-grid_mins[0], h:d1, color:"rgba(255,255,255,0.5)", name:true});
+                this.m1 = frame.frame_rect({x: 0, y:grid_mins[1], w:d0, h:-grid_mins[1], color:"rgba(255,255,255,0.5)", name:true});
                 // max boundaries
-                frame.frame_rect({x: grid_maxes[0], y:0, w:d0-grid_maxes[0], h:d1, color:"rgba(255,255,255,0.5)"});
-                frame.frame_rect({x: 0, y:grid_maxes[1], w:d0, h:d1-grid_maxes[1], color:"rgba(255,255,255,0.5)"});
+                this.M0 = frame.frame_rect({x: grid_maxes[0], y:0, w:d0-grid_maxes[0], h:d1, color:"rgba(255,255,255,0.5)", name:true});
+                this.M1 = frame.frame_rect({x: 0, y:grid_maxes[1], w:d0, h:d1-grid_maxes[1], color:"rgba(255,255,255,0.5)", name:true});
                 // boundary draggers
                 var Mins = frame.rect({x: grid_mins[0], y: grid_mins[1], w:-20, h:-20, color:"black", name:"Mins"})
                 var Maxes = frame.rect({x: grid_maxes[0], y: grid_maxes[1], w:20, h:20, color:"black", name:"Maxes"})
+                this.Mins = Mins;
+                this.Maxes = Maxes;
 
                 this.container.fit(null, 10);
 
                 // events
-                var that = this;
+                var event_info_dump = function(event) {
+                    if (!volume.dump_events) {
+                        return;
+                    }
+                    var name = event.canvas_name;
+                    var type = event.type;
+                    var dragging = that.dragging;
+                    volume.info.html("event name: " + name + ", type: " + type + ", dragging=" +dragging);
+                };
 
                 var click = function(event) {
+                    event_info_dump(event);
                     volume.set_tracking(false);
                     //cl("click: " + event.canvas_name);
                     if (volume.dragging_slice == that) {
@@ -649,6 +672,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
                 //this.dragging = null;
                 var mouse_down = function(event) {
+                    event_info_dump(event);
                     var name = event.canvas_name;
                     if ((name=="Mins") || (name=="Maxes")) {
                         //cl("mouse_down dragging: " + name);
@@ -664,6 +688,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 Maxes.on("mousedown", mouse_down);
 
                 var mouse_move = function(event) {
+                    event_info_dump(event);
                     if (volume.tracking) {
                         that.set_kji(event);
                         return;
@@ -695,10 +720,16 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         volume.draggin_slice = null;
                     }
                 };
-                event_rect.on("mousemove", mouse_move);
+                //event_rect.on("mousemove", mouse_move);
+                var rects = [event_rect, this.m0, this.m1, this.M0, this.M1, this.Mins, this.Maxes];
+                for (var i=0; i<rects.length; i++) {
+                    rects[i].on("mousemove", mouse_move);
+                }
 
                 var mouse_up = function(event) {
                     //cl("mouse_up")
+                    event_info_dump(event);
+                    that.draggine = null;
                     volume.dragging_slice = null;
                 };
                 this.container.on_canvas_event("mouseup", mouse_up);
@@ -773,7 +804,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
             }
         }
-        debugger;
         var V = container.volume32({
             valuesArray: valuesArray,
             num_rows: num_rows,
