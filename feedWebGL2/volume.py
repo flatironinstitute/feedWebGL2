@@ -15,6 +15,7 @@ required_javascript_modules = [
     local_files.vendor_path("js_lib/OrbitControls.js"),
     local_files.vendor_path("js/feedWebGL.js"),
     local_files.vendor_path("js/feedbackSurfaces.js"),
+    local_files.vendor_path("js/streamLiner.js"),
     local_files.vendor_path("js/volume32.js"),
 ]
 
@@ -78,6 +79,17 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
     def sync(self, message="Volume widget is ready"):
         "Wait for the widget to initialize before proceeding. Widget must be displayed!"
         self.element.ready_sync(message).sync_value()
+
+    def load_stream_lines(self, stream_lines):
+        """
+        Load sequence of sequence of triples as stream lines to the surface display.
+        """
+        # KISS for now XXXX eventually optimize using bytearrays and numpy
+        self.js_init("""
+            element.V.settings.stream_lines_parameters = {
+                stream_lines: stream_lines,
+                };
+        """, stream_lines=stream_lines)
 
     def load_3d_numpy_array(
             self, ary, 
