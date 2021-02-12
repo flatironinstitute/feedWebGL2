@@ -19,7 +19,7 @@
                 stream_lines: null,
                 // scaling factor for sprite basis vectors
                 basis_scale: 1.0,
-                epsilon: 1e-10,
+                epsilon: 1e-5,
             }, options);
             var s = this.settings;
             var stream_lines = s.stream_lines;
@@ -41,6 +41,9 @@
                     var point = stream[j];
                     for (var k=0; k<3; k++) {
                         var pk = point[k];
+                        if ( (typeof pk) !== "number") {
+                            throw new Error("Stream lines should be sequence of sequence of 3d points.")
+                        }
                         stream_sequence.push(pk);
                         mins[k] = Math.min(mins[k], pk)
                         maxes[k] = Math.max(maxes[k], pk)
@@ -71,7 +74,10 @@
                 feedbacks: {
                     vertex_position: {num_components: 3},
                     normal: {num_components: 3},
-                    is_valid: {num_components: 1, type: "int"},
+                    //is_valid: {num_components: 1, type: "int"},
+                    // DEBUG ONLY:
+                    //n_straight: {num_components: 3},
+                    //n_horizontal: {num_components: 3},
                 },
             });
 
@@ -197,7 +203,12 @@
             return this.vertex_positions(optionalPreAllocatedArrayBuffer);
         };
         vertex_positions(optionalPreAllocatedArrayBuffer) {
-            return this.runner.feedback_array("vertex_position", optionalPreAllocatedArrayBuffer);
+            // DEBUG ONLY
+            //this.n_straight = this.runner.feedback_array("n_straight");
+            //this.n_horizontal = this.runner.feedback_array("n_horizontal");
+            // END DEBUG ONLY
+            this._vertex_positions = this.runner.feedback_array("vertex_position", optionalPreAllocatedArrayBuffer);
+            return this._vertex_positions;
         };
         vertex_normals(optionalPreAllocatedArrayBuffer) {
             return this.runner.feedback_array("normal", optionalPreAllocatedArrayBuffer);
@@ -256,33 +267,37 @@
     flat out int is_valid;
     out vec3 vertex_position;
     out vec3 normal;
+    out vec3 n_straight;    // debugging output
+    out vec3 n_horizontal;  // debugging output
 
     void main() {
         // default output values
         is_valid = 0;  // default to invalid
         vertex_position = vec3(0.0, 0.0, 0.0);  // arbitrary
         normal = vec3(1.0, 0.0, 0.0);
+        // default values
+        n_straight = vec3(1.0, 0.0, 0.0);  // unit in direction P0 --> P1
+        n_horizontal = vec3(0.0, 1.0, 0.0);  // unit offset along offset of turn P0-P1-P2
+        vec3 n_vertical = vec3(0.0, 0.0, 1.0);  // the other unit basis vector in 3d.
+        vec3 P0, P1, P2;
+        float lmd, lmd1;
         // if B or C are invalid then this vertex is at a "break' in the streamline.
         if ((Bvalid > 0) && (Cvalid > 0)) {
             is_valid = 1;
             //float lmd = floor(interpolation);
             // do not automatically force interpolation into range [0...1]? xxxx
-            float lmd = interpolation;
-            float lmd1 = 1.0 - lmd;
+            lmd = interpolation;
+            lmd1 = 1.0 - lmd;
             // P0, P1, P2 are interpolated points on the streamline.
-            vec3 P0 = PB;
+            P0 = PB;
             if (Avalid > 0) {
                 P0 = lmd1 * PA + lmd * PB;  // interpolate
             }
-            vec3 P1 = lmd1 * PB + lmd * PC;  // always interpolate
-            vec3 P2 = PC;
+            P1 = lmd1 * PB + lmd * PC;  // always interpolate
+            P2 = PC;
             if (Dvalid > 0) {
                 P2 = lmd1 * PC + lmd * PD;  // interpolate
             }
-            // default values
-            vec3 n_straight = vec3(1.0, 0.0, 0.0);  // unit in direction P0 --> P1
-            vec3 n_horizontal = vec3(0.0, 1.0, 0.0);  // unit offset along offset of turn P0-P1-P2
-            vec3 n_vertical = vec3(0.0, 0.0, 1.0);  // the other unit basis vector in 3d.
             vec3 V1 = P1 - P0;
             float lV1 = length(V1);
             // if P0 ~= P1 use arbitrary default basis vectors, otherwise...
@@ -297,15 +312,35 @@
                     if (abs(n_straight[0]) < epsilon) {
                         W2 = vec3(1.0, 0.0, 0.0);
                     } 
+                    // XXXX DEBUG
+                    //W2 = vec3(0.0, 1.0, 0.0);
+                    //n_straight = vec3(1.0, 0.0, 0.0);
+                    // XXXX END DEBUG
                 }
+                // XXXX DEBUG
+                //W2 = vec3(0.0, 0.0, 0.0);
+                //n_straight = vec3(1.0, 0.0, 0.0);
+                // XXXX END DEBUG
                 vec3 W2proj = W2 - (dot(W2, n_straight) * n_straight);
                 float lW2proj = length(W2proj);
                 if (lW2proj < epsilon) {
                     // P0, P1, P2 collinear: arbitrary choice for turn direction...
-                    W2 = vec3(0.0, 1.0, 1.0);
-                    if (abs(n_straight[0]) < epsilon) {
-                        W2 = vec3(1.0, 0.0, 0.0);
-                    } 
+                    vec3 abs_n = abs(n_straight);
+                    float ax = abs_n.x;
+                    float ay = abs_n.y;
+                    float az = abs_n.z;
+                    if (ax > ay) {
+                        if (ax > az) {
+                            W2 = vec3(0.0, 1.0, 1.0);
+                        } else {
+                            // az is max
+                            W2 = vec3(1.0, 1.0, 0.0);
+                        }
+                    } else if (ay > az) {
+                        W2 = vec3(1.0, 0.0, 1.0);
+                    } else {
+                        W2 = vec3(1.0, 1.0, 0.0);
+                    }
                     W2proj = W2 - (dot(W2, n_straight) * n_straight);
                     lW2proj = length(W2proj);
                 }
@@ -329,6 +364,12 @@
             float nw_vertical = normal_weights[2];
             normal = normalize((nw_straight * n_straight) + (nw_horizontal * n_horizontal) + (nw_vertical * n_vertical));
         }
+        // DEBUG
+        //n_straight = PA;
+        //n_horizontal = PB;
+        //vertex_position.x = lmd;
+        //vertex_position.y = lmd1;
+        //vertex_position.z = PA.z;
     }
     `;
 
