@@ -2711,6 +2711,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     class webGL2SurfacePerspective {
         // A view of the surface at a specified threshold and color rotation, etc.
         // The underlying surface may be shared between many perspectives!!!
+        // NOT COMPLETE!  DELETE??
         constructor(surface, options) {
             this.surface = surface;
             var ssettings = surface.settings;
