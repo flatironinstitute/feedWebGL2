@@ -15,7 +15,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.settings = $.extend({
                     feedbackContext: null,    // the underlying FeedbackContext context to use
                     valuesArray: null,   // the array buffer of values to contour
-                    // stream lines settings
+                    // stream lines settings if relevant
                     stream_lines_parameters: null,
                     num_rows: null,
                     num_cols: null,
@@ -55,16 +55,22 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var size = s.num_rows * s.num_cols * s.num_layers;
                 var buffer = s.valuesArray;
                 if (!buffer) {
-                    buffer = new Float32Array(size);
-                } 
-                if (buffer.length != size) {
+                    // assume the this.buffer will be set to an appropriate value before set_up_surface
+                    // buffer = new Float32Array(size);
+                } else if (buffer.length != size) {
                     throw new Error("buffer size must exactly match dimensions.")
                 }
+                var stream_lines_sequence = null;
+                if ((s.stream_lines_parameters) && (s.stream_lines_parameters.stream_lines)) {
+                    stream_lines_sequence = s.stream_lines_parameters.stream_lines;
+                }  // otherwise assume it will be set before set_up_streamlines
+                this.stream_lines_sequence = stream_lines_sequence;
                 this.buffer  = buffer;
                 this.slice_displays = [null, null, null];
                 this.dots_display = null;
                 this.surface_display = null;
                 this.surface = null;
+                this.stream_lines = null;
                 // intial slicing indices
                 this.kji = [0,0,0];
                 // for debugging
@@ -105,6 +111,20 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.set_limits();
                 surface.run();
             };
+            set_up_streamlines() {
+                var s = this.settings;
+                var parameters = $.extend({
+                    feedbackContext: this.feedbackContext,
+                }, s.stream_lines_parameters);
+                parameters.stream_lines =  parameters.stream_lines || this.stream_lines_sequence;
+                if (!parameters.stream_lines) {
+                    throw new Error("sequence of stream line polylines is required.")
+                }
+                this.stream_lines = $.fn.streamLiner(parameters);
+                // run the stream lines so buffers are available
+                this.stream_lines.run(0.0);
+                return this.stream_lines;
+            };
             set_limits() {
                 // xxxx someday rationalize the indexing!
                 var gm = this.grid_mins;
@@ -112,6 +132,81 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var gM = this.grid_maxes;
                 var maxes = [gM[2], gM[1], gM[0]];
                 this.surface.set_grid_limits(mins, maxes);
+            };
+            get_positions(buffer) {
+                // get positions for iso-surface triangles and streamline triangles
+                this.surface_positions = this.surface.get_positions(this.surface_positions);
+                this.stream_positions = this.stream_lines.vertex_positions(this.stream_positions);
+                var length = this.surface_positions.length + this.stream_positions.length;
+                if (buffer) {
+                    if (buffer.length != length) {
+                        throw new Error("preallocated buffer must have correct length.")
+                    }
+                } else {
+                    buffer = new Float32Array(length);
+                }
+                //buffer.set(this.stream_positions);
+                buffer.set(this.surface_positions);
+                buffer.set(this.stream_positions, this.surface_positions.length);
+                return buffer;
+            };
+            get_normals(buffer) {
+                // get positions for iso-surface triangles and streamline triangles
+                this.surface_normals = this.surface.get_normals(this.surface_normals);
+                this.stream_normals = this.stream_lines.vertex_normals(this.stream_normals);
+                var length = this.surface_normals.length + this.stream_normals.length;
+                if (buffer) {
+                    if (buffer.length != length) {
+                        throw new Error("preallocated buffer must have correct length.")
+                    }
+                } else {
+                    buffer = new Float32Array(length);
+                }
+                //buffer.set(this.stream_normals);
+                buffer.set(this.surface_normals);
+                buffer.set(this.stream_normals, this.surface_normals.length);
+                return buffer;
+            };
+            surface_geometry() {
+                var s = this.settings;
+                var geometry;
+                if (s.stream_lines_parameters) {
+                    geometry = new THREE.BufferGeometry();
+                    // create a geometry including streams and surface triangles
+                    if (!this.stream_lines) {
+                        this.stream_lines = this.set_up_streamlines();
+                    }
+                    this.positions = this.get_positions();
+                    this.normals = this.get_normals();
+                    geometry.setAttribute( 'position', new THREE.BufferAttribute( this.positions, 3 ) );
+                    geometry.setAttribute( 'normal', new THREE.BufferAttribute( this.normals, 3 ) );
+                } else {
+                    // just use auto-updating surface geometry.
+                    geometry = this.surface.linked_three_geometry(THREE);
+                }
+                this.surface_geometry = geometry;
+                return geometry;
+            };
+            update_surface_geometry(for_time) {
+                var s = this.settings;
+                var geometry = this.surface_geometry;
+                if (s.stream_lines_parameters) {
+                    // update the streamline animation and reset the geometry buffers
+                    var cycle_duration = 1.0;
+                    var interpolate = (for_time % cycle_duration)/cycle_duration;
+                    this.stream_lines.run(interpolate);
+                    var positions = this.get_positions();
+                    var normals = this.get_normals();
+                    //var positions = this.get_positions(geometry.attributes.position.array);
+                    //var normals = this.get_normals(geometry.attributes.normal.array);
+                    geometry.attributes.position.array = positions;
+                    geometry.attributes.position.needsUpdate = true;
+                    geometry.attributes.normal.array = normals;
+                    geometry.attributes.normal.needsUpdate = true;
+                } else {
+                    // do nothing. The linked surface geometry updates on demand.
+                }
+                return geometry;
             };
             initialize_surface_display(container) {
                 if (!this.surface) {
@@ -128,7 +223,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var camera = new THREE.PerspectiveCamera( 45, container.width()/container.height(), 0.1, 10000 );
                 var material = new THREE.MeshNormalMaterial( {  } );
                 material.side = THREE.DoubleSide;
-                var geometry = this.surface.linked_three_geometry(THREE);
+                var geometry = this.surface_geometry();
                 var mesh = new THREE.Mesh( geometry,  material );
                 var scene = new THREE.Scene();
                 scene.add(mesh);
@@ -207,7 +302,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 for (var name in this) {
                     this[name] = null;
                 }
-            }
+            };
+            // ??? eventually render on demand:
+            // https://threejsfundamentals.org/threejs/lessons/threejs-rendering-on-demand.html
             animate() {
                 var container = this.container;
                 if (!container[0].isConnected) {
@@ -215,6 +312,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     return this.dispose();
                 }
                 var delta = this.voxelClock.getDelta();
+                this.update_surface_geometry(this.voxelClock.elapsedTime);
                 this.voxelControls.update(delta);
                 this.voxel_renderer.render(this.voxel_scene, this.voxel_camera);
                 this.sync_cameras();
@@ -514,7 +612,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.voxel_mesh.update_sphere_locations(surface.crossing.compact_locations);
                 var wires = this.wires_check.is(":checked");
                 this.surface_material.wireframe = wires;
-                surface.check_update_link();
+                if (surface.check_update_link) {
+                    surface.check_update_link();
+                }
             };
             redraw(sync) {
                 if (!sync) {
