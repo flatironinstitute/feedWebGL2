@@ -33,14 +33,14 @@ Go to demos and additional information.
 </a>
 
 
-## The package includes a Python package embedding of the Javascript functionality into Jupyter using widgets
+The package includes a Python package embedding of the Javascript functionality into Jupyter using widgets.
 
-## Development install of Python package
+## How to install the Python package in development mode
 
 The Python package for <code>feedWebGL2</code> defines Jupyter widget interfaces to underlying
 Javascript based features.  To use the Python package you will need a recent version of Jupyter
 configured with Python 3 kernels.  Please use `git` to clone the repository in order to
-install a development version of this experimental software.
+install a development version of this experimental software including all the example notebooks.
 
 The easiest and safest way to get a working environment of this kind is to install
 <a href="https://www.anaconda.com/products/individual">the individual version of Anaconda</a>
