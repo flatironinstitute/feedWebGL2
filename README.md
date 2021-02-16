@@ -64,7 +64,7 @@ as follows:
 ```
 
 To test that the package has installed correctly, launch a Jupyter server starting in the
-
+`feedWebGL2` folder or above it.
 
 ```bash
 % jupyter notebook
@@ -72,4 +72,10 @@ To test that the package has installed correctly, launch a Jupyter server starti
 
 and then navigate to the 
 <a href="https://github.com/AaronWatters/feedWebGL2/blob/master/notebooks/visualizing%20a%203d%20matrix%20using%20the%20volume%20widget.ipynb">
-visualizing a 3d matrix using the volume widget.ipynb</a> notebook in the `notebooks` folder
+visualizing a 3d matrix using the volume widget.ipynb</a> notebook in the `notebooks` folder.
+Run all the cells of the notebook.  If it works you should see a widget appear below
+call 2 that looks something like this:
+
+<img src="./notebooks/torso.png">
+
+
