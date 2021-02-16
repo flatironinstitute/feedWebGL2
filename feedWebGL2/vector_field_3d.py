@@ -96,6 +96,7 @@ class VectorFieldViewer:
         basis_scale=1.0, 
         sprite_shape_weights=None, 
         sprite_shape_normals=None,
+        cycle_duration=1.0,
         epsilon=1e-10):
         # if start points is an int then choose random in range start points
         if type(zyx_start_points) is int:
@@ -127,5 +128,6 @@ class VectorFieldViewer:
             basis_scale=basis_scale,
             sprite_shape_weights=sprite_shape_weights,
             sprite_shape_normals=sprite_shape_normals,
+            cycle_duration=cycle_duration
             )
         widget.build(width=1600)
