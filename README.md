@@ -37,7 +37,39 @@ Go to demos and additional information.
 
 ## Development install of Python package
 
-```
-pip install -e .
+The Python package for <code>feedWebGL2</code> defines Jupyter widget interfaces to underlying
+Javascript based features.  To use the Python package you will need a recent version of Jupyter
+configured with Python 3 kernels.  Please use `git` to clone the repository in order to
+install a development version of this experimental software.
+
+The easiest and safest way to get a working environment of this kind is to install
+<a href="https://www.anaconda.com/products/individual">the individual version of Anaconda</a>
+in single user mode on your workstation.
+
+To use the package please clone the repository using git.  If you don't have git you can install it
+using anaconda (<a href="https://anaconda.org/anaconda/git">https://anaconda.org/anaconda/git</a>).
+Clone the repository in an appropriate folder using this command line:
+
+```bash
+% git clone https://github.com/AaronWatters/feedWebGL2.git
 ```
 
+Install the package in an appropriate environment using `pip`
+
+as follows:
+
+```bash
+% cd feedWebGL2
+% pip install -e .
+```
+
+To test that the package has installed correctly, launch a Jupyter server starting in the
+
+
+```bash
+% jupyter notebook
+```
+
+and then navigate to the 
+<a href="https://github.com/AaronWatters/feedWebGL2/blob/master/notebooks/visualizing%20a%203d%20matrix%20using%20the%20volume%20widget.ipynb">
+visualizing a 3d matrix using the volume widget.ipynb</a> notebook in the `notebooks` folder
