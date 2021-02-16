@@ -55,7 +55,6 @@ Clone the repository in an appropriate folder using this command line:
 ```
 
 Install the package in an appropriate environment using `pip`
-
 as follows:
 
 ```bash

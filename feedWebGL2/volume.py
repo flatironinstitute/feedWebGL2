@@ -8,7 +8,6 @@ import numpy as np
 import jp_proxy_widget
 from jp_doodle.data_tables import widen_notebook
 from jp_doodle import dual_canvas
-from IPython.display import display
 
 required_javascript_modules = [
     local_files.vendor_path("js_lib/three.min.js"),
@@ -80,16 +79,26 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         "Wait for the widget to initialize before proceeding. Widget must be displayed!"
         self.element.ready_sync(message).sync_value()
 
-    def load_stream_lines(self, stream_lines):
+    def load_stream_lines(
+        self, 
+        stream_lines, 
+        basis_scale=1.0, 
+        cycle_duration=1.0,
+        sprite_shape_weights=None, 
+        sprite_shape_normals=None,
+        ):
         """
         Load sequence of sequence of triples as stream lines to the surface display.
         """
-        # KISS for now XXXX eventually optimize using bytearrays and numpy
+        parameters = dict(stream_lines=stream_lines, basis_scale=basis_scale, cycle_duration=cycle_duration)
+        if (sprite_shape_normals):
+            parameters["sprite_shape_normals"] = sprite_shape_normals
+        if (sprite_shape_weights):
+            parameters["sprite_shape_weights"] = sprite_shape_weights
+        # KISS for now XXXX eventually optimize using bytearrays and numpy?
         self.js_init("""
-            element.V.settings.stream_lines_parameters = {
-                stream_lines: stream_lines,
-                };
-        """, stream_lines=stream_lines)
+            element.V.settings.stream_lines_parameters = parameters;
+        """, parameters=parameters)
 
     def load_3d_numpy_array(
             self, ary, 

@@ -115,6 +115,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var s = this.settings;
                 var parameters = $.extend({
                     feedbackContext: this.feedbackContext,
+                    cycle_duration: 1.0,
                 }, s.stream_lines_parameters);
                 parameters.stream_lines =  parameters.stream_lines || this.stream_lines_sequence;
                 if (!parameters.stream_lines) {
@@ -192,7 +193,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var geometry = this.surface_geometry;
                 if (s.stream_lines_parameters) {
                     // update the streamline animation and reset the geometry buffers
-                    var cycle_duration = 1.0;
+                    var cycle_duration = s.stream_lines_parameters.cycle_duration;
                     var interpolate = (for_time % cycle_duration)/cycle_duration;
                     this.stream_lines.run(interpolate);
                     var positions = this.get_positions();

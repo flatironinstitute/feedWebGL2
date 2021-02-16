@@ -68,7 +68,7 @@ class VectorFieldViewer:
 
     def streamLine(self, zyx_start_point, max_number_of_points=None, step_size=None, epsilon=1e-10):
         "compute a stream line using simple interpolation."
-        # xxxx no interpolation of runge-kutta correction yet
+        # xxxx no interpolation or runge-kutta correction yet
         if step_size is None:
             step_size = 2 * self.subsample
         if max_number_of_points is None:
@@ -88,7 +88,15 @@ class VectorFieldViewer:
         stream = np.array(points, dtype=np.float)
         return stream
 
-    def displayWidget(self, zyx_start_points, max_number_of_points=None, step_size=None, epsilon=1e-10):
+    def displayWidget(
+        self, 
+        zyx_start_points, 
+        max_number_of_points=None, 
+        step_size=None, 
+        basis_scale=1.0, 
+        sprite_shape_weights=None, 
+        sprite_shape_normals=None,
+        epsilon=1e-10):
         # if start points is an int then choose random in range start points
         if type(zyx_start_points) is int:
             sp = np.random.random((zyx_start_points, 3))
@@ -99,7 +107,13 @@ class VectorFieldViewer:
         display(widget.debugging_display())
         # will this work? -- proceed after the widget has initialized
         widget.sync()
-        zyx_streamlines = [self.streamLine(zyx) for zyx in zyx_start_points]
+        zyx_streamlines = [
+            self.streamLine(
+                zyx, 
+                max_number_of_points=max_number_of_points, 
+                step_size=step_size,
+                epsilon=epsilon) 
+            for zyx in zyx_start_points]
         norm_matrix = self.get_norm_matrix()
         rescaled_streamlines = []
         norm_side = self.norm_side
@@ -108,5 +122,10 @@ class VectorFieldViewer:
             rescaled_streamlines.append(rescaled.tolist())
         self.rescaled_streamlines = rescaled_streamlines
         widget.load_3d_numpy_array(norm_matrix, threshold=norm_matrix.mean())
-        widget.load_stream_lines(rescaled_streamlines)
+        widget.load_stream_lines(
+            stream_lines=rescaled_streamlines,
+            basis_scale=basis_scale,
+            sprite_shape_weights=sprite_shape_weights,
+            sprite_shape_normals=sprite_shape_normals,
+            )
         widget.build(width=1600)
