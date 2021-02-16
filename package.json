@@ -8,7 +8,7 @@
     "dist/index.js"
   ],
   "dependencies": {
-    "jquery": "^3.0.0"
+    "jquery": "^3.5.0"
   },
   "devDependencies": {
     "babel-cli": "^6.26.0",
