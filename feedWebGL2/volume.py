@@ -225,7 +225,13 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         assert self.options is not None, "options must be intialized"
         assert self.data is not None, "data must be provided"
         self.element.html("building")
-        self.element.V.build_scaffolding(self.get_element(), width)
+        #self.element.V.build_scaffolding(self.get_element(), width)
+        # build the scaffolding on a child div to allow garbage collection on reinit
+        self.js_init("""
+            element.empty();
+            element.V_container = $("<div/>").appendTo(element);
+            element.V.build_scaffolding(element.V_container, width);
+        """, width=width)
         self.element.V.zoom_out()
 
     def doodle_diagram(
