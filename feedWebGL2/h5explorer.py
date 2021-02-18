@@ -12,9 +12,16 @@ import os
 
 class Explorer:
 
-    def __init__(self, folder=".", filters=None, width=1000, shape_max=100):
+    def __init__(self, folder=".", filters=None, width=1400, shape_max=100):
+        # use default filters if not provided
+        if filters is None:
+            filters = [
+                LogFilter,
+                BlurFilter,
+            ]
         self.folder = folder
-        self.filters = filters
+        # instantiate the filters
+        self.filters = [Filter(self) for Filter in filters]
         self.width = width
         self.shape_max = shape_max
         self.current_file = None
@@ -25,11 +32,14 @@ class Explorer:
         display(widget)
 
     def make_widget(self):
+        volume.widen_notebook()
         self.file_tab = FileTab(self)
         self.load_tab = LoadTab(self)
+        self.filter_tab = FilterTab(self)
         self.tabs = [
             self.file_tab,
             self.load_tab,
+            self.filter_tab,
         ]
         self.info = widgets.HTML("<div>hdf5 explorer</div>")
         self.volume = volume.Volume32()
@@ -85,7 +95,7 @@ class FileTab:
     title = "File"
 
     def __init__(self, in_explorer):
-        self.in_exporer = in_explorer
+        self.in_explorer = in_explorer
 
     def widget(self):
         html1 = widgets.HTML("<H1>Select file.</H1>")
@@ -96,7 +106,7 @@ class FileTab:
                 return
             new = self.dropdown.value
             if new != self.option0:
-                ex = self.in_exporer
+                ex = self.in_explorer
                 f = ex.get_file(new)
                 if f:
                     self.button.disabled = False
@@ -112,7 +122,7 @@ class FileTab:
             disabled=True,
         )
         def button_click(b):
-            ex = self.in_exporer
+            ex = self.in_explorer
             ex.current_file = self.dropdown.value
             ex.info.value = "<div>Selected file %s</div>" % ex.current_file
             ex.update_all()
@@ -122,8 +132,8 @@ class FileTab:
         return self.assembly
 
     def update(self):
-        ex = self.in_exporer
-        folder = self.in_exporer.folder
+        ex = self.in_explorer
+        folder = self.in_explorer.folder
         filenames = os.listdir(folder)
         h5files = [fn for fn in filenames if fn.endswith(".h5")]
         self.option0 = "(not chosen)"
@@ -143,7 +153,7 @@ class LoadTab(FileTab):
     def widget(self):
         self.key = None
         self.image = None
-        ex = self.in_exporer
+        ex = self.in_explorer
         html1 = widgets.HTML("<H1>Load image.</H1>")
         self.info = widgets.HTML("<div>Please select a file using the file tab.</div>")
         self.dropdown = widgets.Dropdown(options=["No images available: please select a file."])
@@ -164,7 +174,7 @@ class LoadTab(FileTab):
                 else:
                     self.key = new
                     self.image = arr
-                    self.info.value = "<div>Object %s has shape %s.</div>" % (new, arr.shape)
+                    self.info.value = "<div>Object %s has shape %s.  Press the button to load.</div>" % (new, arr.shape)
                     self.button.disabled = False
             else:
                 self.button.disabled = True
@@ -174,7 +184,7 @@ class LoadTab(FileTab):
             disabled=True,
         )
         def button_click(b):
-            ex = self.in_exporer
+            ex = self.in_explorer
             try:
                 ex.current_image = np.array(self.image, dtype=np.float)
             except:
@@ -190,7 +200,7 @@ class LoadTab(FileTab):
 
     def update(self):
         self.button.disabled = True
-        ex = self.in_exporer
+        ex = self.in_explorer
         self.option0 = "(please select a file)"
         keys = []
         h5file = ex.get_file()
@@ -206,6 +216,122 @@ class LoadTab(FileTab):
         self.dropdown.options = options
         message = "No file chosen."
         if ex.current_key:
-            message = "current image is: " + repr(ex.current_key)
+            message = "current image is: %s.  Press the button to load the image." % repr(ex.current_key)
         self.info.value = "<div>%s</div>" % message
         self.button.disabled = True
+
+
+class FilterTab(FileTab):
+
+    title = "Filter"
+
+    def widget(self):
+        ex = self.in_explorer
+        html1 = widgets.HTML("<H1>Modify the image using a filter.</H1>")
+        filters = ex.filters
+        tab_children = [f.widget() for f in filters]
+        self.tab_widget = widgets.Tab(children=tab_children)
+        for (i, f) in enumerate(filters):
+            self.tab_widget.set_title(i, f.title)
+            f.index = i
+        self.assembly = widgets.VBox([html1, self.tab_widget])
+        return self.assembly
+
+    def update(self):
+        ex = self.in_explorer
+        for f in ex.filters:
+            f.update()
+
+class LogFilter(FileTab):
+
+    title = "Logarithm"
+
+    def widget(self):
+        html1 = widgets.HTML("<H1>Take logarithm of image values.</H1>")
+        self.info = widgets.HTML("<div>Parameters</div>")
+        self.shift = widgets.Checkbox(
+            value=True,
+            description='Shift minimum to 1.0',
+        )
+        self.base = widgets.BoundedFloatText(
+            value=np.e,
+            min=2,
+            max=10.0,
+            step=0.1,
+            description='Base:',
+            disabled=False
+        )
+        self.button = widgets.Button(
+            description="Take Logarithm",
+        )
+        self.button.on_click(self.apply)
+        return widgets.VBox([html1, self.info, self.shift, self.base, self.button])
+
+    def update(self):
+        image_array = self.in_explorer.current_image
+        if image_array is None:
+            self.info.value = "<div>No array selected: please selecta an array</div>"
+        else:
+            self.info.value = "<div>Parameters</div>"
+
+    def apply(self, button):
+        ex = self.in_explorer
+        image_array = ex.current_image
+        if image_array is None:
+            self.update()
+            return
+        if self.shift.value:
+            # shift array so min value is 1.0
+            image_array = image_array + (1.0 - image_array.min())
+        log_base = np.log(self.base.value)
+        log_image = log_base * np.log(image_array)
+        ex.current_image = log_image
+        ex.update_all()
+
+class BlurFilter(LogFilter):
+
+    # title is required
+    title = "Blur"
+
+    def widget(self):
+        "The widget method defines the parameters for the filter."
+        html1 = widgets.HTML("<H1>Take logarithm of image values.</H1>")
+        # self.info is required
+        self.info = widgets.HTML("<div>Parameters</div>")
+        # other parameters
+        self.sigma = widgets.BoundedFloatText(
+            value=2.0,
+            min=1.0,
+            max=10.0,
+            step=0.1,
+            description='Sigma:',
+            disabled=False
+        )
+        # apply button is required
+        self.button = widgets.Button(
+            description="Apply blur",
+        )
+        self.button.on_click(self.apply)
+        # Construct a widget container with all sub-widgets
+        return widgets.VBox([html1, self.info, self.sigma, self.button])
+
+    def apply(self, button):
+        """
+        The apply method defines how to execute the filter using the parameters.
+        It must test that the image is defined.
+        """
+        from scipy.ndimage import gaussian_filter
+        ex = self.in_explorer
+        image_array = ex.current_image
+        if image_array is None:
+            # no image: abort...
+            self.update()
+            return
+        # Get parameters
+        sigma = self.sigma.value
+        # apply the filter to the image
+        blurred_image = gaussian_filter(image_array, sigma=sigma)
+        # store the modified array
+        ex.current_image = blurred_image
+        # redisplay all widgets
+        ex.update_all()
