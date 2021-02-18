@@ -36,10 +36,12 @@ class Explorer:
         self.file_tab = FileTab(self)
         self.load_tab = LoadTab(self)
         self.filter_tab = FilterTab(self)
+        self.save_tab = SaveTab(self)
         self.tabs = [
             self.file_tab,
             self.load_tab,
             self.filter_tab,
+            self.save_tab,
         ]
         self.info = widgets.HTML("<div>hdf5 explorer</div>")
         self.volume = volume.Volume32()
@@ -73,10 +75,13 @@ class Explorer:
         ss_image = image[0 : Is * stride: stride, 0 : Js * stride: stride, 0 : Ks * stride: stride]
         return ss_image
 
+    def file_path(self, filename):
+        return os.path.join(self.folder, filename)
+
     def get_file(self, filename=None, mode="r"):
         filename = filename or self.current_file
         if filename:
-            file_path = os.path.join(self.folder, filename)
+            file_path = self.file_path(filename)
             self.info.value = "<div>attempting to open %s</div>" % file_path
             try:
                 hdf5_file = h5py.File(file_path, mode)
@@ -173,11 +178,12 @@ class LoadTab(FileTab):
                     self.info.value = "<div>Error getting object %s</div>" % new
                 else:
                     self.key = new
-                    self.image = arr
+                    self.image = np.array(arr, dtype=np.float)
                     self.info.value = "<div>Object %s has shape %s.  Press the button to load.</div>" % (new, arr.shape)
                     self.button.disabled = False
             else:
                 self.button.disabled = True
+            h5file.close()
         self.dropdown.observe(dropdown_change)
         self.button = widgets.Button(
             description="View image",
@@ -186,9 +192,10 @@ class LoadTab(FileTab):
         def button_click(b):
             ex = self.in_explorer
             try:
-                ex.current_image = np.array(self.image, dtype=np.float)
+                ex.current_image = self.image # np.array(self.image, dtype=np.float)
             except:
                 self.info.value = "<div>Error loading image</div>"
+                raise
             else:
                 ex.current_key = self.key
                 ex.info.value = "<div>Selected array %s</div>" % ex.current_key
@@ -217,6 +224,8 @@ class LoadTab(FileTab):
         message = "No file chosen."
         if ex.current_key:
             message = "current image is: %s.  Press the button to load the image." % repr(ex.current_key)
+        elif ex.current_file:
+            message = "Please select an image from current file %s" % ex.current_file
         self.info.value = "<div>%s</div>" % message
         self.button.disabled = True
 
@@ -335,3 +344,80 @@ class BlurFilter(LogFilter):
         ex.current_image = blurred_image
         # redisplay all widgets
         ex.update_all()
+
+class SaveTab(FileTab):
+
+    title = "Save"
+
+    def widget(self):
+        html1 = widgets.HTML("<H1>Save Image.</H1>")
+        self.info = widgets.HTML("<div>Image name must be new and not empty.</div>")
+        self.name = widgets.Text(
+            value='',
+            placeholder='Name to save with',
+            description='Name:',
+            disabled=False
+        )
+        self.button_selected = widgets.Button(
+            description="Save to selected file",
+        )
+        self.button_selected.on_click(self.save_to_selected_file)
+        self.new_file = widgets.Text(
+            value='',
+            placeholder='name of new file',
+            description='Save to new file name:',
+            disabled=False
+        )
+        self.button_new = widgets.Button(
+            description="Save to new file",
+        )
+        self.button_new.on_click(self.save_to_new_file)
+        self.assembly = widgets.VBox(children=[
+            html1, 
+            self.info, 
+            self.name, 
+            self.button_selected, 
+            self.new_file,
+            self.button_new])
+        return self.assembly
+
+    def save_to_new_file(self, button):
+        ex = self.in_explorer
+        filename = self.new_file.value
+        path = ex.file_path(filename)
+        if os.path.exists(path):
+            self.info.value = "<div>File name exists.  Please provide an unused new name.</div>"
+            returnrai
+
+        if not filename.endswith(".h5"):
+            self.info.value = "<div>Please provide new file name endint in '.h5'.</div>"
+            return
+        self.save(filename, mode="r+")
+
+    def save_to_selected_file(self, button):
+        self.save(None)
+
+    def save(self, filename=None, mode="x"):
+        ex = self.in_explorer
+        success = False
+        if ex.current_image is None:
+            self.info.value = "<div>There is no current image to save</div>"
+            return
+        try:
+            h5file = ex.get_file(filename, mode="a")
+        except:
+            self.info.value = "Failed to open file."
+            return
+        name = self.name.value
+        if (name in h5file) or not name:
+            self.info.value = "Save name must be new and must not be empty."
+        else:
+            h5file[name] = ex.current_image
+            ex.info.value = "saved image as %s." % repr(name)
+            success = True
+        h5file.close()
+        if success:
+            ex.update_all()
+
+    def update(self):
+        self.info.value = "<div>Image name must be new and not empty.</div>"
