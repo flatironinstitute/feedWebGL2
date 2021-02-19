@@ -151,39 +151,21 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     ${grid_location_decl}
     `;
 
-    $.fn.webGL2crossingVoxels = function(options) {
-
-        class WebGL2CrossingVoxels {
+    $.fn.webGL2voxelSorter = function(options) {
+        class WebGL2voxelSorter {
             constructor(options) {
                 this.settings = $.extend({
-                    feedbackContext: null,    // the underlying FeedbackContext context to use
                     valuesArray: null,   // the array buffer of values to contour
                     num_rows: null,
                     num_cols: null,
                     num_layers: 1,  // default to "flat"
                     num_blocks: 1,  // for physics simulations data may come in multiple blocks
-                    grid_min: [0, 0, 0],
-                    grid_max: [-1, -1, -1],  // disabled grid coordinate filtering (invalid limits)
-                    rasterize: false,
-                    threshold: 0,  // value at contour
-                    // when getting compact arrays
-                    // shrink the array sizes by this factor.
-                    shrink_factor: 0.2,
-                    // grid coordinate convention.
-                    location: "std",
-                    // samplers are prepared by caller if needed.  Descriptors provided by caller.
-                    samplers: {},
-                    // invalid marker
-                    location_fill: -1e12,
-                    // coordinate vectors
-                    dx: [1, 0, 0],
-                    dy: [0, 1, 0],
-                    dz: [0, 0, 1],
-                    fragment_shader: noop_fragment_shader,
                 }, options);
 
+                // generate stats in a temporary context.
+                var feedbackContext = $.fn.feedWebGL2({});
+                // generate stats...
                 var s = this.settings;
-                this.feedbackContext = s.feedbackContext;
                 var nvalues = s.valuesArray.length;
                 var nvoxels = s.num_rows * s.num_cols * s.num_layers * s.num_blocks;
                 if (nvalues != nvoxels) {
@@ -191,67 +173,27 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
                 }
                 // allocate and load buffer with a fresh name
-                this.buffer = this.feedbackContext.buffer()
-                this.buffer.initialize_from_array(s.valuesArray);
-                var buffername = this.buffer.name;
+                var buffer = feedbackContext.buffer()
+                buffer.initialize_from_array(s.valuesArray);
+                var buffername = buffer.name;
 
-                var vertex_shader;
-                if (s.location == "std") {
-                    vertex_shader = crossingVoxelsShader(locate_std_decl);
-                } else if (s.location="polar_scaled") {
-                    vertex_shader = crossingVoxelsShader(locate_polar_scaled_decl);
-                } else {
-                    throw new Error("unknown grid location type: " + s.location);
-                }
-
-                this.program = this.feedbackContext.program({
-                    vertex_shader: vertex_shader,
-                    fragment_shader: this.settings.fragment_shader,
+                var program = feedbackContext.program({
+                    vertex_shader: voxelSorterShader,
                     feedbacks: {
                         index: {type: "int"},
-                        location: {num_components: 3},
                         front_corners: {num_components: 4},
                         back_corners: {num_components: 4},
+                        //min_corner: {num_components: 1},
+                        //max_corner: {num_components: 1},
+                        corner_extrema: {num_components: 2},
                     },
                 });
-
-                // set up input parameters
-                //  indexing is [ix, iy, iz] -- z is fastest
-                //var x_offset = 1;
-                var z_offset = 1;
-                var y_offset = s.num_cols;
-                //var z_offset = s.num_cols * s.num_rows;
-                var x_offset = s.num_cols * s.num_rows;
-                var num_voxels = nvalues - (x_offset + y_offset + z_offset);
-
                 var inputs = {};
-                var add_input = function (ix, iy, iz) {
-                    var name = (("a" + ix) + iy) + iz;
-                    var dx = [0, x_offset][ix];
-                    var dy = [0, y_offset][iy];
-                    var dz = [0, z_offset][iz];
-                    inputs[name] = {
-                        per_vertex: true,
-                        num_components: 1,
-                        from_buffer: {
-                            name: buffername,
-                            skip_elements: dx + dy + dz,
-                        }
-                    }
-                };
-                add_input(0,0,0);
-                add_input(0,0,1);
-                add_input(0,1,0);
-                add_input(0,1,1);
-                add_input(1,0,0);
-                add_input(1,0,1);
-                add_input(1,1,0);
-                add_input(1,1,1);
+                var num_voxels = add_corner_offset_inputs(s, nvalues, buffername, inputs);
 
-                this.runner = this.program.runner({
+                var runner = program.runner({
                     num_instances: 1,
                     vertices_per_instance: num_voxels,
-                    rasterize: s.rasterize,
                     uniforms: {
                         // number of rows
                         uRowSize: {
@@ -268,346 +210,807 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             vtype: "1iv",
                             default_value: [s.num_layers],
                         },
-                        // threshold value
-                        uValue: {
-                            vtype: "1fv",
-                            default_value: [s.threshold],
-                        },
-                        u_grid_min: {
-                            vtype: "3fv",
-                            default_value: s.grid_min,
-                        },
-                        u_grid_max: {
-                            vtype: "3fv",
-                            default_value: s.grid_max,
-                        },
                     },
                     inputs: inputs,
-                    samplers: s.samplers,
                 });
-                this.front_corners_array = null;
-                this.back_corners_array = null;
-                this.index_array = null;
-                this.compact_length = null;
+                runner.run();
+                // get all feedbacks from GPU into Javascript context
+                var indices0 = runner.feedback_array("index");
+                var front_corners0 = runner.feedback_array("front_corners");
+                var back_corners0 = runner.feedback_array("back_corners");
+                //var min_corners0 = runner.feedback_array("min_corner");
+                //var max_corners0 = runner.feedback_array("max_corner");
+                var extrema = runner.feedback_array("corner_extrema");
+                // unpack extrema for convenience
+                var min_corners0 = new Float32Array(num_voxels);
+                var max_corners0 = new Float32Array(num_voxels);
+                var extrema_index = 0;
+                for (var i=0; i<num_voxels; i++) {
+                    min_corners0[i] = extrema[extrema_index];
+                    extrema_index ++;
+                    max_corners0[i] = extrema[extrema_index];
+                    extrema_index ++;
+                }
+
+                // compactiffy to remove invalid entries
+                var indices = feedbackContext.filter_degenerate_entries(indices0, indices0, null, 1, -1, true);
+                var front_corners = feedbackContext.filter_degenerate_entries(indices0, front_corners0, null, 4, -1, true);
+                var back_corners = feedbackContext.filter_degenerate_entries(indices0, back_corners0, null, 4, -1, true);
+                var min_corners = feedbackContext.filter_degenerate_entries(indices0, min_corners0, null, 1, -1, true);
+                var max_corners = feedbackContext.filter_degenerate_entries(indices0, max_corners0, null, 1, -1, true);
+
+                // sort indices by max_corner
+                var sorter_len = max_corners.length;
+                var max_corner_indices = new Uint32Array(sorter_len);
+                for (var i=0; i<sorter_len; i++) {
+                    max_corner_indices[i] = i;
+                }
+                var compare = function (i, j) {
+                    return max_corners[i] - max_corners[j];
+                }
+                max_corner_indices.sort(compare);
+
+                // make all feedbacks conform to index order
+                var conform = function (buffer, num_components) {
+                    var len = buffer.length;
+                    var to_buffer = new (buffer.constructor)(len);
+                    var buffer_index = 0;
+                    for (var sort_index=0; sort_index<sorter_len; sort_index++) {
+                        var copy_index = max_corner_indices[sort_index] * num_components;
+                        for (var i=0; i<num_components; i++) {
+                            to_buffer[buffer_index] = buffer[copy_index];
+                            copy_index ++;
+                            buffer_index ++;
+                        }
+                    }
+                    return to_buffer;
+                };
+                this.indices = conform(indices, 1);
+                this.front_corners = conform(front_corners, 4);
+                this.back_corners = conform(back_corners, 4);
+                this.min_corners = conform(min_corners, 1);
+                this.max_corners = conform(max_corners, 1);
+                // sanity check: max_corners should be sorted
+                max_corners = this.max_corners;
+                for (var i=0; i<sorter_len-1; i++) {
+                    if (max_corners[i] > max_corners[i+1]) {
+                        throw new Error("Max corner conformation failed: " + [i, max_corners[i], max_corners[i+1]]);
+                    }
+                }
+
+                // dispose of temporary context (all generated data is in Javascript space, free up GPU)
+                feedbackContext.lose_context();
+                feedbackContext = program = runner = null;
             };
-            run() {
-                this.runner.install_uniforms();
-                this.runner.run();
+
+            threshold_start_index(threshold) {
+                // determine the least index in max_corners of the where max_corners[index] >= threshold
+                // (binary search)
+                var max_corners = this.max_corners;
+                var low_index = 0;
+                var high_index = max_corners.length;
+                while ((low_index + 1) < high_index) {
+                    var test_index = Math.floor(0.5 * (low_index + high_index));
+                    if (max_corners[test_index] < threshold) {
+                        low_index = test_index;
+                    } else {
+                        high_index = test_index;
+                    }
+                }
+                return high_index;
             };
-            get_sphere_mesh(options) {
-                // must be run after get_compacted_feedbacks has run at least once.
-                var settings = $.extend({
-                    THREE: null,   // required THREE instance
-                    material: null, // material to use
-                    radius: 1,  // shared radius for spheres
-                    width_segments: 10,
-                    height_segments: 10,}, options);
-                settings.locations = this.compact_locations;
-                return $.fn.webGL2crossingVoxels.spheresMesh(settings);
-            };
-            get_points_mesh(options) {
-                // must be run after get_compacted_feedbacks has run at least once.
-                var that = this;
-                var settings = $.extend({
-                    THREE: null,   // required THREE instance
-                    size: null,
-                    colorize: false,
-                }, options);
-                settings.locations = this.compact_locations;
-                settings.center = this.compacted_feedbacks.mid;
-                settings.radius = this.compacted_feedbacks.radius;
+        };
+
+        return new WebGL2voxelSorter(options);
+    };
+
+    var voxelSorterShader = `#version 300 es
+    // global length of rows
+    uniform int uRowSize;
+
+    // global number of columnss
+    uniform int uColSize;
+
+    // global number of layers (if values are in multiple blocks, else 0)
+    uniform int uLayerSize;
+
+    // per mesh function values at voxel corners
+    in float a000, a001, a010, a011, a100, a101, a110, a111;
+
+    // corners feedbacks
+    out vec4 front_corners, back_corners;
+
+    // min/max corner feedback
+    out vec2 corner_extrema;  // [min, max] of corner values.
+
+    // index feedback
+    flat out int index;
+
+    ${std_sizes_declarations}
+
+    void main() {
+        // default to invalid index indicating the voxel is not in the interior.
+        index = -1;
+        front_corners = vec4(a000, a001, a010, a011);
+        back_corners = vec4(a100, a101, a110, a111);
+        //min_corner = 0.0;
+        //max_corner = 0.0;
+        corner_extrema = vec2(0.0, 0.0);
+        ${get_sizes_macro("gl_VertexID")}
+        // Dont tile last column/row/layer which wraps around
+        bool voxel_ok = (
+            (i_col_num < (uRowSize - 1)) && 
+            (i_row_num < (uColSize - 1)) &&
+            (i_depth_num < (uLayerSize - 1))
+        );
+        if (voxel_ok) {
+            // the voxel is interior
+            index = gl_VertexID;
+            float m = front_corners[0];
+            float M = front_corners[0];
+            vec4 corners = front_corners;
+            for (int j=0; j<2; j++) {
+                for (int i=0; i<4; i++) {
+                    float c = corners[i];
+                    m = min(c, m);
+                    M = max(c, M);
+                }
+                corners = back_corners;
+            }
+            //min_corner = m;
+            //max_corner = M;
+            corner_extrema = vec2(m, M);
+        }
+    }
+    `;
+
+    var get_indexer = function (num_cols, num_rows, num_layers) {
+        var y_offset = num_cols;
+        var x_offset = y_offset * num_rows;
+        var block_offset = x_offset * num_layers;
+        var indexer = function(xyzblock) {
+            var [x_index, y_index, z_index, block_index] = xyzblock
+            var index = x_index * x_offset + y_index * y_offset + z_index + block_offset * block_index;
+            return index;
+        };
+        return indexer;
+    };
+
+    var get_deindexer = function (num_cols, num_rows, num_layers) {
+        var y_offset = num_cols;
+        var x_offset = y_offset * num_rows;
+        var block_offset = x_offset * num_layers;
+        var deindexer = function(index) {
+            var block_index = 0;
+            var block_rem = index;
+            if (block_offset) {
+                var block_index = Math.floor(index / block_offset);
+                var block_rem = index % block_offset;
+            }
+            var x_index = Math.floor(block_rem / x_offset);
+            var x_rem = block_rem % x_offset;
+            var y_index = Math.floor(x_rem, y_offset);
+            var z_index = x_rem % y_offset;
+            var xyzblock = [x_index, y_index, z_index, block_index];
+            return xyzblock;
+        };
+        return deindexer;
+    };
+
+    // expose indexer externally
+    $.fn.webGL2voxelSorter.get_indexer = get_indexer;
+
+    var select_connected_voxels = function(voxel_indices, seed_xyzblock, target) {
+        // transitive closure on adjacent voxels
+        var settings = target.settings;
+        var index_tester = {};
+        for (var i=0; i<voxel_indices.length; i++) {
+            var index = voxel_indices[i];
+            if (index >= 0) {
+                index_tester[index] = true;
+            }
+        }
+        var indexer = get_indexer(settings.num_cols, settings.num_rows, settings.num_layers);
+        //var deindexer = get_deindexer(settings.num_cols, settings.num_rows, settings.num_layers);
+        var seed_index = indexer(seed_xyzblock);
+        var horizon = {}
+        horizon[seed_index] = [seed_index, seed_xyzblock];
+        var count = 1;
+        var total = 0;
+        var visited = {};
+        while (count>0) {
+            count = 0;
+            var vcount = 0;
+            var next_horizon = {};
+            for (var key in horizon) {
+                var [index, xyzblock] = horizon[key];
+                // boundary case can be missing in crossing voxels
+                if (index_tester[index]) {   
+                    visited[index] = index;
+                    vcount ++;
+                }
+                var [x_index, y_index, z_index, block_index] = xyzblock;
+                var hi_x = x_index + 1;
+                var hi_y = y_index + 1;
+                var hi_z = z_index + 1;
+                var lo_x = Math.max(0, x_index-1);
+                var lo_y = Math.max(0, y_index-1);
+                var lo_z = Math.max(0, z_index-1);
+                // xxxx for now don't follow block! ????
+                for (var ix=lo_x; ix<=hi_x; ix++) {
+                    for (var iy=lo_y; iy<=hi_y; iy++) {
+                        for (var iz=lo_z; iz<=hi_z; iz++) {
+                            var test_xyzblock = [ix, iy, iz, block_index];
+                            var test_index = indexer(test_xyzblock);
+                            var test = index_tester[test_index];
+                            // DEBUG
+                            //if (vcount < 10) {
+                            //    var yesno = test ? "YES " : "NO  ";
+                            //    var value = settings.valuesArray[test_index];
+                            //    console.log(yesno + [vcount, ix, iy, iz] + " : " + [test_index, value]);
+                            //}
+                            // END DEBUG
+                            if ((test) || (test===0)) {
+                                var v = visited[test_index];
+                                var h = horizon[test_index];
+                                if ((!h) && (!v) && (v!==0)) {
+                                    next_horizon[test_index] = [test_index, test_xyzblock]
+                                    count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            horizon = next_horizon;
+            total += vcount;
+            if (total > voxel_indices.length) {
+                throw new Error("Iteration sanity check failed. Infinite loop? " + total);
+            }
+        }
+        var result_indices = voxel_indices.slice();
+        for (var i=0; i<voxel_indices.length; i++) {
+            var index = voxel_indices[i];
+            if ((index >= 0) && (visited[index])) {
+                // connected.
+                result_indices[i] = index;
+            } else {
+                // not connected
+                result_indices[i] = -1;
+            }
+        }
+        target.connected_voxel_count = total;
+        return result_indices;
+    };
+
+    var add_corner_offset_inputs = function(s, nvalues, buffername, inputs) {
+        // add input parameters for voxel corners as indexed into ravelled buffer.
+        // return highest index of interior voxel.
+        //  indexing is [ix, iy, iz] -- z is fastest
+        //var x_offset = 1;
+        var z_offset = 1;
+        var y_offset = s.num_cols;
+        //var z_offset = s.num_cols * s.num_rows;
+        var x_offset = s.num_cols * s.num_rows;
+        var num_voxels = nvalues - (x_offset + y_offset + z_offset);
+
+        var add_input = function (ix, iy, iz) {
+            var name = (("a" + ix) + iy) + iz;
+            var dx = [0, x_offset][ix];
+            var dy = [0, y_offset][iy];
+            var dz = [0, z_offset][iz];
+            inputs[name] = {
+                per_vertex: true,
+                num_components: 1,
+                from_buffer: {
+                    name: buffername,
+                    skip_elements: dx + dy + dz,
+                }
+            }
+        };
+        add_input(0,0,0);
+        add_input(0,0,1);
+        add_input(0,1,0);
+        add_input(0,1,1);
+        add_input(1,0,0);
+        add_input(1,0,1);
+        add_input(1,1,0);
+        add_input(1,1,1);
+        return num_voxels;
+    };
+
+    $.fn.webGL2voxelSorter.example = function (container) {
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+        });
+        var valuesArray = new Float32Array([
+            2,1,0,
+            1,1,0,
+            0,0,0,
+
+            1,1,0,
+            1,1,0,
+            0,0,0,
+
+            0,0,0,
+            0,0,0,
+            0,0,0,
+        ]);
+        var sorter = container.webGL2voxelSorter({
+            valuesArray: valuesArray,
+            num_rows: 3,
+            num_cols: 3,
+            num_layers: 3,
+        });
+        var indices = sorter.indices;
+        var front_corners = sorter.front_corners;
+        var back_corners = sorter.back_corners;
+        var minc = sorter.min_corners;
+        var maxc = sorter.max_corners;
+        var ci = 0;
+        for (var i=0; i<indices.length; i++) {
+            $("<br/>").appendTo(container);
+            $("<span> " + indices[i] + " m" + minc[i] + " M" + maxc[i] + " </span>").appendTo(container);
+            for (var j=0; j<4; j++) {
+                $("<span> " + front_corners[ci] + " " + back_corners[ci] + " </span>").appendTo(container);
+                ci ++;
+            }
+        }
+    };
+
+    $.fn.webGL2crossingVoxels = function(options) {
+        return new WebGL2CrossingVoxels(options);
+    };
+
+    class WebGL2CrossingVoxels {
+        constructor(options) {
+            this.settings = $.extend({
+                feedbackContext: null,    // the underlying FeedbackContext context to use
+                valuesArray: null,   // the array buffer of values to contour
+                num_rows: null,
+                num_cols: null,
+                num_layers: 1,  // default to "flat"
+                num_blocks: 1,  // for physics simulations data may come in multiple blocks
+                grid_min: [0, 0, 0],
+                grid_max: [-1, -1, -1],  // disabled grid coordinate filtering (invalid limits)
+                rasterize: false,
+                threshold: 0,  // value at contour
+                // when getting compact arrays
+                // shrink the array sizes by this factor.
+                shrink_factor: 0.2,
+                // grid coordinate convention.
+                location: "std",
+                // samplers are prepared by caller if needed.  Descriptors provided by caller.
+                samplers: {},
+                // invalid marker
+                location_fill: -1e12,
+                // coordinate vectors
+                dx: [1, 0, 0],
+                dy: [0, 1, 0],
+                dz: [0, 0, 1],
+                fragment_shader: noop_fragment_shader,
+            }, options);
+
+            this.initialize();
+        }
+
+        initialize() {
+            var s = this.settings;
+            this.feedbackContext = s.feedbackContext;
+            var nvalues = s.valuesArray.length;
+            var nvoxels = s.num_rows * s.num_cols * s.num_layers * s.num_blocks;
+            if (nvalues != nvoxels) {
+                // for now strict checking
+                throw new Error("voxels " + nvoxels + " don't match values " + nvalues);
+            }
+            // allocate and load buffer with a fresh name
+            this.buffer = this.feedbackContext.buffer()
+            this.buffer.initialize_from_array(s.valuesArray);
+            var buffername = this.buffer.name;
+
+            var vertex_shader;
+            if (s.location == "std") {
+                vertex_shader = crossingVoxelsShader(locate_std_decl);
+            } else if (s.location="polar_scaled") {
+                vertex_shader = crossingVoxelsShader(locate_polar_scaled_decl);
+            } else {
+                throw new Error("unknown grid location type: " + s.location);
+            }
+
+            this.program = this.feedbackContext.program({
+                vertex_shader: vertex_shader,
+                fragment_shader: this.settings.fragment_shader,
+                feedbacks: {
+                    index: {type: "int"},
+                    location: {num_components: 3},
+                    front_corners: {num_components: 4},
+                    back_corners: {num_components: 4},
+                },
+            });
+
+            var inputs = {};
+            var num_voxels = add_corner_offset_inputs(s, nvalues, buffername, inputs);
+
+            this.runner = this.program.runner({
+                num_instances: 1,
+                vertices_per_instance: num_voxels,
+                rasterize: s.rasterize,
+                uniforms: {
+                    // number of rows
+                    uRowSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_cols],
+                    },
+                    // numver of columns
+                    uColSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_rows],
+                    },
+                    // number of layers
+                    uLayerSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_layers],
+                    },
+                    // threshold value
+                    uValue: {
+                        vtype: "1fv",
+                        default_value: [s.threshold],
+                    },
+                    u_grid_min: {
+                        vtype: "3fv",
+                        default_value: s.grid_min,
+                    },
+                    u_grid_max: {
+                        vtype: "3fv",
+                        default_value: s.grid_max,
+                    },
+                },
+                inputs: inputs,
+                samplers: s.samplers,
+            });
+            this.front_corners_array = null;
+            this.back_corners_array = null;
+            this.index_array = null;
+            this.compact_length = null;
+        };
+        run() {
+            this.runner.install_uniforms();
+            this.runner.run();
+        };
+        get_sphere_mesh(options) {
+            // must be run after get_compacted_feedbacks has run at least once.
+            var settings = $.extend({
+                THREE: null,   // required THREE instance
+                material: null, // material to use
+                radius: 1,  // shared radius for spheres
+                width_segments: 10,
+                height_segments: 10,}, options);
+            settings.locations = this.compact_locations;
+            return $.fn.webGL2crossingVoxels.spheresMesh(settings);
+        };
+        get_points_mesh(options) {
+            // must be run after get_compacted_feedbacks has run at least once.
+            var that = this;
+            var settings = $.extend({
+                THREE: null,   // required THREE instance
+                size: null,
+                colorize: false,
+            }, options);
+            settings.locations = this.compact_locations;
+            settings.center = this.compacted_feedbacks.mid;
+            settings.radius = this.compacted_feedbacks.radius;
+            if (settings.colorize) {
+                settings.colors = this.get_location_colors();
+            }
+            var result = $.fn.webGL2crossingVoxels.pointsMesh(settings);
+            result.update_sphere_locations = function(locations, colors) {
+                locations = locations || that.compact_locations;
+                var geometry = result.geometry;
+                geometry.attributes.position.array = locations;
+                geometry.attributes.position.needsUpdate = true;
                 if (settings.colorize) {
-                    settings.colors = this.get_location_colors();
+                    colors = colors || that.get_location_colors();
+                    geometry.attributes.color.array = colors;
+                    geometry.attributes.color.needsUpdate = true;
                 }
-                var result = $.fn.webGL2crossingVoxels.pointsMesh(settings);
-                result.update_sphere_locations = function(locations, colors) {
-                    locations = locations || that.compact_locations;
-                    var geometry = result.geometry;
-                    geometry.attributes.position.array = locations;
-                    geometry.attributes.position.needsUpdate = true;
-                    if (settings.colorize) {
-                        colors = colors || that.get_location_colors();
-                        geometry.attributes.color.array = colors;
-                        geometry.attributes.color.needsUpdate = true;
-                    }
-                    var c = that.compacted_feedbacks.mid;
-                    var r = that.compacted_feedbacks.radius;
-                    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(c[0], c[1], c[2]), r);
-                };
-                result.update_sphere_locations();
-                return result;
+                var c = that.compacted_feedbacks.mid;
+                var r = that.compacted_feedbacks.radius;
+                geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(c[0], c[1], c[2]), r);
             };
-            get_compacted_feedbacks(location_only) {
-                var s = this.settings;
-                this.run();
-                var location_fill = this.settings.location_fill;
-                var rn = this.runner;
-                if (!location_only) {
-                    this.front_corners_array = rn.feedback_array(
-                        "front_corners",
-                        this.front_corners_array,
-                    );
-                    this.back_corners_array = rn.feedback_array(
-                        "back_corners",
-                        this.back_corners_array,
-                    );
-                    // xxxx locations are not always needed -- could optimize.
-                    this.location_array = rn.feedback_array(
-                        "location",
-                        this.location_array,
-                    );
-                } else {
-                    this.location_array = rn.feedback_array(
-                        "location",
-                        this.location_array,
-                    );
-                }
-                this.index_array = rn.feedback_array(
-                    "index",
-                    this.index_array,
+            result.update_sphere_locations();
+            return result;
+        };
+        get_feedbacks(location_only) {
+            this.run();
+            var rn = this.runner;
+            if (!location_only) {
+                this.front_corners_array = rn.feedback_array(
+                    "front_corners",
+                    this.front_corners_array,
                 );
-                if (this.compact_length === null) {
-                    // allocate arrays to size limit
-                    this.compact_length = Math.floor(
-                        this.settings.shrink_factor * this.index_array.length
-                    );
-                    this.compact_front_corners = new Float32Array(4 * this.compact_length);
-                    this.compact_back_corners = new Float32Array(4 * this.compact_length);
-                    this.compact_indices = new Int32Array(this.compact_length);
-                    this.compact_locations = new Float32Array(3 * this.compact_length);
-                }
-                // compact the arrays
-                this.compact_indices = this.feedbackContext.filter_degenerate_entries(
-                    this.index_array, this.index_array, this.compact_indices, 1, -1
+                this.back_corners_array = rn.feedback_array(
+                    "back_corners",
+                    this.back_corners_array,
                 );
-                if (!location_only) {
-                    this.compact_front_corners = this.feedbackContext.filter_degenerate_entries(
-                        this.index_array, this.front_corners_array, this.compact_front_corners, 4, -1
-                    );
-                    this.compact_back_corners = this.feedbackContext.filter_degenerate_entries(
-                        this.index_array, this.back_corners_array, this.compact_back_corners, 4, -1
-                    );
-                    // xxxx locations are not always needed -- could optimize.
-                    this.compact_locations = this.feedbackContext.filter_degenerate_entries(
-                        this.index_array, this.location_array, this.compact_locations, 3, location_fill
-                    );
-                } else {
-                    this.compact_locations = this.feedbackContext.filter_degenerate_entries(
-                        this.index_array, this.location_array, this.compact_locations, 3, location_fill
-                    );
-                }
-                // compute compact locations and extrema
-                var mins = null;
-                var maxes = null;
-                var locs = this.compact_locations;
-                var indices = this.compact_indices;
-                if ((indices.length>0) && (indices[0]>=0)) {
-                    mins = [locs[0], locs[1], locs[2]];
-                    maxes = [locs[0], locs[1], locs[2]];
-                    for (var i=0; i<indices.length; i++) {
-                        if (indices[i]<0) {
-                            break;
-                        }
-                        for (var k=0; k<3; k++) {
-                            var v = locs[i*3 + k];
-                            mins[k] = Math.min(mins[k], v);
-                            maxes[k] = Math.max(maxes[k], v);
-                        }
-                    }
-                } else {
-                    mins = [0,0,0];
-                    maxes = [0,0,0];
-                }
-                var n2 = 0;
-                var mid = [];
-                if (mins) {
-                    // increase the maxes by offset in each dim
-                    maxes = this.vsum(maxes, s.dx);
-                    maxes = this.vsum(maxes, s.dy);
-                    maxes = this.vsum(maxes, s.dz);
-                    n2 = this.vdistance2(mins, maxes);
-                    for (var k=0; k<3; k++) {
-                        mid.push(0.5 * (mins[k] + maxes[k]));
-                        //n2 += (mins[k] - maxes[k]) ** 2;
-                        var d = (mins[k] - maxes[k]);
-                        n2 += d * d;
-                    }
-                }
-                this.compacted_feedbacks = {
-                    mid: mid,
-                    radius: 0.5 * Math.sqrt(n2),
-                    mins: mins,
-                    maxes: maxes,
-                    indices: this.compact_indices, 
-                    front_corners: this.compact_front_corners,
-                    back_corners: this.compact_back_corners,
-                    locations: this.compact_locations,
-                };
-                return this.compacted_feedbacks;
-            };
-            // XXX should get vector ops from somewhere else.
-            vdistance2(v1, v2) {
-                var result = 0.0;
-                if ((v1) && (v2)) {
-                    for (var k=0; k<3; k++) {
-                        var d = v1[k] - v2[k];
-                        result += d * d;
-                    }
-                }
-                return result;
-            };
-            vsum(v1, v2) {
-                var result = [];
-                for (var k=0; k<3; k++) {
-                    result.push(v1[k] + v2[k]);
-                }
-                return result;
-            };
-            get_location_colors() {
-                var indices = this.compact_indices;
-                var locations = this.compact_locations;
-                var feedbacks = this.compacted_feedbacks;
-                var mins = feedbacks.mins;
-                var maxes = feedbacks.maxes;
-                var colors = this.compact_colors;
-                if (!colors) {
-                    colors = new Float32Array(locations.length);
-                    this.compact_colors = colors;
-                }
-                if ((!indices) || (indices[0] < 0)) {
-                    return colors;  // no points: do nothing
-                }
-                var diffs = [];
-                var base_intensity = 0.2;
-                for (var j=0; j<3; j++) {
-                    var d = maxes[j] - mins[j];
-                    if (d < 1e-9) {
-                        d = 1.0;
-                    }
-                    diffs.push(d / (1 - base_intensity));
-                }
+                // xxxx locations are not always needed -- could optimize.
+                this.location_array = rn.feedback_array(
+                    "location",
+                    this.location_array,
+                );
+            } else {
+                this.location_array = rn.feedback_array(
+                    "location",
+                    this.location_array,
+                );
+            }
+            this.index_array = rn.feedback_array(
+                "index",
+                this.index_array,
+            );
+        };
+        full_index_indicator_array() {
+            // make a fresh copy of indicator_array[index]==index only if index is crossing
+            // otherwise indicator_array[i] < 0 indicates not crossing.
+            return this.index_array.slice(0);  // for this implementation, just copy...
+        };
+        set_seed(xyz_block) {
+            this.settings.seed_xyzblock = xyz_block;
+        };
+        get_compacted_feedbacks(location_only) {
+            this.get_feedbacks(location_only);
+            var s = this.settings;
+            var location_fill = this.settings.location_fill;
+            if (this.compact_length === null) {
+                // allocate arrays to size limit
+                this.compact_length = Math.floor(
+                    this.settings.shrink_factor * this.index_array.length
+                );
+                this.compact_front_corners = new Float32Array(4 * this.compact_length);
+                this.compact_back_corners = new Float32Array(4 * this.compact_length);
+                this.compact_indices = new Int32Array(this.compact_length);
+                this.compact_locations = new Float32Array(3 * this.compact_length);
+            }
+            // if the seed is defined, trace connected voxels
+            this.connected_voxel_count = null;
+            if (s.seed_xyzblock) {
+                this.index_array = select_connected_voxels(this.index_array, s.seed_xyzblock, this);
+            }
+            // compact the arrays
+            this.compact_indices = this.feedbackContext.filter_degenerate_entries(
+                this.index_array, this.index_array, this.compact_indices, 1, -1
+            );
+            if (!location_only) {
+                this.compact_front_corners = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.front_corners_array, this.compact_front_corners, 4, -1
+                );
+                this.compact_back_corners = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.back_corners_array, this.compact_back_corners, 4, -1
+                );
+                // xxxx locations are not always needed -- could optimize.
+                this.compact_locations = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.location_array, this.compact_locations, 3, location_fill
+                );
+            } else {
+                this.compact_locations = this.feedbackContext.filter_degenerate_entries(
+                    this.index_array, this.location_array, this.compact_locations, 3, location_fill
+                );
+            }
+            // compute compact locations and extrema
+            var mins = null;
+            var maxes = null;
+            var locs = this.compact_locations;
+            var indices = this.compact_indices;
+            if ((indices.length>0) && (indices[0]>=0)) {
+                mins = [locs[0], locs[1], locs[2]];
+                maxes = [locs[0], locs[1], locs[2]];
                 for (var i=0; i<indices.length; i++) {
                     if (indices[i]<0) {
                         break;
                     }
-                    for (var j=0; j<3; j++) {
-                        var ij = i * 3 + j;
-                        colors[ij] = base_intensity + (locations[ij] - mins[j])/diffs[j];
+                    for (var k=0; k<3; k++) {
+                        var v = locs[i*3 + k];
+                        mins[k] = Math.min(mins[k], v);
+                        maxes[k] = Math.max(maxes[k], v);
                     }
                 }
-                return colors;
+            } else {
+                mins = [0,0,0];
+                maxes = [0,0,0];
+            }
+            var n2 = 0;
+            var mid = [];
+            if (mins) {
+                // increase the maxes by offset in each dim
+                maxes = this.vsum(maxes, s.dx);
+                maxes = this.vsum(maxes, s.dy);
+                maxes = this.vsum(maxes, s.dz);
+                n2 = this.vdistance2(mins, maxes);
+                for (var k=0; k<3; k++) {
+                    mid.push(0.5 * (mins[k] + maxes[k]));
+                    //n2 += (mins[k] - maxes[k]) ** 2;
+                    var d = (mins[k] - maxes[k]);
+                    n2 += d * d;
+                }
+            }
+            this.compacted_feedbacks = {
+                mid: mid,
+                radius: 0.5 * Math.sqrt(n2),
+                mins: mins,
+                maxes: maxes,
+                indices: this.compact_indices, 
+                front_corners: this.compact_front_corners,
+                back_corners: this.compact_back_corners,
+                locations: this.compact_locations,
             };
-            reset_three_camera(camera, radius_multiple, orbit_control) {
-                // adjust three.js camera to look at current voxels
+            return this.compacted_feedbacks;
+        };
+        // XXX should get vector ops from somewhere else.
+        vdistance2(v1, v2) {
+            var result = 0.0;
+            if ((v1) && (v2)) {
+                for (var k=0; k<3; k++) {
+                    var d = v1[k] - v2[k];
+                    result += d * d;
+                }
+            }
+            return result;
+        };
+        vsum(v1, v2) {
+            var result = [];
+            for (var k=0; k<3; k++) {
+                result.push(v1[k] + v2[k]);
+            }
+            return result;
+        };
+        get_location_colors() {
+            var indices = this.compact_indices;
+            var locations = this.compact_locations;
+            var feedbacks = this.compacted_feedbacks;
+            var mins = feedbacks.mins;
+            var maxes = feedbacks.maxes;
+            var colors = this.compact_colors;
+            if (!colors) {
+                colors = new Float32Array(locations.length);
+                this.compact_colors = colors;
+            }
+            if ((!indices) || (indices[0] < 0)) {
+                return colors;  // no points: do nothing
+            }
+            var diffs = [];
+            var base_intensity = 0.2;
+            for (var j=0; j<3; j++) {
+                var d = maxes[j] - mins[j];
+                if (d < 1e-9) {
+                    d = 1.0;
+                }
+                diffs.push(d / (1 - base_intensity));
+            }
+            for (var i=0; i<indices.length; i++) {
+                if (indices[i]<0) {
+                    break;
+                }
+                for (var j=0; j<3; j++) {
+                    var ij = i * 3 + j;
+                    colors[ij] = base_intensity + (locations[ij] - mins[j])/diffs[j];
+                }
+            }
+            return colors;
+        };
+        reset_three_camera(camera, radius_multiple, orbit_control, radius, cx, cy, cz) {
+            // adjust three.js camera to look at current voxels
+            if (!radius) {
                 var cf = this.compacted_feedbacks;
                 if ((!cf) || (!cf.mins)) {
                     // no points -- punt
                     return;
                 }
-                var cx = cf.mid[0];
-                var cy = cf.mid[1];
-                var cz = cf.mid[2];
-                radius_multiple = radius_multiple || 3;
-                camera.position.x = cx;
-                camera.position.y = cy;
-                camera.position.z = cz + radius_multiple * cf.radius;
-                camera.lookAt(cf.mid[0], cf.mid[1], cf.mid[2]);
-                if (orbit_control) {
-                    orbit_control.center.x = cx;
-                    orbit_control.center.y = cy;
-                    orbit_control.center.z = cz;
-                }
-                return camera;
+                cx = cf.mid[0];
+                cy = cf.mid[1];
+                cz = cf.mid[2];
+                radius = cf.radius;
             }
-            set_threshold(value) {
-                this.runner.change_uniform("uValue", [value]);
-            };
-            set_grid_limits(grid_mins, grid_maxes) {
-                this.runner.change_uniform("u_grid_min", grid_mins);
-                this.runner.change_uniform("u_grid_max", grid_maxes);
-            };
+            radius_multiple = radius_multiple || 3;
+            camera.position.x = cx;
+            camera.position.y = cy;
+            camera.position.z = cz + radius_multiple * radius;
+            camera.lookAt(cx, cy, cz);
+            if (orbit_control) {
+                orbit_control.center.x = cx;
+                orbit_control.center.y = cy;
+                orbit_control.center.z = cz;
+            }
+            return camera;
+        }
+        set_threshold(value) {
+            this.settings.threshold = value;
+            this.runner.change_uniform("uValue", [value]);
         };
+        set_grid_limits(grid_mins, grid_maxes) {
+            this.runner.change_uniform("u_grid_min", grid_mins);
+            this.runner.change_uniform("u_grid_max", grid_maxes);
+        };
+    };
 
-        var crossingVoxelsShader = function(grid_location_declaration) {
-            return `#version 300 es
+    var crossingVoxelsShader = function(grid_location_declaration) {
+        return `#version 300 es
 
-        // global length of rows
-        uniform int uRowSize;
+    // global length of rows
+    uniform int uRowSize;
 
-        // global number of columnss
-        uniform int uColSize;
+    // global number of columnss
+    uniform int uColSize;
 
-        // global number of layers (if values are in multiple blocks, else 0)
-        uniform int uLayerSize;
-        
-        // global contour threshold
-        uniform float uValue;
+    // global number of layers (if values are in multiple blocks, else 0)
+    uniform int uLayerSize;
+    
+    // global contour threshold
+    uniform float uValue;
 
-        // global grid thresholds
-        //  (I tried integers but it didn't work, couldn't debug...)
-        uniform vec3 u_grid_min, u_grid_max;
+    // global grid thresholds
+    //  (I tried integers but it didn't work, couldn't debug...)
+    uniform vec3 u_grid_min, u_grid_max;
 
-        // per mesh function values at voxel corners
-        in float a000, a001, a010, a011, a100, a101, a110, a111;
+    // per mesh function values at voxel corners
+    in float a000, a001, a010, a011, a100, a101, a110, a111;
 
-        // corners feedbacks
-        out vec4 front_corners, back_corners;
+    // corners feedbacks
+    out vec4 front_corners, back_corners;
 
-        // location feedback
-        out vec3 location;
+    // location feedback
+    out vec3 location;
 
-        // index feedback
-        flat out int index;
+    // index feedback
+    flat out int index;
 
-        ${std_sizes_declarations}
-        ${grid_location_declaration}
+    ${std_sizes_declarations}
+    ${grid_location_declaration}
 
-        void main() {
-            // default to invalid index indicating the voxel does not cross the value.
-            index = -1;
-            front_corners = vec4(a000, a001, a010, a011);
-            back_corners = vec4(a100, a101, a110, a111);
+    void main() {
+        // default to invalid index indicating the voxel does not cross the value.
+        index = -1;
+        front_corners = vec4(a000, a001, a010, a011);
+        back_corners = vec4(a100, a101, a110, a111);
 
-            ${get_sizes_macro("gl_VertexID")}
-            //location = location_offset;
-            vec3 rescaled = rescale_offset(vec3(0,0,0));
-            //location = grid_location(vec3(0,0,0));
-            location = grid_xyz(rescaled);
+        ${get_sizes_macro("gl_VertexID")}
+        //location = location_offset;
+        vec3 rescaled = rescale_offset(vec3(0,0,0));
+        //location = grid_location(vec3(0,0,0));
+        location = grid_xyz(rescaled);
 
-            bool voxel_ok = true;
-            if (u_grid_min[0] < u_grid_max[0]) {
-                // voxel coordinate filtering is enabled
-                voxel_ok = ( 
-                    (u_grid_min[0] <= rescaled[0]) && (rescaled[0] < u_grid_max[0]) &&
-                    (u_grid_min[1] <= rescaled[1]) && (rescaled[1] < u_grid_max[1]) &&
-                    (u_grid_min[2] <= rescaled[2]) && (rescaled[2] < u_grid_max[2]) );
+        bool voxel_ok = true;
+        if (u_grid_min[0] < u_grid_max[0]) {
+            // voxel coordinate filtering is enabled
+            voxel_ok = ( 
+                (u_grid_min[0] <= rescaled[0]) && (rescaled[0] < u_grid_max[0]) &&
+                (u_grid_min[1] <= rescaled[1]) && (rescaled[1] < u_grid_max[1]) &&
+                (u_grid_min[2] <= rescaled[2]) && (rescaled[2] < u_grid_max[2]) );
+        }
+
+        // Dont tile last column/row/layer which wraps around
+        if ((voxel_ok) && 
+            (i_col_num < (uRowSize - 1)) && 
+            (i_row_num < (uColSize - 1)) &&
+            (i_depth_num < (uLayerSize - 1))) {
+            float m = front_corners[0];
+            float M = front_corners[0];
+            vec4 corners = front_corners;
+            for (int j=0; j<2; j++) {
+                for (int i=0; i<4; i++) {
+                    float c = corners[i];
+                    m = min(c, m);
+                    M = max(c, M);
+                }
+                corners = back_corners;
             }
-
-            // Dont tile last column/row/layer which wraps around
-            if ((voxel_ok) && 
-                (i_col_num < (uRowSize - 1)) && 
-                (i_row_num < (uColSize - 1)) &&
-                (i_depth_num < (uLayerSize - 1))) {
-                float m = front_corners[0];
-                float M = front_corners[0];
-                vec4 corners = front_corners;
-                for (int j=0; j<2; j++) {
-                    for (int i=0; i<4; i++) {
-                        float c = corners[i];
-                        m = min(c, m);
-                        M = max(c, M);
-                    }
-                    corners = back_corners;
-                }
-                if ((m <= uValue) && (M > uValue)) {
-                    // the pixel crosses the threshold
-                    index = gl_VertexID;
-                }
+            if ((m <= uValue) && (M > uValue)) {
+                // the pixel crosses the threshold
+                index = gl_VertexID;
             }
         }
-        `;};
-        return new WebGL2CrossingVoxels(options);
-    };
+    }
+    `;};
 
     $.fn.webGL2crossingVoxels.pointsMesh = function (options) {
         var settings = $.extend({
@@ -703,6 +1106,309 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             num_layers: 3, 
             threshold: 0.5,
             shrink_factor: 0.8,
+        });
+        var compacted = crossing.get_compacted_feedbacks();
+        var indices = compacted.indices;
+        var front_corners = compacted.front_corners;
+        var back_corners = compacted.back_corners;
+        var ci = 0;
+        for (var i=0; i<indices.length; i++) {
+            $("<br/>").appendTo(container);
+            $("<span> " + indices[i] + " </span>").appendTo(container);
+            for (var j=0; j<4; j++) {
+                $("<span> " + front_corners[ci] + " " + back_corners[ci] + " </span>").appendTo(container);
+                ci ++;
+            }
+        }
+    };
+
+    $.fn.webGL2sortedVoxels = function(options) {
+        return new WebGL2SortedVoxels(options);
+    };
+
+    class WebGL2SortedVoxels extends WebGL2CrossingVoxels  {
+        initialize() {
+            var s = this.settings;
+            this.feedbackContext = s.feedbackContext;
+            //var nvalues = s.valuesArray.length;
+            this.sorter = $.fn.webGL2voxelSorter({
+                valuesArray: s.valuesArray,
+                num_rows: s.num_rows,
+                num_cols: s.num_cols,
+                num_layers: s.num_layers,
+                num_blocks: s.num_blocks,
+            });
+            // load buffers with sorter output arrays
+            this.indices_buffer = this.feedbackContext.buffer();
+            //this.front_corners_buffer = this.feedbackContext.buffer();
+            //this.back_corners_buffer = this.feedbackContext.buffer();
+            this.min_corners_buffer = this.feedbackContext.buffer();
+            this.max_corners_buffer = this.feedbackContext.buffer();
+
+            this.indices_buffer.initialize_from_array(this.sorter.indices);
+            //this.front_corners_buffer.initialize_from_array(this.sorter.front_corners);
+            //this.back_corners_buffer.initialize_from_array(this.sorter.back_corners);
+            this.min_corners_buffer.initialize_from_array(this.sorter.min_corners);
+            this.max_corners_buffer.initialize_from_array(this.sorter.max_corners);
+            
+            // allocate arrays to size limit
+            this.compact_length = Math.floor(
+                this.settings.shrink_factor * this.sorter.indices.length
+            );
+            // extended length for selection processing.
+            this.compact_length = Math.min(this.compact_length, this.sorter.indices.length);
+            this.extended_length = Math.min(4 * this.compact_length, this.sorter.indices.length);
+
+            var vertex_shader;
+            if (s.location == "std") {
+                vertex_shader = sortedVoxelsShader(locate_std_decl);
+            } else if (s.location="polar_scaled") {
+                vertex_shader = sortedVoxelsShader(locate_polar_scaled_decl);
+            } else {
+                throw new Error("unknown grid location type: " + s.location);
+            }
+
+            this.program = this.feedbackContext.program({
+                vertex_shader: vertex_shader,
+                fragment_shader: this.settings.fragment_shader,
+                feedbacks: {
+                    index: {type: "int"},
+                    location: {num_components: 3},
+                },
+            });
+            var inputs = {};
+            inputs.index_in = {
+                per_vertex: true,
+                num_components: 1,
+                type: "int",
+                from_buffer: {
+                    name: this.indices_buffer.name,
+                    skip_elements: 0,  // adjust for each run
+                }
+            };
+            inputs.maxcorner = {
+                per_vertex: true,
+                num_components: 1,
+                from_buffer: {
+                    name: this.max_corners_buffer.name,
+                    skip_elements: 0,  // adjust for each run
+                }
+            };
+            inputs.mincorner = {
+                per_vertex: true,
+                num_components: 1,
+                from_buffer: {
+                    name: this.min_corners_buffer.name,
+                    skip_elements: 0,  // adjust for each run
+                }
+            };
+
+            this.runner = this.program.runner({
+                num_instances: 1,
+                vertices_per_instance: this.extended_length,
+                rasterize: s.rasterize,
+                uniforms: {
+                    // number of rows
+                    uRowSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_cols],
+                    },
+                    // numver of columns
+                    uColSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_rows],
+                    },
+                    // number of layers
+                    uLayerSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_layers],
+                    },
+                    // threshold value
+                    uValue: {
+                        vtype: "1fv",
+                        default_value: [s.threshold],
+                    },
+                    u_grid_min: {
+                        vtype: "3fv",
+                        default_value: s.grid_min,
+                    },
+                    u_grid_max: {
+                        vtype: "3fv",
+                        default_value: s.grid_max,
+                    },
+                },
+                inputs: inputs,
+                samplers: s.samplers,
+            });
+
+            this.front_corners_array = new Float32Array(4 * this.extended_length);
+            this.back_corners_array = new Float32Array(4 * this.extended_length);
+            this.index_array = new Int32Array(this.extended_length);
+            this.location_array = new Float32Array(3 * this.extended_length);
+
+            this.compact_front_corners = new Float32Array(4 * this.compact_length);
+            this.compact_back_corners = new Float32Array(4 * this.compact_length);
+            this.compact_indices = new Int32Array(this.compact_length);
+            this.compact_locations = new Float32Array(3 * this.compact_length);
+        };
+        run() {
+            var threshold = this.settings.threshold;
+            var threshold_start = this.sorter.threshold_start_index(threshold);
+            //var run_size = Math.min(this.sorter.indices.length - start_index, this.compact_length);
+            var run_size = this.extended_length;
+            var max_start = this.sorter.indices.length - run_size;
+            var start_index = Math.min(max_start, threshold_start);
+            var runner = this.runner;
+            //runner.vertices_per_instance = run_size;
+            runner.inputs.index_in.bindBuffer(this.indices_buffer, start_index);
+            runner.inputs.maxcorner.bindBuffer(this.max_corner_buffer, start_index);
+            runner.inputs.mincorner.bindBuffer(this.min_corner_buffer, start_index);
+            this.runner.install_uniforms();
+            this.runner.run();
+            this.run_size = run_size;
+            this.run_start_index = start_index;
+        };
+        get_feedbacks(location_only) {
+            this.run();
+            var rn = this.runner;
+            // set index default to invalid voxel
+            var index_array = this.index_array;
+            for (var i=0; i<index_array.length; i++) {
+                index_array[i] = -1;
+            }
+            this.index_array = rn.feedback_array(
+                "index",
+                index_array,
+            );
+            this.location_array = rn.feedback_array(
+                "location",
+                this.location_array,
+            );
+            if (!location_only) {
+                var front_corners_array = this.front_corners_array;
+                var back_corners_array = this.back_corners_array;
+                var front_corners_src = this.sorter.front_corners;
+                var back_corners_src = this.sorter.back_corners;
+                var start_index = this.run_start_index;
+                var run_size = this.run_size;
+                var corners_index = 0;
+                for (var out_index=0; out_index<run_size; out_index++) {
+                    var corners_src = 4 * (out_index + start_index);
+                    for (var corner_coord=0; corner_coord<4; corner_coord++) {
+                        front_corners_array[corners_index] = front_corners_src[corners_src];
+                        back_corners_array[corners_index] = back_corners_src[corners_src];
+                        corners_index ++;
+                        corners_src ++;
+                    }
+                }
+            }
+        }
+        full_index_indicator_array() {
+            // make a fresh copy of indicator_array[index]==index only if index is crossing
+            // otherwise indicator_array[i] < 0 indicates not crossing.
+            var result =  this.sorter.indices.slice(0);
+            for (var i=0; i<result.length; i++) {
+                result[i] = -1;  // default to not crossing
+            }
+            var index_array = this.index_array;
+            for (var i=0; i<index_array.length; i++) {
+                var index = index_array[i];
+                if (index >= 0) {
+                    result[index] = index;
+                }
+            }
+            return result;
+        };
+    };
+    var sortedVoxelsShader = function(grid_location_declaration) {
+        return `#version 300 es
+
+        // global length of rows
+        uniform int uRowSize;
+    
+        // global number of columnss
+        uniform int uColSize;
+    
+        // global number of layers (if values are in multiple blocks, else 0)
+        uniform int uLayerSize;
+        
+        // global contour threshold
+        uniform float uValue;
+    
+        // global grid thresholds
+        //  (I tried integers but it didn't work, couldn't debug...)
+        uniform vec3 u_grid_min, u_grid_max;
+
+        // index input
+        in int index_in;
+
+        // voxel value extrema
+        in float maxcorner, mincorner;
+    
+        // location feedback
+        out vec3 location;
+    
+        // index feedback
+        flat out int index;
+
+        ${std_sizes_declarations}
+        ${grid_location_declaration}
+
+        void main() {
+            ${get_sizes_macro("index_in")}
+            // default to invalid index indicating the voxel does not cross the value.
+            index = -1;
+            vec3 rescaled = rescale_offset(vec3(0,0,0));
+            location = grid_xyz(rescaled);
+            bool voxel_ok = true;
+            if (u_grid_min[0] < u_grid_max[0]) {
+                // voxel coordinate filtering is enabled
+                voxel_ok = ( 
+                    (u_grid_min[0] <= rescaled[0]) && (rescaled[0] < u_grid_max[0]) &&
+                    (u_grid_min[1] <= rescaled[1]) && (rescaled[1] < u_grid_max[1]) &&
+                    (u_grid_min[2] <= rescaled[2]) && (rescaled[2] < u_grid_max[2]) );
+            }
+            if (voxel_ok) {
+                voxel_ok = (mincorner <= uValue) && (maxcorner >= uValue);
+            }
+            if ((voxel_ok) && 
+                (i_col_num < (uRowSize - 1)) && 
+                (i_row_num < (uColSize - 1)) &&
+                (i_depth_num < (uLayerSize - 1))) {
+                // position is valid.
+                index = index_in;
+            }
+        }
+        `;
+    }
+
+    $.fn.webGL2sortedVoxels.example = function (container) {
+        var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
+
+        var context = container.feedWebGL2({
+            gl: gl,
+        });
+        var valuesArray = new Float32Array([
+            0,0,0,
+            0,0,0,
+            0,0,0,
+
+            0,0,0,
+            0,1,0,
+            0,0,0,
+
+            0,0,0,
+            0,0,0,
+            0,0,0,
+        ]);
+        var crossing = container.webGL2sortedVoxels({
+            feedbackContext: context,
+            valuesArray: valuesArray,
+            num_rows: 3,
+            num_cols: 3,
+            num_layers: 3, 
+            threshold: 0.5,
+            shrink_factor: 1.0,
         });
         var compacted = crossing.get_compacted_feedbacks();
         var indices = compacted.indices;
@@ -1622,6 +2328,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     0, 1, 0,
                     0, 0, 1,
                 ],
+                // use sorted voxel implementation by default.
+                sorted: true,
             }, options);
             this.check_geometry();
             var s = this.settings;
@@ -1652,7 +2360,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 set_up_sampler("ColumnScale", s.num_cols+1);
                 set_up_sampler("LayerScale", s.num_layers+1);
             }
-            this.crossing = container.webGL2crossingVoxels({
+            var crossing_maker = container.webGL2crossingVoxels;
+            if (s.sorted) {
+                var crossing_maker = container.webGL2sortedVoxels;
+            }
+            this.crossing = crossing_maker({
                 feedbackContext: this.feedbackContext,
                 valuesArray: s.valuesArray,
                 num_rows: s.num_rows,
@@ -1674,6 +2386,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.segments = null;
             // named perspectives which share this underlying surface data structure
             this.named_perspectives = {};
+        };
+        connected_voxel_count() {
+            debugger;
+            return this.crossing.connected_voxel_count;
         };
         get_perspective(name, options) {
             options = options || {};
@@ -1706,6 +2422,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
             }
         }
+        set_seed (xyz_block) {
+            this.crossing.set_seed(xyz_block);
+        };
         run () {
             var s = this.settings;
             var compacted = this.crossing.get_compacted_feedbacks();
@@ -1992,6 +2711,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     class webGL2SurfacePerspective {
         // A view of the surface at a specified threshold and color rotation, etc.
         // The underlying surface may be shared between many perspectives!!!
+        // NOT COMPLETE!  DELETE??
         constructor(surface, options) {
             this.surface = surface;
             var ssettings = surface.settings;
@@ -2643,6 +3363,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         };
         fix_normals() {
             // reverse normal if it points opposite triangle face
+            // xxx this operation could be done on the gpu if it is a bottleneck xxx
             var positions = this._triangle_positions;
             var normals = this._triangle_normals;
             for (var cursor=0; cursor<this._last_nondegenerate_position; cursor += 9) {
@@ -2683,7 +3404,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
         };
         get_triangle_indices() {
-            debugger;
             // determine vertex position indices for triangles for active triangles.
             // index_indicator is negative where the position index is invalid.
             var s = this.settings;
@@ -2693,7 +3413,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             //   pi = index_indicator[voxel_index]
             //   voxel_position = [positions[pi], positions[pi+1], positions[pi+2], ]
             // this assumes index_indicator is only used as a sentinel until the next iteration.
-            var index_indicator = this.crossing.index_array.slice(0); // make a copy...
+            var index_indicator = this.crossing.full_index_indicator_array(); // make a copy...
             var indices = this.segments.get_indices();
             // maximum number of triangle vertices (3 per triangle)
             var max_length = 3 * triangle_corners.length * indices.length;
@@ -2704,7 +3424,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var block_offset = layer_offset * s.num_layers;
             var triangle_corner_offsets = this.triangle_corner_offsets;
             var triangle_cursor = 0;
-            var diagonal_offset = this.diagonal_offset;
+            //var diagonal_offset = this.diagonal_offset;
             for (var root_index=0; root_index<indices.length; root_index++) {
                 var root = indices[root_index];
                 if ((root >= 0) && (index_indicator[root] >= 0)) {

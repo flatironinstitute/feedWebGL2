@@ -8,13 +8,13 @@ import numpy as np
 import jp_proxy_widget
 from jp_doodle.data_tables import widen_notebook
 from jp_doodle import dual_canvas
-from IPython.display import display
 
 required_javascript_modules = [
     local_files.vendor_path("js_lib/three.min.js"),
     local_files.vendor_path("js_lib/OrbitControls.js"),
     local_files.vendor_path("js/feedWebGL.js"),
     local_files.vendor_path("js/feedbackSurfaces.js"),
+    local_files.vendor_path("js/streamLiner.js"),
     local_files.vendor_path("js/volume32.js"),
 ]
 
@@ -49,45 +49,80 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         super(Volume32, self).__init__(*pargs, **kwargs)
         load_requirements(self)
         self.element.html("Uninitialized Volume widget.")
+        self.js_init("""
+            element.ready_sync = function (message) {
+                element.html(message);
+                return true;
+            };
+        """)
         self.options = None
         self.data = None
 
     def set_options(
             self, num_rows, num_cols, num_layers, 
             threshold=0, shrink_factor=0.2, method="tetrahedra",
+            sorted=True,
             ):
         methods = ("tetrahedra", "diagonal")
         assert method in methods, "method must be in " + repr(methods)
         options = jp_proxy_widget.clean_dict(
             num_rows=num_rows, num_cols=num_cols, num_layers=num_layers, 
             threshold=threshold, shrink_factor=shrink_factor, method=method,
+            sorted=sorted,
         )
         self.options = options
         self.js_init("""
             element.V = element.volume32(options);
         """, options=options)
 
+    def sync(self, message="Volume widget is ready"):
+        "Wait for the widget to initialize before proceeding. Widget must be displayed!"
+        self.element.ready_sync(message).sync_value()
+
+    def load_stream_lines(
+        self, 
+        stream_lines, 
+        basis_scale=1.0, 
+        cycle_duration=1.0,
+        sprite_shape_weights=None, 
+        sprite_shape_normals=None,
+        ):
+        """
+        Load sequence of sequence of triples as stream lines to the surface display.
+        """
+        parameters = dict(stream_lines=stream_lines, basis_scale=basis_scale, cycle_duration=cycle_duration)
+        if (sprite_shape_normals):
+            parameters["sprite_shape_normals"] = sprite_shape_normals
+        if (sprite_shape_weights):
+            parameters["sprite_shape_weights"] = sprite_shape_weights
+        # KISS for now XXXX eventually optimize using bytearrays and numpy?
+        self.js_init("""
+            element.V.settings.stream_lines_parameters = parameters;
+        """, parameters=parameters)
+
     def load_3d_numpy_array(
             self, ary, 
             threshold=None, shrink_factor=None, chunksize=10000000, method="tetrahedra",
+            sorted=True,
             ):
         if not self.rendered:
             display(self)
         if threshold is None:
             threshold = 0.5 * (ary.min() + ary.max());
         self.element.html("Loading shape: " + repr(ary.shape) + " " + repr([threshold, shrink_factor]))
-        (num_layers, num_cols, num_rows) = ary.shape
+        (num_layers, num_rows, num_cols) = ary.shape
         if shrink_factor is None:
             shrink_factor = self.shrink_heuristic(*ary.shape)
         ary32 = np.array(ary, dtype=np.float32)
         self.set_options(
-            num_rows, num_cols, num_layers, 
-            threshold=threshold, shrink_factor=shrink_factor, method=method)
+            num_rows=num_rows, num_cols=num_cols, num_layers=num_layers, 
+            threshold=threshold, shrink_factor=shrink_factor, method=method,
+            sorted=sorted,
+            )
         self.data = ary32
         ary_bytes = bytearray(ary32.tobytes())
         nbytes = len(ary_bytes)
         self.js_init("""
-            debugger;
             var uint8array = new Uint8Array(length);
             element.build_status = function(msg) {
                 element.html(msg);
@@ -143,6 +178,42 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         normals = float32array(normals_hex)
         return (positions, normals)
 
+    def dump_to_binary_stl(self, filename="volume.stl", verbose=True):
+        if verbose:
+            print("Dumping volume snapshot as binary STL to " + filename)
+        (positions, normals) = self.triangles_and_normals()
+        if verbose:
+            print("Dumping ", len(positions), "triangles.")
+        file = open(filename, "wb")
+        typ = np.dtype(np.float32, "<") # little endian float32
+        ityp = np.dtype(np.int32, "<") # little endian int32
+        #b = np.array(positions[0,0,0], dtype=typ).tobytes()
+        #len(b), b, positions[0,0,0]
+        header = (b'BINARY STL HEADER STRING :: ' * 20)[:80]
+        ntriangles = len(positions)
+        ntriangles_bytes = np.array(ntriangles, dtype=ityp).tobytes()
+        file.write(header)
+        file.write(ntriangles_bytes)
+        trailer = b'\x00\x00'
+        def dump_triple(triple):
+            assert triple.shape == (3,)
+            for i in range(3):
+                xi = triple[i]
+                bi = np.array(xi, dtype=typ).tobytes()
+                file.write(bi)
+        for itriangle in range(ntriangles):
+            if verbose and (itriangle % 10000) == 0:
+                print (itriangle)
+            normal = normals[itriangle][0]
+            dump_triple(normal)
+            for ivertex in range(3):
+                vertex = positions[itriangle][ivertex]
+                dump_triple(vertex)
+            file.write(trailer)
+        file.close()
+        if verbose:
+            print ("wrote binary STL to " + repr(filename))
+
     shrink_multiple = 4.0
     shrink_max = 0.7
 
@@ -154,8 +225,14 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         assert self.options is not None, "options must be intialized"
         assert self.data is not None, "data must be provided"
         self.element.html("building")
-        self.element.V.build_scaffolding(self.get_element(), width)
-        self.element.V.focus_volume()
+        #self.element.V.build_scaffolding(self.get_element(), width)
+        # build the scaffolding on a child div to allow garbage collection on reinit
+        self.js_init("""
+            element.empty();
+            element.V_container = $("<div/>").appendTo(element);
+            element.V.build_scaffolding(element.V_container, width);
+        """, width=width)
+        self.element.V.zoom_out()
 
     def doodle_diagram(
         self, 
@@ -210,9 +287,12 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
                 swatch.arrow(location1=tcenter, location2=(tcenter + 0.2 * normal), lineWidth=2, color=color, head_length=0.02)
         swatch.fit(0.6)
 
-def display_isosurface(for_array, threshold=None, save=False, method="tetrahedra"):
+def display_isosurface(
+        for_array, threshold=None, save=False, method="tetrahedra",
+        sorted=True
+        ):
     W = Volume32()
-    W.load_3d_numpy_array(for_array, threshold=threshold, method=method)
+    W.load_3d_numpy_array(for_array, threshold=threshold, method=method, sorted=sorted)
     W.build()
     if save:
         return W

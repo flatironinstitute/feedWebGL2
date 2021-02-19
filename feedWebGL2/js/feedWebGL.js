@@ -106,11 +106,14 @@
                 this.programs[prog.name] = prog;
                 return prog;
             };
-            filter_degenerate_entries(sentinel, from_buffer, to_buffer, num_components, fill){
+            filter_degenerate_entries(sentinel, from_buffer, to_buffer, num_components, fill, truncate){
                 // where the sentinel is negative the from_buffer is degenerate
                 // pack non-degenerate entries into to_buffer
                 // KISS implementation for now (no sub-buffer copies)
                 // 
+                if (!to_buffer) {
+                    to_buffer = new (from_buffer.constructor)(from_buffer.length);
+                }
                 fill = fill || 0;
                 var limit = to_buffer.length;
                 var to_index = 0;
@@ -132,6 +135,9 @@
                     if (to_index >= limit) {
                         break;  // buffer may not be large enough for all valid values.
                     }
+                }
+                if ((truncate) && (to_index < limit)) {
+                    return to_buffer.slice(0, to_index);
                 }
                 while (to_index < limit) {
                     to_buffer[to_index] = fill;
@@ -813,8 +819,9 @@
                     gl.vertexAttribPointer(this.position, this.num_components,
                         gl.FLOAT, false, this.byte_stride, this.byte_offset);
                 } else if (this.type == "int") {
+                    // no "normalize" argument!
                     gl.vertexAttribIPointer(this.position, this.num_components,
-                        gl.INT, false, this.byte_stride, this.byte_offset);
+                        gl.INT, this.byte_stride, this.byte_offset);
                 } else {
                     throw new Error("only int and float types are supported for attributes.");
                 }
