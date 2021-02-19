@@ -445,7 +445,7 @@ class SaveTab(FileTab):
         path = ex.file_path(filename)
         if os.path.exists(path):
             self.info.value = "<div>File name exists.  Please provide an unused new name.</div>"
-            returnrai
+            return
 
         if not filename.endswith(".h5"):
             self.info.value = "<div>Please provide new file name endint in '.h5'.</div>"
