@@ -28,6 +28,7 @@ class Explorer:
         self.current_file = None
         self.current_key = None
         self.current_image = None
+        self.displayed_image = None
         self.error = None
         widget = self.make_widget()
         display(widget)
@@ -59,11 +60,12 @@ class Explorer:
         for t in self.tabs:
             t.update()
         image = self.current_image 
-        if image is not None:
+        if image is not None and image is not self.displayed_image:
             ss_image = self.sub_sample(image)
             W = self.volume
             W.load_3d_numpy_array(ss_image, ss_image.mean())
             W.build(width=self.width)
+            self.displayed_image = image
 
     def sub_sample(self, image):
         (I, J, K) = image.shape
