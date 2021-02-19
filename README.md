@@ -54,7 +54,16 @@ Clone the repository in an appropriate folder using this command line:
 % git clone https://github.com/AaronWatters/feedWebGL2.git
 ```
 
-Install the package in an appropriate environment using `pip`
+The `jp_doodle` dependancy for the package apparently does not install
+automatically using the commands below in some cases.  Install it in
+the appropriate environment from Github using the followind command
+
+```bash
+% pip install https://github.com/AaronWatters/jp_doodle/zipball/master
+```
+
+Install the `feedWebGL2` package in development mode
+in an appropriate environment using `pip`
 as follows:
 
 ```bash
