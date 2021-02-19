@@ -18,6 +18,7 @@ class Explorer:
             filters = [
                 LogFilter,
                 BlurFilter,
+                SubsampleFilter,
             ]
         self.folder = folder
         # instantiate the filters
@@ -69,6 +70,8 @@ class Explorer:
         shape_max = self.shape_max
         M = max(I, J, K)
         stride = int(M / shape_max)
+        if stride <= 1:
+            return image
         Is = int(I / stride)
         Js = int(J / stride)
         Ks = int(K / stride)
@@ -344,6 +347,59 @@ class BlurFilter(LogFilter):
         ex.current_image = blurred_image
         # redisplay all widgets
         ex.update_all()
+
+class SubsampleFilter(LogFilter):
+
+    # title is required
+    title = "Subsample"
+
+    def widget(self):
+        "The widget method defines the parameters for the filter."
+        html1 = widgets.HTML("<H1>Reduce array size by stride.</H1>")
+        # self.info is required
+        self.info = widgets.HTML("<div>Parameters</div>")
+        # other parameters
+        self.stride = widgets.BoundedIntText(
+            value=2,
+            min=2,
+            max=100,
+            step=1,
+            description='Stride:',
+            disabled=False
+        )
+        # apply button is required
+        self.button = widgets.Button(
+            description="Reduce",
+        )
+        self.button.on_click(self.apply)
+        # Construct a widget container with all sub-widgets
+        return widgets.VBox([html1, self.info, self.stride, self.button])
+
+    def apply(self, button):
+        """
+        The apply method defines how to execute the filter using the parameters.
+        It must test that the image is defined.
+        """
+        from scipy.ndimage import gaussian_filter
+        ex = self.in_explorer
+        image_array = ex.current_image
+        if image_array is None:
+            # no image: abort...
+            self.update()
+            return
+        # Get parameters
+        stride = self.stride.value
+        # apply the filter to the image
+        (I, J, K) = image_array.shape
+        Is = int(I / stride)
+        Js = int(J / stride)
+        Ks = int(K / stride)
+        ss_image = image_array[0 : Is * stride: stride, 0 : Js * stride: stride, 0 : Ks * stride: stride]
+        # store the modified array
+        ex.current_image = ss_image
+        # redisplay all widgets
+        ex.update_all()
+
 
 class SaveTab(FileTab):
 
