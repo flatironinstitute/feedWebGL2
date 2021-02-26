@@ -30,6 +30,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // isosurface generation method "diagonal" or "tetrahedra"
                     method: "tetrahedra",
                     sorted: false,
+                    SurfaceClearColorHex: 0xffffff,
+                    VoxelClearColorHex: 0x0,
                 }, options);
                 var s = this.settings;
                 var context = s.feedbackContext;
@@ -213,11 +215,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 if (!this.surface) {
                     this.set_up_surface();
                 }
+                var s = this.settings;
                 container.empty();
                 var canvas = document.createElement( 'canvas' );
                 var context = canvas.getContext( 'webgl2', { alpha: false } ); 
                 var renderer = new THREE.WebGLRenderer( { canvas: canvas, context: context } );
                 renderer.setPixelRatio( window.devicePixelRatio );
+                renderer.setClearColor(s.SurfaceClearColorHex, 1);
                 renderer.setSize( container.width(), container.height() );
                 renderer.outputEncoding = THREE.sRGBEncoding;
                 container[0].appendChild( renderer.domElement );
@@ -250,6 +254,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 surface_camera.scale.copy( s );
             };
             initialize_voxels(container) {
+                var s = this.settings;
                 if (!this.surface) {
                     this.set_up_surface();
                 }
@@ -258,6 +263,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var canvas = document.createElement( 'canvas' );
                 var context = canvas.getContext( 'webgl2', { alpha: false } ); 
                 var renderer = new THREE.WebGLRenderer( { canvas: canvas, context: context } );
+                renderer.setClearColor(s.VoxelClearColorHex, 1);
                 renderer.setPixelRatio( window.devicePixelRatio );
                 renderer.setSize( container.width(), container.height() );
                 renderer.outputEncoding = THREE.sRGBEncoding;
