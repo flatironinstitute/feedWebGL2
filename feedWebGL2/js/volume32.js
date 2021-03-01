@@ -31,7 +31,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     method: "tetrahedra",
                     sorted: false,
                     SurfaceClearColorHex: 0xffffff,
-                    VoxelClearColorHex: 0x0,
+                    VoxelClearColorHex: 0xffffff,
                 }, options);
                 var s = this.settings;
                 var context = s.feedbackContext;
