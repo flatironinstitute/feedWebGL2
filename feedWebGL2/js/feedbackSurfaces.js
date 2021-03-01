@@ -591,6 +591,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 dy: [0, 1, 0],
                 dz: [0, 0, 1],
                 fragment_shader: noop_fragment_shader,
+                base_intensity: 0.0,
+                max_intensity: 0.5,
             }, options);
 
             this.initialize();
@@ -865,6 +867,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             return result;
         };
         get_location_colors() {
+            var s = this.settings;
             var indices = this.compact_indices;
             var locations = this.compact_locations;
             var feedbacks = this.compacted_feedbacks;
@@ -879,7 +882,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 return colors;  // no points: do nothing
             }
             var diffs = [];
-            var base_intensity = 0.2;
+            var base_intensity = s.base_intensity || 0.0;
+            var max_intensity = s.max_intensity || 1.0;
             for (var j=0; j<3; j++) {
                 var d = maxes[j] - mins[j];
                 if (d < 1e-9) {
@@ -893,7 +897,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
                 for (var j=0; j<3; j++) {
                     var ij = i * 3 + j;
-                    colors[ij] = base_intensity + (locations[ij] - mins[j])/diffs[j];
+                    // xxx this calculation is not quite right if max_intensity < 1.0
+                    colors[ij] = (base_intensity + (locations[ij] - mins[j])/diffs[j]) * max_intensity;
                 }
             }
             return colors;
