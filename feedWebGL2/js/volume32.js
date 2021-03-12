@@ -295,7 +295,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 //    radius, cx, cy, cz,
                 //    up, offset,
                 //    );
+                // set the camera with the correct 'up'
+                this.reset_camera(voxels, camera, null);
+                // then create the orbiter
                 this.voxelControls = new THREE.OrbitControls(camera, renderer.domElement);
+                // then reset the orbit center (and camera parameters again)
                 this.reset_camera(voxels, camera, null, this.voxelControls);
                 var mesh = voxels.get_points_mesh({
                     THREE: THREE,
