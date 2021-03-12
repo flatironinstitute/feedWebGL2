@@ -903,8 +903,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
             return colors;
         };
-        reset_three_camera(camera, radius_multiple, orbit_control, radius, cx, cy, cz) {
+        reset_three_camera(camera, radius_multiple, orbit_control, radius, cx, cy, cz, up, offset) {
             // adjust three.js camera to look at current voxels
+            up = up || {x: 0, y:1, z:0};
+            offset = offset || {x: 0, y:0, z:1};
             if (!radius) {
                 var cf = this.compacted_feedbacks;
                 if ((!cf) || (!cf.mins)) {
@@ -917,14 +919,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 radius = cf.radius;
             }
             radius_multiple = radius_multiple || 3;
-            camera.position.x = cx;
-            camera.position.y = cy;
-            camera.position.z = cz + radius_multiple * radius;
-            camera.lookAt(cx, cy, cz);
+            var radius_shift = radius_multiple * radius;
+            camera.position.x = cx + radius_shift * offset.x;
+            camera.position.y = cy + radius_shift * offset.y;
+            camera.position.z = cz + radius_shift * offset.z;
+            camera.up = new THREE.Vector3(up.x, up.y, up.z);
+            camera.lookAt(new THREE.Vector3(cx, cy, cz));
             if (orbit_control) {
-                orbit_control.center.x = cx;
-                orbit_control.center.y = cy;
-                orbit_control.center.z = cz;
+                //orbit_control.center.x = cx;
+                //orbit_control.center.y = cy;
+                //orbit_control.center.z = cz;
+                orbit_control.target.set(cx, cy, cz);
+                orbit_control.update();
             }
             return camera;
         }

@@ -32,6 +32,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     sorted: false,
                     SurfaceClearColorHex: 0xffffff,
                     VoxelClearColorHex: 0xffffff,
+                    camera_up: {x:0, y:1, z:0},
+                    camera_offset: {x:0, y:0, z:1},
+                    camera_distance_multiple: 2.0,
                 }, options);
                 var s = this.settings;
                 var context = s.feedbackContext;
@@ -237,7 +240,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.surface_mesh = mesh;
                 this.surface_camera = camera;
                 this.surface_renderer = renderer;
-                this.surface.crossing.reset_three_camera(camera, 2.0);
+                //this.surface.crossing.reset_three_camera(camera, 2.0);
+                this.reset_camera(this.surface.crossing, camera);
                 this.sync_cameras();
                 //renderer.render( scene, camera );
             };
@@ -252,6 +256,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 surface_camera.position.copy( d );
                 surface_camera.quaternion.copy( q );
                 surface_camera.scale.copy( s );
+            };
+            reset_camera(
+                owner,
+                camera, radius_multiple, orbit_control, radius, cx, cy, cz, up, offset
+            ) {
+                var s = this.settings;
+                radius_multiple = radius_multiple || s.camera_distance_multiple;
+                up = up || s.camera_up;
+                offset = offset || s.camera_offset;
+                owner.reset_three_camera(
+                    camera, radius_multiple, orbit_control, radius, cx, cy, cz, up, offset
+                );
             };
             initialize_voxels(container) {
                 var s = this.settings;
@@ -269,7 +285,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 renderer.outputEncoding = THREE.sRGBEncoding;
                 container[0].appendChild( renderer.domElement );
                 var camera = new THREE.PerspectiveCamera( 45, container.width()/container.height(), 0.1, 10000 );
-                voxels.reset_three_camera(camera, 2.0);
+                //var [radius_multiple, orbit_control, radius, cx, cy, cz, up, offset] = [
+                //    s.camera_distance_multiple, null, null, null, null, null, s.camera_up, s.camera_offset
+                //];
+                //voxels.reset_three_camera(
+                //    camera, 
+                //    radius_multiple,
+                //    orbit_control, 
+                //    radius, cx, cy, cz,
+                //    up, offset,
+                //    );
+                this.voxelControls = new THREE.OrbitControls(camera, renderer.domElement);
+                this.reset_camera(voxels, camera, null, this.voxelControls);
                 var mesh = voxels.get_points_mesh({
                     THREE: THREE,
                     colorize: true,
@@ -291,8 +318,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.voxel_mesh = mesh;
                 this.voxel_camera = camera;
                 this.voxel_renderer = renderer;
-                this.voxelControls = new THREE.OrbitControls(camera, renderer.domElement);
-                this.voxelControls.userZoom = false;
+                //this.voxelControls = new THREE.OrbitControls(camera, renderer.domElement);
+                //this.voxelControls.userZoom = false;
+                this.voxelControls.update();
                 this.voxelClock = new THREE.Clock();
             };
             dispose() {
@@ -320,7 +348,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
                 var delta = this.voxelClock.getDelta();
                 this.update_surface_geometry(this.voxelClock.elapsedTime);
-                this.voxelControls.update(delta);
+                //this.voxelControls.update();
                 this.voxel_renderer.render(this.voxel_scene, this.voxel_camera);
                 this.sync_cameras();
                 this.surface_renderer.render(this.surface_scene, this.surface_camera);
@@ -592,14 +620,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var r = Math.max(cx, cy, cz)  * 2 + 2;
                 var crossing = this.surface.crossing;
                 var shift = 2.0;
-                crossing.reset_three_camera(this.surface_camera, shift, null, r, cx, cy, cz);
-                crossing.reset_three_camera(this.voxel_camera, shift, this.voxelControls, r, cx, cy, cz);
+                //crossing.reset_three_camera(this.surface_camera, shift, null, r, cx, cy, cz);
+                //crossing.reset_three_camera(this.voxel_camera, shift, this.voxelControls, r, cx, cy, cz);
+                this.reset_camera(crossing, this.surface_camera, shift, null, r, cx, cy, cz);
+                this.reset_camera(crossing, this.voxel_camera, shift, this.voxelControls, r, cx, cy, cz);
             }
             focus_volume() {
                 var crossing = this.surface.crossing;
                 var shift = 2.0;
-                crossing.reset_three_camera(this.surface_camera, shift);
-                crossing.reset_three_camera(this.voxel_camera, shift, this.voxelControls);
+                //crossing.reset_three_camera(this.surface_camera, shift);
+                //crossing.reset_three_camera(this.voxel_camera, shift, this.voxelControls);
+                this.reset_camera(crossing, this.surface_camera, shift);
+                this.reset_camera(crossing, this.voxel_camera, shift, this.voxelControls);
             };
             show_info() {
                 var index_order = [this.kji[2], this.kji[1], this.kji[0], ];

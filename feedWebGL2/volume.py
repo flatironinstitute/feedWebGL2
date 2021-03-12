@@ -9,6 +9,9 @@ import jp_proxy_widget
 from jp_doodle.data_tables import widen_notebook
 from jp_doodle import dual_canvas
 
+# need to add camera positioning support
+# https://stackoverflow.com/questions/14271672/moving-the-camera-lookat-and-rotations-in-three-js
+
 required_javascript_modules = [
     local_files.vendor_path("js_lib/three.min.js"),
     local_files.vendor_path("js_lib/OrbitControls.js"),
@@ -62,6 +65,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             self, num_rows, num_cols, num_layers, 
             threshold=0, shrink_factor=0.2, method="tetrahedra",
             sorted=True,
+            camera_up=None, 
+            camera_offset=None,
+            camera_distance_multiple=None,
             ):
         methods = ("tetrahedra", "diagonal")
         assert method in methods, "method must be in " + repr(methods)
@@ -69,6 +75,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             num_rows=num_rows, num_cols=num_cols, num_layers=num_layers, 
             threshold=threshold, shrink_factor=shrink_factor, method=method,
             sorted=sorted,
+            camera_up=camera_up, 
+            camera_offset=camera_offset,
+            camera_distance_multiple=camera_distance_multiple,
         )
         self.options = options
         self.js_init("""
@@ -104,6 +113,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             self, ary, 
             threshold=None, shrink_factor=None, chunksize=10000000, method="tetrahedra",
             sorted=True,
+            camera_up=dict(x=0, y=1, z=0),
+            camera_offset=dict(x=0, y=0, z=1),
+            camera_distance_multiple=2.0,
             ):
         if not self.rendered:
             display(self)
@@ -117,7 +129,10 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         self.set_options(
             num_rows=num_rows, num_cols=num_cols, num_layers=num_layers, 
             threshold=threshold, shrink_factor=shrink_factor, method=method,
-            sorted=sorted,
+            sorted=sorted, 
+            camera_up=camera_up, 
+            camera_offset=camera_offset,
+            camera_distance_multiple=camera_distance_multiple,
             )
         self.data = ary32
         ary_bytes = bytearray(ary32.tobytes())
