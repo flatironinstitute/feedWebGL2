@@ -19,6 +19,10 @@
                 stream_lines: null,
                 // scaling factor for sprite basis vectors
                 basis_scale: 1.0,
+                // coordinate vectors
+                dk: [1, 0, 0],
+                dj: [0, 1, 0],
+                di: [0, 0, 1],
                 epsilon: 1e-5,
             }, options);
             var s = this.settings;
@@ -97,6 +101,18 @@
                     basis_scale: {
                         vtype: "1fv",
                         default_value: [s.basis_scale],
+                    },
+                    dk: {
+                        vtype: "3fv",
+                        default_value: s.dk,
+                    },
+                    dj: {
+                        vtype: "3fv",
+                        default_value: s.dj,
+                    },
+                    di: {
+                        vtype: "3fv",
+                        default_value: s.di,
                     },
                 },
                 inputs: {
@@ -254,7 +270,11 @@
     // Scaling factor for basis vector weights
     uniform float basis_scale;
 
-    // "per mesh" streamline points and validity indicator
+    // uniform offsets in kji directions for array index a[i,j,k]
+    // applied after grid relative computations, compatible with triangulate_vertex_shader
+    uniform vec3 dk, dj, di, translation;
+
+    // "per mesh" streamline points and validity indicator in "ijk" mesh coordinates
     in vec3 PA, PB, PC, PD;
     in int Avalid, Bvalid, Cvalid, Dvalid;
 
@@ -270,6 +290,13 @@
     out vec3 n_straight;    // debugging output
     out vec3 n_horizontal;  // debugging output
 
+    vec3 kji2xyz(vec3 ijk) {
+        // convert "grid" kji to "view" xyz.
+        // Order is compatible with vector_field_3d.py.  Array indices A[i, j, k] correspond to 
+        // input coordinate offsets (dk, dj, di)
+        return (ijk[2] * di) + (ijk[1] * dj) + (ijk[0] * dk);
+    }
+
     void main() {
         // default output values
         is_valid = 0;  // default to invalid
@@ -283,20 +310,25 @@
         float lmd, lmd1;
         // if B or C are invalid then this vertex is at a "break' in the streamline.
         if ((Bvalid > 0) && (Cvalid > 0)) {
+            // convert all positions to view coords
+            vec3 pA = kji2xyz(PA);
+            vec3 pB = kji2xyz(PB);
+            vec3 pC = kji2xyz(PC);
+            vec3 pD = kji2xyz(PD);
             is_valid = 1;
             //float lmd = floor(interpolation);
             // do not automatically force interpolation into range [0...1]? xxxx
             lmd = interpolation;
             lmd1 = 1.0 - lmd;
             // P0, P1, P2 are interpolated points on the streamline.
-            P0 = PB;
+            P0 = pB;
             if (Avalid > 0) {
-                P0 = lmd1 * PA + lmd * PB;  // interpolate
+                P0 = lmd1 * pA + lmd * pB;  // interpolate
             }
-            P1 = lmd1 * PB + lmd * PC;  // always interpolate
-            P2 = PC;
+            P1 = lmd1 * pB + lmd * pC;  // always interpolate
+            P2 = pC;
             if (Dvalid > 0) {
-                P2 = lmd1 * PC + lmd * PD;  // interpolate
+                P2 = lmd1 * pC + lmd * pD;  // interpolate
             }
             vec3 V1 = P1 - P0;
             float lV1 = length(V1);
