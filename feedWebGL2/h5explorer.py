@@ -309,7 +309,7 @@ class BlurFilter(LogFilter):
 
     def widget(self):
         "The widget method defines the parameters for the filter."
-        html1 = widgets.HTML("<H1>Take logarithm of image values.</H1>")
+        html1 = widgets.HTML("<H1>Apply a symmetric gaussian blur to the 3d volume.</H1>")
         # self.info is required
         self.info = widgets.HTML("<div>Parameters</div>")
         # other parameters
