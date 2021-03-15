@@ -496,15 +496,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
         var add_input = function (ix, iy, iz) {
             var name = (("a" + ix) + iy) + iz;
-            var dx = [0, x_offset][ix];
-            var dy = [0, y_offset][iy];
-            var dz = [0, z_offset][iz];
+            var dk = [0, x_offset][ix];
+            var dj = [0, y_offset][iy];
+            var di = [0, z_offset][iz];
             inputs[name] = {
                 per_vertex: true,
                 num_components: 1,
                 from_buffer: {
                     name: buffername,
-                    skip_elements: dx + dy + dz,
+                    skip_elements: dk + dj + di,
                 }
             }
         };
@@ -587,9 +587,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // invalid marker
                 location_fill: -1e12,
                 // coordinate vectors
-                dx: [1, 0, 0],
-                dy: [0, 1, 0],
-                dz: [0, 0, 1],
+                dk: [1, 0, 0],
+                dj: [0, 1, 0],
+                di: [0, 0, 1],
                 fragment_shader: noop_fragment_shader,
                 base_intensity: 0.0,
                 max_intensity: 0.5,
@@ -825,9 +825,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var mid = [];
             if (mins) {
                 // increase the maxes by offset in each dim
-                maxes = this.vsum(maxes, s.dx);
-                maxes = this.vsum(maxes, s.dy);
-                maxes = this.vsum(maxes, s.dz);
+                maxes = this.vsum(maxes, s.dk);
+                maxes = this.vsum(maxes, s.dj);
+                maxes = this.vsum(maxes, s.di);
                 n2 = this.vdistance2(mins, maxes);
                 for (var k=0; k<3; k++) {
                     mid.push(0.5 * (mins[k] + maxes[k]));
@@ -1454,9 +1454,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     num_rows: null,
                     num_cols: null,
                     num_layers: 0,  // if >1 then indexing in multiple blocks
-                    dx: [1, 0, 0],
-                    dy: [0, 1, 0],
-                    dz: [0, 0, 1],
+                    dk: [1, 0, 0],
+                    dj: [0, 1, 0],
+                    di: [0, 0, 1],
                     translation: [0, 0, 0],
                     color: [1, 1, 1],
                     rasterize: false,
@@ -1536,17 +1536,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             vtype: "1fv",
                             default_value: [s.epsilon],
                         },
-                        dx: {
+                        dk: {
                             vtype: "3fv",
-                            default_value: s.dx,
+                            default_value: s.dk,
                         },
-                        dy: {
+                        dj: {
                             vtype: "3fv",
-                            default_value: s.dy,
+                            default_value: s.dj,
                         },
-                        dz: {
+                        di: {
                             vtype: "3fv",
-                            default_value: s.dz,
+                            default_value: s.di,
                         },
                         translation: {
                             vtype: "3fv",
@@ -1637,7 +1637,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
         // uniform offsets in xyz directions
         // applied after grid relative computations, compatible with triangulate_vertex_shader
-        uniform vec3 dx, dy, dz, translation;
+        uniform vec3 dk, dj, di, translation;
 
         // color rotator for converting normals to colors
         uniform mat3 color_rotator;
@@ -1749,7 +1749,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // weighted average position.
                     vec3 vertex = position_sum / offset_sum;
                     // Converted position feedback:
-                    vPosition = dx * vertex[0] + dy * vertex[1] + dz * vertex[2] + translation;
+                    vPosition = dk * vertex[0] + dj * vertex[1] + di * vertex[2] + translation;
 
                     // compute normal
 
@@ -1766,7 +1766,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     mat3 Minv = inverse(M);
                     vec3 n = Minv * d;
                     // rotate normal
-                    n = dx * n[0] + dy * n[1] + dz * n[2];
+                    n = dk * n[0] + dj * n[1] + di * n[2];
                     float ln = length(n);
                     if (ln > epsilon) {
                         vNormal = n / ln;
@@ -1825,9 +1825,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             num_rows: 3,
             num_cols: 3,
             rasterize: true,
-            dx: [0.3, 0, 0],
-            dy: [0, 0.3, 0],
-            dz: [0, 0, 0.3],
+            dk: [0.3, 0, 0],
+            dj: [0, 0.3, 0],
+            di: [0, 0, 0.3],
             threshold: 0.5,
         });
         interpolator.run();
@@ -1858,9 +1858,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     num_rows: null,
                     num_cols: null,
                     num_layers: 0,  // if >1 then indexing in multiple blocks
-                    dx: [1, 0, 0],
-                    dy: [0, 1, 0],
-                    dz: [0, 0, 1],
+                    dk: [1, 0, 0],
+                    dj: [0, 1, 0],
+                    di: [0, 0, 1],
                     translation: [0, 0, 0],
                     color: [1, 1, 1],
                     rasterize: false,
@@ -1940,17 +1940,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             vtype: "1fv",
                             default_value: [s.threshold],
                         },
-                        dx: {
+                        dk: {
                             vtype: "3fv",
-                            default_value: s.dx,
+                            default_value: s.dk,
                         },
-                        dy: {
+                        dj: {
                             vtype: "3fv",
-                            default_value: s.dy,
+                            default_value: s.dj,
                         },
-                        dz: {
+                        di: {
                             vtype: "3fv",
-                            default_value: s.dz,
+                            default_value: s.di,
                         },
                         translation: {
                             vtype: "3fv",
@@ -2042,7 +2042,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         uniform float uValue;
         
         // uniform offsets in xyz directions
-        uniform vec3 dx, dy, dz, translation;
+        uniform vec3 dk, dj, di, translation;
 
         // color rotator for converting normals to colors
         uniform mat3 color_rotator;
@@ -2190,7 +2190,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         combined_offsets[vnum] = ((1.0 - delta) * offsetL) + (delta * offsetR);
                     }
                     vec3 vertex = combined_offsets[iVertexNumber];
-                    vPosition = dx * vertex[0] + dy * vertex[1] + dz * vertex[2] + translation;
+                    vPosition = dk * vertex[0] + dj * vertex[1] + di * vertex[2] + translation;
                     gl_Position.xyz = vPosition;
                     gl_Position[3] = 1.0;
                     //vdump = float[4](vertex[0], vertex[1], vertex[2], delta);
@@ -2198,7 +2198,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // compute normal
                     vec3 nm = cross(combined_offsets[1] - combined_offsets[0], combined_offsets[2] - combined_offsets[0]);
                     // rotate normal
-                    nm = dx * nm[0] + dy * nm[1] + dz * nm[2];
+                    nm = dk * nm[0] + dj * nm[1] + di * nm[2];
                     float ln = length(nm);
                     if (ln > 1e-12) {
                         vNormal = nm / ln;
@@ -2289,9 +2289,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             num_rows: 3,
             num_cols: 3,
             rasterize: true,
-            dx: [0.3, 0, 0],
-            dy: [0, 0.3, 0],
-            dz: [0, 0, 0.3],
+            dk: [0.3, 0, 0],
+            dj: [0, 0.3, 0],
+            di: [0, 0, 0.3],
             threshold: 0.5,
         });
         segments.run();
@@ -2318,9 +2318,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 num_cols: null,
                 num_layers: 1,  // default to "flat"
                 num_blocks: 1,
-                //dx: [1, 0, 0],
-                //dy: [0, 1, 0],
-                //dz: [0, 0, 1],
+                //dk: [1, 0, 0],
+                //dj: [0, 1, 0],
+                //di: [0, 0, 1],
                 //translation: [-1, -1, 0],
                 //color: [1, 1, 1],   ??? not used???
                 rasterize: false,
@@ -2389,9 +2389,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 location: s.location,
                 samplers: this.samplers,
                 // never rasterize the crossing pixels
-                dx: s.dx,
-                dy: s.dy,
-                dz: s.dz,
+                dk: s.dk,
+                dj: s.dj,
+                di: s.di,
             });
             // initialize segmenter upon first run.
             this.segments = null;
@@ -2421,13 +2421,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             if (s.location != "std") {
                 return;  // don't mess with non-standard geometry
             }
-            if (!s.dx) {
+            if (!s.dk) {
                 // geometry needs specifying:
                 var max_dimension = Math.max(s.num_rows, s.num_cols, s.num_layers);
                 var dpixel = 2.0 / max_dimension;
-                s.dx = [dpixel, 0, 0];
-                s.dy = [0, dpixel, 0];
-                s.dz = [0, 0, dpixel];
+                s.dk = [dpixel, 0, 0];
+                s.dj = [0, dpixel, 0];
+                s.di = [0, 0, dpixel];
                 if (!s.translation) {
                     s.translation = [-0.5 * s.num_cols * dpixel, -0.5 * s.num_rows * dpixel, -0.5 * s.num_layers * dpixel]
                 }
@@ -2481,9 +2481,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 num_layers: s.num_layers,
                 num_blocks: s.num_blocks,
                 rasterize: s.rasterize,
-                dx: s.dx,
-                dy: s.dy,
-                dz: s.dz,
+                dk: s.dk,
+                dj: s.dj,
+                di: s.di,
                 translation: s.translation,
                 threshold: s.threshold,
                 invalid_coordinate: s.invalid_coordinate,
@@ -2768,8 +2768,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.reset();
         };
         reset() {
-            this.voxels_ready = false;
-            this.surface_ready = false;
+            this.voxels_readj = false;
+            this.surface_readj = false;
             this.parameters_set = false;
         };
         check_parameters() {
@@ -2784,17 +2784,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         };
         check_voxels() {
             this.check_parameters();
-            if (!this.voxels_ready) {
+            if (!this.voxels_readj) {
                 this.surface.crossing.get_compacted_feedbacks();
-                this.voxels_ready = true;
+                this.voxels_readj = true;
             }
         };
         check_surface() {
             this.check_parameters();
-            if (!this.surface_ready) {
+            if (!this.surface_readj) {
                 this.surface.run();
-                this.surface_ready = true;
-                this.voxels_ready = true;  // surface.run automatically updates voxels too.
+                this.surface_readj = true;
+                this.voxels_readj = true;  // surface.run automatically updates voxels too.
             }
         };
         get_positions() {
@@ -2843,7 +2843,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             1,1,1,
         ]);
         var h = 0.5
-        var ddz = 0.1
+        var ddi = 0.1
         var init = container.webGL2surfaces_from_diagonals;
         if (opt) {
             init = container.webGL2surfaces3dopt;
@@ -2855,9 +2855,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 num_rows: 3,
                 num_cols: 3,
                 num_layers: 3,
-                dx: [h, 0, 0],
-                dy: [0, h, 0],
-                dz: [ddz, 0.33*ddz, h],
+                dk: [h, 0, 0],
+                dj: [0, h, 0],
+                di: [ddi, 0.33*ddi, h],
                 translation: [-h, -h, -h],
                 //color: [h, h, h],  ??? not used ???
                 rasterize: true,
@@ -2933,9 +2933,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 num_layers: s.num_layers,
                 num_blocks: s.num_blocks,
                 rasterize: s.rasterize,
-                dx: s.dx,
-                dy: s.dy,
-                dz: s.dz,
+                dk: s.dk,
+                dj: s.dj,
+                di: s.di,
                 translation: s.translation,
                 threshold: s.threshold,
                 invalid_coordinate: s.invalid_coordinate,
@@ -3232,7 +3232,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             0,0,0,
         ]);
         var h = 0.5
-        var ddz = 0.1
+        var ddi = 0.1
 
         var contours = container.webGL2surfaces_from_diagonals(
             {
@@ -3241,9 +3241,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 num_rows: 3,
                 num_cols: 3,
                 num_layers: 3,
-                dx: [h, 0, 0],
-                dy: [0, h, 0],
-                dz: [ddz, 0.33*ddz, h],
+                dk: [h, 0, 0],
+                dj: [0, h, 0],
+                di: [ddi, 0.33*ddi, h],
                 translation: [-h, -h, -h],
                 //color: [h, h, h],  ??? not used ???
                 rasterize: true,

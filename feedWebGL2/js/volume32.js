@@ -24,9 +24,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // when getting compact arrays
                     // shrink the array sizes by this factor.
                     shrink_factor: 0.2,
-                    dx: [1,0,0],
-                    dy: [0,1,0],
-                    dz: [0,0,1],
+                    dk: [1,0,0],
+                    dj: [0,1,0],
+                    di: [0,0,1],
                     // isosurface generation method "diagonal" or "tetrahedra"
                     method: "tetrahedra",
                     sorted: false,
@@ -105,9 +105,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     rasterize: false,
                     threshold: s.threshold,
                     shrink_factor: s.shrink_factor,  // how much to shrink the arrays
-                    dx: s.dx,
-                    dy: s.dy,
-                    dz: s.dz,
+                    dk: s.dk,
+                    dj: s.dj,
+                    di: s.di,
                     translation: [0,0,0],
                     sorted: s.sorted,
                 });
@@ -616,7 +616,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.threshold_slider.slider("option", "value", value);
             };
             zoom_out() {
-                // xxx this will not work right if dx, dy, dz are not default valued!
+                // xxx this will not work right if dk, dj, di are not default valued!
                 var s = this.settings;
                 var cz = 0.5 * (s.num_cols - 1);
                 var cy = 0.5 * (s.num_rows - 1);
