@@ -1639,7 +1639,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         // global contour threshold
         uniform float uValue;
 
-        // uniform offsets in xyz directions
+        // uniform offsets in kji directions for array index a[i,j,k]
         // applied after grid relative computations, compatible with triangulate_vertex_shader
         uniform vec3 dk, dj, di, translation;
 
