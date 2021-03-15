@@ -8,6 +8,10 @@ Requires nd_frame to be loaded.
 Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
 */
+
+// XXXX FIX AND CHECK NORMAL COMPUTATIONS -- NORMALS SHOULD BE COMPUTED *AFTER* ALL COORD TRANSFORMS
+
+
 "use strict";
 
 (function($) {
