@@ -24,9 +24,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // when getting compact arrays
                     // shrink the array sizes by this factor.
                     shrink_factor: 0.2,
-                    dk: [1,0,0],
+                    di: [1,0,0],
                     dj: [0,1,0],
-                    di: [0,0,1],
+                    dk: [0,0,1],
                     // isosurface generation method "diagonal" or "tetrahedra"
                     method: "tetrahedra",
                     sorted: false,
@@ -123,6 +123,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     cycle_duration: 1.0,
                 }, s.stream_lines_parameters);
                 parameters.stream_lines =  parameters.stream_lines || this.stream_lines_sequence;
+                parameters.dk = parameters.dk || s.dk;
+                parameters.di = parameters.di || s.di;
+                parameters.dj = parameters.dj || s.dj;
                 if (!parameters.stream_lines) {
                     throw new Error("sequence of stream line polylines is required.")
                 }

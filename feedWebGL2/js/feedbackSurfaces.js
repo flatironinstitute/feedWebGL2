@@ -591,9 +591,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // invalid marker
                 location_fill: -1e12,
                 // coordinate vectors
-                dk: [1, 0, 0],
+                di: [1, 0, 0],
                 dj: [0, 1, 0],
-                di: [0, 0, 1],
+                dk: [0, 0, 1],
                 fragment_shader: noop_fragment_shader,
                 base_intensity: 0.0,
                 max_intensity: 0.5,
@@ -1458,9 +1458,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     num_rows: null,
                     num_cols: null,
                     num_layers: 0,  // if >1 then indexing in multiple blocks
-                    dk: [1, 0, 0],
+                    di: [1, 0, 0],
                     dj: [0, 1, 0],
-                    di: [0, 0, 1],
+                    dk: [0, 0, 1],
                     translation: [0, 0, 0],
                     color: [1, 1, 1],
                     rasterize: false,
@@ -1753,7 +1753,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // weighted average position.
                     vec3 vertex = position_sum / offset_sum;
                     // Converted position feedback:
-                    vPosition = dk * vertex[0] + dj * vertex[1] + di * vertex[2] + translation;
+                    vPosition = di * vertex[0] + dj * vertex[1] + dk * vertex[2] + translation;
 
                     // compute normal
 
@@ -1770,7 +1770,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     mat3 Minv = inverse(M);
                     vec3 n = Minv * d;
                     // rotate normal
-                    n = dk * n[0] + dj * n[1] + di * n[2];
+                    n = di * n[0] + dj * n[1] + dk * n[2];
                     float ln = length(n);
                     if (ln > epsilon) {
                         vNormal = n / ln;
@@ -2194,7 +2194,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         combined_offsets[vnum] = ((1.0 - delta) * offsetL) + (delta * offsetR);
                     }
                     vec3 vertex = combined_offsets[iVertexNumber];
-                    vPosition = dk * vertex[0] + dj * vertex[1] + di * vertex[2] + translation;
+                    vPosition = di * vertex[0] + dj * vertex[1] + dk * vertex[2] + translation;
                     gl_Position.xyz = vPosition;
                     gl_Position[3] = 1.0;
                     //vdump = float[4](vertex[0], vertex[1], vertex[2], delta);
@@ -2202,7 +2202,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     // compute normal
                     vec3 nm = cross(combined_offsets[1] - combined_offsets[0], combined_offsets[2] - combined_offsets[0]);
                     // rotate normal
-                    nm = dk * nm[0] + dj * nm[1] + di * nm[2];
+                    nm = di * nm[0] + dj * nm[1] + dk * nm[2];
                     float ln = length(nm);
                     if (ln > 1e-12) {
                         vNormal = nm / ln;
@@ -2429,9 +2429,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // geometry needs specifying:
                 var max_dimension = Math.max(s.num_rows, s.num_cols, s.num_layers);
                 var dpixel = 2.0 / max_dimension;
-                s.dk = [dpixel, 0, 0];
+                s.di = [dpixel, 0, 0];
                 s.dj = [0, dpixel, 0];
-                s.di = [0, 0, dpixel];
+                s.dk = [0, 0, dpixel];
                 if (!s.translation) {
                     s.translation = [-0.5 * s.num_cols * dpixel, -0.5 * s.num_rows * dpixel, -0.5 * s.num_layers * dpixel]
                 }

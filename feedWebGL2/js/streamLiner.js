@@ -20,9 +20,9 @@
                 // scaling factor for sprite basis vectors
                 basis_scale: 1.0,
                 // coordinate vectors
-                dk: [1, 0, 0],
+                di: [1, 0, 0],
                 dj: [0, 1, 0],
-                di: [0, 0, 1],
+                dk: [0, 0, 1],
                 epsilon: 1e-5,
             }, options);
             var s = this.settings;
@@ -294,7 +294,7 @@
         // convert "grid" kji to "view" xyz.
         // Order is compatible with vector_field_3d.py.  Array indices A[i, j, k] correspond to 
         // input coordinate offsets (dk, dj, di)
-        return (ijk[2] * di) + (ijk[1] * dj) + (ijk[0] * dk);
+        return (ijk[2] * dk) + (ijk[1] * dj) + (ijk[0] * di);
     }
 
     void main() {
