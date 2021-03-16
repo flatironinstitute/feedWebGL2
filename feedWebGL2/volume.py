@@ -68,6 +68,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             camera_up=None, 
             camera_offset=None,
             camera_distance_multiple=None,
+            di=None,
+            dj=None,
+            dk=None,
             ):
         methods = ("tetrahedra", "diagonal")
         assert method in methods, "method must be in " + repr(methods)
@@ -78,9 +81,11 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             camera_up=camera_up, 
             camera_offset=camera_offset,
             camera_distance_multiple=camera_distance_multiple,
+            di=di, dj=dj, dk=dk,
         )
         self.options = options
         self.js_init("""
+        debugger;
             element.V = element.volume32(options);
         """, options=options)
 
@@ -116,7 +121,13 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             camera_up=dict(x=0, y=1, z=0),
             camera_offset=dict(x=0, y=0, z=1),
             camera_distance_multiple=2.0,
+            di=dict(x=1, y=0, z=0),  # xyz offset between ary[0,0,0] and ary[1,0,0]
+            dj=dict(x=0, y=1, z=0),  # xyz offset between ary[0,0,0] and ary[0,1,0]
+            dk=dict(x=0, y=0, z=1),  # xyz offset between ary[0,0,0] and ary[0,0,1]
             ):
+        self.dk = self.positional_xyz(dk)
+        self.di = self.positional_xyz(di)
+        self.dj = self.positional_xyz(dj)
         if not self.rendered:
             display(self)
         if threshold is None:
@@ -133,6 +144,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             camera_up=camera_up, 
             camera_offset=camera_offset,
             camera_distance_multiple=camera_distance_multiple,
+            dk=self.dk,
+            dj=self.dj,
+            di=self.di,
             )
         self.data = ary32
         ary_bytes = bytearray(ary32.tobytes())
@@ -174,6 +188,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             cursor = next_cursor
         self.element.load_buffer().sync_value()
         self.element.build_status("Loaded: " + repr(nbytes))
+
+    def positional_xyz(self, dictionary):
+        return [dictionary["x"], dictionary["y"], dictionary["z"], ]
 
     def triangles_and_normals(self):
         from jp_proxy_widget.hex_codec import hex_to_bytearray
