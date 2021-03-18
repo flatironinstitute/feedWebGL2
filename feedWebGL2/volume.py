@@ -192,11 +192,12 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
     def positional_xyz(self, dictionary):
         return [dictionary["x"], dictionary["y"], dictionary["z"], ]
 
-    def triangles_and_normals(self):
+    def triangles_and_normals(self, just_triangles=False):
         from jp_proxy_widget.hex_codec import hex_to_bytearray
         float_count = self.element.position_count().sync_value()
         positions_hex = self.element.get_positions_bytes().sync_value()
-        normals_hex = self.element.get_normals_bytes().sync_value()
+        if not just_triangles:
+            normals_hex = self.element.get_normals_bytes().sync_value()
         def float32array(hex):
             # xxx this should be a convenience provided in jp_proxy_widget...
             #print("converting", hex)
@@ -207,8 +208,28 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             triangles = float_count // 9
             return floats_array.reshape((triangles, 3, 3))
         positions = float32array(positions_hex)
+        if just_triangles:
+            return positions
         normals = float32array(normals_hex)
         return (positions, normals)
+
+    def to_k3d_mesh(self, unify_vertices=False):
+        """
+        Convert current isosurface to a k3d mesh.  K3d must be installed separately
+        """
+        try:
+            import k3d
+        except ImportError:
+            raise ImportError(
+                "feedWebGL2 install does not include k3d as a dependancy " +
+                "-- it must be installed separately to use the to_k3d_mesh feature.")
+        positions = self.triangles_and_normals(just_triangles=True)
+        if unify_vertices:
+            raise NotImplementedError("Vertex unification is not yet implemented.")
+        else:
+            k3d_vertices = positions.ravel()
+            k3d_indices = np.arange(len(k3d_vertices)/3)
+        return k3d.mesh(k3d_vertices, k3d_indices, side="double")
 
     def dump_to_binary_stl(self, filename="volume.stl", verbose=True):
         if verbose:
