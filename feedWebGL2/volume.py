@@ -193,6 +193,27 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         return [dictionary["x"], dictionary["y"], dictionary["z"], ]
 
     def triangles_and_normals(self, just_triangles=False):
+        # new implementation should work for larger data sizes
+        from . import segmented_caller
+        # Must call position_count -- this loads the data from the GPU to javascript.
+        float_count = self.element.position_count().sync_value()
+        def get_3_by_3(method):
+            mbytes = segmented_caller.get_bytes(self, method)
+            floats = np.frombuffer(mbytes , dtype=np.float32)
+            (ln,) = floats.shape
+            assert ln == float_count
+            (ntriangles, rem) = divmod(ln, 9)
+            assert rem == 0, "triangle arrays should groups of 3 positions with 3 floats each. " + repr((ln, ntriangles, rem))
+            result = floats.reshape((ntriangles, 3, 3))
+            return result
+        positions = get_3_by_3(method=self.element.get_positions_bytes)
+        if just_triangles:
+            return positions
+        normals = get_3_by_3(method=self.element.get_normals_bytes)
+        return (positions, normals)
+
+    def triangles_and_normals0(self, just_triangles=False):
+        # xxxx old implementation sometimes fails for large data sizes.  historical.  delete eventually.
         from jp_proxy_widget.hex_codec import hex_to_bytearray
         float_count = self.element.position_count().sync_value()
         positions_hex = self.element.get_positions_bytes().sync_value()
