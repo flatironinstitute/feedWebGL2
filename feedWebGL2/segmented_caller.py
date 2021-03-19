@@ -119,7 +119,6 @@ class SegmentedCallReceiver {
 
     // pasted from jp_proxy_widget/.../proxy_implementation.js
     to_hex(int8) {
-        debugger;
         var length = int8.length;
         var hex_array = Array(length);
         for (var i=0; i<length; i++) {
