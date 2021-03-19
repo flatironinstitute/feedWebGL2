@@ -35,6 +35,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     camera_up: {x:0, y:1, z:0},
                     camera_offset: {x:0, y:0, z:1},
                     camera_distance_multiple: 2.0,
+                    axis_length: true,  // auto assign length
                 }, options);
                 var s = this.settings;
                 var context = s.feedbackContext;
@@ -50,6 +51,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 assert_positive(s.num_rows);
                 assert_positive(s.num_cols);
                 assert_positive(s.num_layers);
+
+                if (s.axis_length === true) {
+                    // auto assign axis length to average dimension
+                    s.axis_length = (s.num_rows + s.num_cols + s.num_layers) / 3.0
+                }
                 //this.shape = [s.num_rows, s.num_cols, s.num_layers];
                 this.shape = [s.num_cols, s.num_rows, s.num_layers];
                 this.grid_mins = [0, 0, 0];
@@ -80,6 +86,21 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.kji = [0,0,0];
                 // for debugging
                 this.dump_events = false;
+            };
+            // xxxx really should get these from somewhere else
+            vsum(v1, v2) {
+                var result = [];
+                for (var k=0; k<3; k++) {
+                    result.push(v1[k] + v2[k]);
+                }
+                return result;
+            };
+            vscale(scalar, v) {
+                var result = [];
+                for (var k=0; k<3; k++) {
+                    result.push(scalra * v[k]);
+                }
+                return result;
             };
             set_up_surface() {
                 var shape = this.shape;
@@ -238,6 +259,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var mesh = new THREE.Mesh( geometry,  material );
                 var scene = new THREE.Scene();
                 scene.add(mesh);
+                if (s.axis_length) {
+                    // add axes indicator
+                    var axesHelper = new THREE.AxesHelper( s.axis_length );
+                    scene.add(axesHelper);
+                }
                 this.surface_material = material;
                 this.surface_scene = scene;
                 this.surface_mesh = mesh;
