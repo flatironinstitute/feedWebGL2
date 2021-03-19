@@ -281,12 +281,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 if (s.axis_length) {
                     // add axes indicator
                     var ln = s.axis_length;
-                    var ln1 = ln * 1.1
+                    var ln1 = ln * 1.1;
+                    var ln2 = ln * 0.1;
                     var axesHelper = new THREE.AxesHelper( ln );
                     scene.add(axesHelper);
-                    THREE.sprite_text(scene, "X", [[ln1, 0, 0]], .5, "red", 20);
-                    THREE.sprite_text(scene, "Y", [[0, ln1, 0]], .5, "green", 20);
-                    THREE.sprite_text(scene, "Z", [[0, 0, ln1]], .5, "blue", 20);
+                    THREE.sprite_text(scene, "X", [[ln1, 0, 0]], ln2, "red", 20);
+                    THREE.sprite_text(scene, "Y", [[0, ln1, 0]], ln2, "green", 20);
+                    THREE.sprite_text(scene, "Z", [[0, 0, ln1]], ln2, "blue", 20);
                 }
                 this.surface_material = material;
                 this.surface_scene = scene;
