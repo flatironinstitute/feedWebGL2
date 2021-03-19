@@ -234,10 +234,11 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         normals = float32array(normals_hex)
         return (positions, normals)
 
-    def to_k3d_mesh(self, unify_vertices=False):
+    def to_k3d_mesh(self, unify_vertices=False, *mesh_positional_args, **mesh_kw_args):
         """
         Convert current isosurface to a k3d mesh.  K3d must be installed separately
         """
+        from . import vertex_unifier
         try:
             import k3d
         except ImportError:
@@ -245,12 +246,17 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
                 "feedWebGL2 install does not include k3d as a dependancy " +
                 "-- it must be installed separately to use the to_k3d_mesh feature.")
         positions = self.triangles_and_normals(just_triangles=True)
+        unifier = None
         if unify_vertices:
-            raise NotImplementedError("Vertex unification is not yet implemented.")
+            unifier = vertex_unifier.Unifier(positions)
+            k3d_vertices = unifier.output_vertices.ravel()
+            k3d_indices = unifier.triangles_indices.ravel()
         else:
             k3d_vertices = positions.ravel()
             k3d_indices = np.arange(len(k3d_vertices)/3)
-        return k3d.mesh(k3d_vertices, k3d_indices, side="double")
+        result = k3d.mesh(k3d_vertices, k3d_indices, side="double", *mesh_positional_args, **mesh_kw_args)
+        result.unifier = unifier  # for test and debug xxxx comment out later
+        return result
 
     def dump_to_binary_stl(self, filename="volume.stl", verbose=True):
         if verbose:
