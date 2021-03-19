@@ -5,6 +5,7 @@ Support for large data transfers in widget calls.
 # XXXX someday move this logic (refactored) to jp_proxy_widget main module.
 
 from jupyter_ui_poll import run_ui_poll_loop
+from jp_proxy_widget.hex_codec import hex_to_bytearray, bytearray_to_hex
 import json
 
 DEFAULT_CHUNK_SIZE = 10000000
@@ -23,8 +24,16 @@ def get_json(widget, callable, chunk_size=DEFAULT_CHUNK_SIZE, *arguments):
     caller = get_or_make_caller(widget)
     return caller.get_json(callable, chunk_size, arguments)
 
+def get_bytes(widget, callable, chunk_size=DEFAULT_CHUNK_SIZE, *arguments):
+    caller = get_or_make_caller(widget)
+    return caller.get_hex(callable, chunk_size, arguments)
+
 JS_SUPPORT = """
 // xxxx this should be shared among all widgets xxxx
+
+const FORMAT_STRING = "string";
+const FORMAT_JSON = "json";
+const FORMAT_HEX = "hex";
 
 class SegmentedCallReceiver {
     constructor (send_chunk_callback, error_callback) {
@@ -40,7 +49,7 @@ class SegmentedCallReceiver {
         //this.error_callback = null;
         this.active = false;
     };
-    call_and_start_sending(callable, args, chunk_size, as_json) {
+    call_and_start_sending(callable, args, chunk_size, format) {
         if (this.active) {
             var error = "caller is active -- cannot restart";
             error_callback(error);
@@ -56,17 +65,28 @@ class SegmentedCallReceiver {
             error_callback("call exception: " + e);
             throw e;
         }
-        if (as_json) {
+        if (format == FORMAT_STRING) {
+            // do nothing: leave data as a string
+        } else if (format == FORMAT_JSON) {
             try {
                 data = JSON.stringify(data);
             } catch (e) {
                 error_callback("json conversion failed: " + e);
                 throw e;
             }
+        } else if (format == FORMAT_HEX) {
+            try {
+                data = this.to_hex(data);
+            } catch (e) {
+                error_callback("hex conversion failed: " + e);
+                throw e;
+            }
+        } else {
+            throw new Error("unknown format: " + format);
         }
         var tdata = (typeof data);
         if ( tdata != "string") {
-            var error = "return value must be json or string " + tdata;
+            var error = "return value must be json converted or string or hex converted " + tdata;
             error_callback(error);
             throw new Error(error);
         }
@@ -96,6 +116,43 @@ class SegmentedCallReceiver {
         this.send_chunk_callback(chunk);
         return chunk;
     };
+
+    // pasted from jp_proxy_widget/.../proxy_implementation.js
+    to_hex(int8) {
+        debugger;
+        var length = int8.length;
+        var hex_array = Array(length);
+        for (var i=0; i<length; i++) {
+            var b = int8[i];
+            var h = b.toString(16);
+            var ln = h.length;
+            if (ln==1) {
+                h = "0" + h
+            } else if (ln==2) {
+                // use h unmodified
+            } else {
+                throw new Error("invalid byte value: " + h);
+            }
+            hex_array[i] = h;;
+        }
+        return hex_array.join("");
+    };
+
+    from_hex(hexstr) {
+        var length2 = hexstr.length;
+        if ((length2 % 2) != 0) {
+            throw "hex string length must be multiple of length 2";
+        }
+        var length = length2 / 2;
+        var result = new Uint8Array(length);
+        for (var i=0; i<length; i++) {
+            var i2 = 2 * i;
+            var h = hexstr.substring(i2, i2+2);
+            var b = parseInt(h, 16);
+            result[i] = b;
+        }
+        return;
+    };
 };
 
 element._segmented_call_receiver = new SegmentedCallReceiver(send_chunk_callback, error_callback);
@@ -104,8 +161,14 @@ element._segmented_call_receiver = new SegmentedCallReceiver(send_chunk_callback
 class SegmentedCallError(ValueError):
     "Error in segmented call."
 
+FORMAT_STRING = "string"
+FORMAT_JSON = "json"
+FORMAT_HEX = "hex"
+
 class SegmentedCallManager:
     "State manager for segmented call loop."
+    # xxxx need to add better error handling.
+    # Javascript errors can cause Python kernel to hang until interrupt.
 
     def __init__(self, widget):
         self.widget = widget
@@ -116,15 +179,16 @@ class SegmentedCallManager:
         )
         self.error = None
         self.accumulated_response = None
-        self.receiving_json = False
+        self.receiving_format = FORMAT_STRING
         self.collecting = False
-    def get_string(self, callable, chunk_size=DEFAULT_CHUNK_SIZE, arguments=()):
-        self.receiving_json = False
-        return self.collect_sends(callable, arguments, chunk_size, self.receiving_json)
+    def get_string(self, callable, chunk_size=DEFAULT_CHUNK_SIZE, arguments=(), format=FORMAT_STRING):
+        self.receiving_format = format
+        return self.collect_sends(callable, arguments, chunk_size, format)
     def get_json(self, callable, chunk_size=DEFAULT_CHUNK_SIZE, arguments=()):
-        self.receiving_json = True
-        return self.collect_sends(callable, arguments, chunk_size, self.receiving_json)
-    def collect_sends(self, callable, arguments, chunk_size, as_json):
+        return self.get_string(callable, chunk_size, arguments, format=FORMAT_JSON)
+    def get_hex(self, callable, chunk_size=DEFAULT_CHUNK_SIZE, arguments=()):
+        return self.get_string(callable, chunk_size, arguments, format=FORMAT_HEX)
+    def collect_sends(self, callable, arguments, chunk_size, receiving_format):
         self.reset_error_state()
         self.accumulated_response = []
         self.collecting = True
@@ -134,14 +198,24 @@ class SegmentedCallManager:
             callable,
             arguments,
             chunk_size,
-            as_json)
+            receiving_format)
         #self.widget.element._segmented_call_receiver.get_chunk() # implicit
         run_ui_poll_loop(self.poll_is_finished)
         #("after poll", self.collecting, self.accumulated_response)
         all_data = "".join(self.accumulated_response)
-        if as_json:
-            all_data = json.loads(all_data)
-        return all_data
+        #if as_json:
+        #    all_data = json.loads(all_data)
+        converted = self.convert_data(all_data, receiving_format)
+        return converted
+    def convert_data(self, data, format):
+        if format == FORMAT_STRING:
+            return data
+        if format == FORMAT_JSON:
+            return json.loads(data)
+        if format == FORMAT_HEX:
+            #print("got hex", data)
+            return hex_to_bytearray(data)
+        raise ValueError("unknown format: " + repr(format))
     def poll_is_finished(self):
         if self.collecting:
             return None
@@ -178,8 +252,12 @@ def test_in_jupyter():
     element.json_function = function() {
         return {text: "this is a string in json"};
     };
+    element.bytes_function = function () {
+        return [4,6,8,211];
+    }
     """)
     test1 = get_string(greeter, greeter.element.string_function, chunk_size=3)
     test2 = get_json(greeter, greeter.element.json_function, chunk_size=3)
-    greeter.element.html("<h2>segmented json call %s'</h2>" % repr((test1, test2)))
+    test3 = list(get_bytes(greeter, greeter.element.bytes_function, chunk_size=3))
+    greeter.element.html("<h2>segmented json call %s'</h2>" % repr((test1, test2, test3)))
     return greeter
