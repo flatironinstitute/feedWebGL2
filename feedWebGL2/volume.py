@@ -15,6 +15,7 @@ from jp_doodle import dual_canvas
 required_javascript_modules = [
     local_files.vendor_path("js_lib/three.min.js"),
     local_files.vendor_path("js_lib/OrbitControls.js"),
+    local_files.vendor_path("js_lib/three_sprite_text.js"),
     local_files.vendor_path("js/feedWebGL.js"),
     local_files.vendor_path("js/feedbackSurfaces.js"),
     local_files.vendor_path("js/streamLiner.js"),

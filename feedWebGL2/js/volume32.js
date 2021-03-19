@@ -54,7 +54,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
                 if (s.axis_length === true) {
                     // auto assign axis length to average dimension
-                    s.axis_length = (s.num_rows + s.num_cols + s.num_layers) / 3.0
+                    s.axis_length = (
+                        s.num_rows * this.vnorm(s.di) + 
+                        s.num_cols * this.vnorm(s.dj) + 
+                        s.num_layers * this.vnorm(s.dk)) / 3.0
                 }
                 //this.shape = [s.num_rows, s.num_cols, s.num_layers];
                 this.shape = [s.num_cols, s.num_rows, s.num_layers];
@@ -102,6 +105,22 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
                 return result;
             };
+            vdistance2(v1, v2) {
+                var result = 0.0;
+                if ((v1) && (v2)) {
+                    for (var k=0; k<3; k++) {
+                        var d = v1[k] - v2[k];
+                        result += d * d;
+                    }
+                }
+                return result;
+            };
+            vdistance(v1, v2) {
+                return Math.sqrt(this.vdistance2(v1, v2));
+            };
+            vnorm(v) {
+                return this.vdistance(v, [0, 0, 0]);
+            }
             set_up_surface() {
                 var shape = this.shape;
                 var num_cols, num_rows, num_layers;
@@ -261,8 +280,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 scene.add(mesh);
                 if (s.axis_length) {
                     // add axes indicator
-                    var axesHelper = new THREE.AxesHelper( s.axis_length );
+                    var ln = s.axis_length;
+                    var ln1 = ln * 1.1
+                    var axesHelper = new THREE.AxesHelper( ln );
                     scene.add(axesHelper);
+                    THREE.sprite_text(scene, "X", [[ln1, 0, 0]], .5, "red", 20);
+                    THREE.sprite_text(scene, "Y", [[0, ln1, 0]], .5, "green", 20);
+                    THREE.sprite_text(scene, "Z", [[0, 0, ln1]], .5, "blue", 20);
                 }
                 this.surface_material = material;
                 this.surface_scene = scene;
