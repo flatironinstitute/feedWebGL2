@@ -2403,7 +2403,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.named_perspectives = {};
         };
         connected_voxel_count() {
-            debugger;
             return this.crossing.connected_voxel_count;
         };
         get_perspective(name, options) {
