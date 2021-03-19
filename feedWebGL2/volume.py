@@ -9,9 +9,13 @@ import jp_proxy_widget
 from jp_doodle.data_tables import widen_notebook
 from jp_doodle import dual_canvas
 
+# need to add camera positioning support
+# https://stackoverflow.com/questions/14271672/moving-the-camera-lookat-and-rotations-in-three-js
+
 required_javascript_modules = [
     local_files.vendor_path("js_lib/three.min.js"),
     local_files.vendor_path("js_lib/OrbitControls.js"),
+    local_files.vendor_path("js_lib/three_sprite_text.js"),
     local_files.vendor_path("js/feedWebGL.js"),
     local_files.vendor_path("js/feedbackSurfaces.js"),
     local_files.vendor_path("js/streamLiner.js"),
@@ -62,6 +66,12 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             self, num_rows, num_cols, num_layers, 
             threshold=0, shrink_factor=0.2, method="tetrahedra",
             sorted=True,
+            camera_up=None, 
+            camera_offset=None,
+            camera_distance_multiple=None,
+            di=None,
+            dj=None,
+            dk=None,
             ):
         methods = ("tetrahedra", "diagonal")
         assert method in methods, "method must be in " + repr(methods)
@@ -69,9 +79,14 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             num_rows=num_rows, num_cols=num_cols, num_layers=num_layers, 
             threshold=threshold, shrink_factor=shrink_factor, method=method,
             sorted=sorted,
+            camera_up=camera_up, 
+            camera_offset=camera_offset,
+            camera_distance_multiple=camera_distance_multiple,
+            di=di, dj=dj, dk=dk,
         )
         self.options = options
         self.js_init("""
+        debugger;
             element.V = element.volume32(options);
         """, options=options)
 
@@ -104,7 +119,16 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             self, ary, 
             threshold=None, shrink_factor=None, chunksize=10000000, method="tetrahedra",
             sorted=True,
+            camera_up=dict(x=0, y=1, z=0),
+            camera_offset=dict(x=0, y=0, z=1),
+            camera_distance_multiple=2.0,
+            di=dict(x=1, y=0, z=0),  # xyz offset between ary[0,0,0] and ary[1,0,0]
+            dj=dict(x=0, y=1, z=0),  # xyz offset between ary[0,0,0] and ary[0,1,0]
+            dk=dict(x=0, y=0, z=1),  # xyz offset between ary[0,0,0] and ary[0,0,1]
             ):
+        self.dk = self.positional_xyz(dk)
+        self.di = self.positional_xyz(di)
+        self.dj = self.positional_xyz(dj)
         if not self.rendered:
             display(self)
         if threshold is None:
@@ -117,7 +141,13 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         self.set_options(
             num_rows=num_rows, num_cols=num_cols, num_layers=num_layers, 
             threshold=threshold, shrink_factor=shrink_factor, method=method,
-            sorted=sorted,
+            sorted=sorted, 
+            camera_up=camera_up, 
+            camera_offset=camera_offset,
+            camera_distance_multiple=camera_distance_multiple,
+            dk=self.dk,
+            dj=self.dj,
+            di=self.di,
             )
         self.data = ary32
         ary_bytes = bytearray(ary32.tobytes())
@@ -160,11 +190,36 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         self.element.load_buffer().sync_value()
         self.element.build_status("Loaded: " + repr(nbytes))
 
-    def triangles_and_normals(self):
+    def positional_xyz(self, dictionary):
+        return [dictionary["x"], dictionary["y"], dictionary["z"], ]
+
+    def triangles_and_normals(self, just_triangles=False):
+        # new implementation should work for larger data sizes
+        from . import segmented_caller
+        # Must call position_count -- this loads the data from the GPU to javascript.
+        float_count = self.element.position_count().sync_value()
+        def get_3_by_3(method):
+            mbytes = segmented_caller.get_bytes(self, method)
+            floats = np.frombuffer(mbytes , dtype=np.float32)
+            (ln,) = floats.shape
+            assert ln == float_count
+            (ntriangles, rem) = divmod(ln, 9)
+            assert rem == 0, "triangle arrays should groups of 3 positions with 3 floats each. " + repr((ln, ntriangles, rem))
+            result = floats.reshape((ntriangles, 3, 3))
+            return result
+        positions = get_3_by_3(method=self.element.get_positions_bytes)
+        if just_triangles:
+            return positions
+        normals = get_3_by_3(method=self.element.get_normals_bytes)
+        return (positions, normals)
+
+    def triangles_and_normals0(self, just_triangles=False):
+        # xxxx old implementation sometimes fails for large data sizes.  historical.  delete eventually.
         from jp_proxy_widget.hex_codec import hex_to_bytearray
         float_count = self.element.position_count().sync_value()
         positions_hex = self.element.get_positions_bytes().sync_value()
-        normals_hex = self.element.get_normals_bytes().sync_value()
+        if not just_triangles:
+            normals_hex = self.element.get_normals_bytes().sync_value()
         def float32array(hex):
             # xxx this should be a convenience provided in jp_proxy_widget...
             #print("converting", hex)
@@ -175,8 +230,34 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             triangles = float_count // 9
             return floats_array.reshape((triangles, 3, 3))
         positions = float32array(positions_hex)
+        if just_triangles:
+            return positions
         normals = float32array(normals_hex)
         return (positions, normals)
+
+    def to_k3d_mesh(self, unify_vertices=False, *mesh_positional_args, **mesh_kw_args):
+        """
+        Convert current isosurface to a k3d mesh.  K3d must be installed separately
+        """
+        from . import vertex_unifier
+        try:
+            import k3d
+        except ImportError:
+            raise ImportError(
+                "feedWebGL2 install does not include k3d as a dependancy " +
+                "-- it must be installed separately to use the to_k3d_mesh feature.")
+        positions = self.triangles_and_normals(just_triangles=True)
+        unifier = None
+        if unify_vertices:
+            unifier = vertex_unifier.Unifier(positions)
+            k3d_vertices = unifier.output_vertices.ravel()
+            k3d_indices = unifier.triangles_indices.ravel()
+        else:
+            k3d_vertices = positions.ravel()
+            k3d_indices = np.arange(len(k3d_vertices)/3)
+        result = k3d.mesh(k3d_vertices, k3d_indices, side="double", *mesh_positional_args, **mesh_kw_args)
+        result.unifier = unifier  # for test and debug xxxx comment out later
+        return result
 
     def dump_to_binary_stl(self, filename="volume.stl", verbose=True):
         if verbose:

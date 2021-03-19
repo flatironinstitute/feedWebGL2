@@ -105,6 +105,7 @@ class VectorFieldViewer:
                 sp[:,i] = sp[:, i] * self.shape[i]
             zyx_start_points = sp
         widget = volume.Volume32()
+        self.widget = widget
         display(widget.debugging_display())
         # will this work? -- proceed after the widget has initialized
         widget.sync()
@@ -116,6 +117,7 @@ class VectorFieldViewer:
                 epsilon=epsilon) 
             for zyx in zyx_start_points]
         norm_matrix = self.get_norm_matrix()
+        self.norm_matrix = norm_matrix
         rescaled_streamlines = []
         norm_side = self.norm_side
         for sl in zyx_streamlines:
@@ -123,11 +125,56 @@ class VectorFieldViewer:
             rescaled_streamlines.append(rescaled.tolist())
         self.rescaled_streamlines = rescaled_streamlines
         widget.load_3d_numpy_array(norm_matrix, threshold=norm_matrix.mean())
-        widget.load_stream_lines(
-            stream_lines=rescaled_streamlines,
+        self.stream_options = dict(
             basis_scale=basis_scale,
             sprite_shape_weights=sprite_shape_weights,
             sprite_shape_normals=sprite_shape_normals,
             cycle_duration=cycle_duration
+        )
+        widget.load_stream_lines(
+            stream_lines=rescaled_streamlines,
+            **self.stream_options,
             )
         widget.build(width=1600)
+
+    def dump_settings_to_json(self, file):
+        import json
+        L = []
+        a = L.append
+        inside = False
+        a("{")
+        def addjson(name, value, formatted=False, first=False):
+            if not first:
+                a(",\n")
+            a('"%s": ' % name)
+            if not formatted:
+                value = json.dumps(value, indent=4)
+            a(value)
+        def addnumbers(name, numbers):
+            string = self.numbers_json(numbers)
+            return addjson(name, string, formatted=True, first=False)
+        addjson("volume_options", self.widget.options, first=True)
+        addjson("stream_options", self.stream_options)
+        addnumbers("streamlines", self.rescaled_streamlines)
+        addnumbers("array", self.norm_matrix.ravel())
+        a("}")
+        all_json = "".join(L)
+        file.write(all_json)
+    
+    def numbers_json(self, seq):
+        L = []
+        a = L.append
+        inside = False
+        a("[")
+        for x in seq:
+            if inside:
+                a(",\n")
+            if type(x) in (list, tuple):
+                s = self.numbers_json(x)
+            else:
+                s = "{:.3e}".format(x)
+            a(s)
+            inside = True
+        a("]")
+        return "".join(L)
+
