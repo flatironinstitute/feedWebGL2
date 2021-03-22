@@ -92,6 +92,13 @@ class VectorFieldViewer:
         self, 
         zyx_start_points, 
         max_number_of_points=None, 
+        camera_up=dict(x=0, y=1, z=0),  # camera is oriented with Y axis pointing "up"
+        camera_offset=dict(x=0, y=0, z=1),  # camera is offset from the figure in positive z dimension.
+        camera_distance_multiple=2.0, # Camera is placed by default 2 radius lengths from the figure center.
+        di=dict(x=1, y=0, z=0),  # xyz offset between ary[0,0,0] and ary[1,0,0]
+        dj=dict(x=0, y=1, z=0),  # xyz offset between ary[0,0,0] and ary[0,1,0]
+        dk=dict(x=0, y=0, z=1),  # xyz offset between ary[0,0,0] and ary[0,0,1]
+        width=1600,
         step_size=None, 
         basis_scale=1.0, 
         sprite_shape_weights=None, 
@@ -124,7 +131,14 @@ class VectorFieldViewer:
             rescaled = sl / norm_side
             rescaled_streamlines.append(rescaled.tolist())
         self.rescaled_streamlines = rescaled_streamlines
-        widget.load_3d_numpy_array(norm_matrix, threshold=norm_matrix.mean())
+        widget.load_3d_numpy_array(
+            ary=norm_matrix, 
+            threshold=norm_matrix.mean(),
+            camera_up=camera_up,
+            camera_offset=camera_offset,
+            camera_distance_multiple=camera_distance_multiple,
+            di=di, dj=dj, dk=dk,
+            )
         self.stream_options = dict(
             basis_scale=basis_scale,
             sprite_shape_weights=sprite_shape_weights,
@@ -135,7 +149,9 @@ class VectorFieldViewer:
             stream_lines=rescaled_streamlines,
             **self.stream_options,
             )
-        widget.build(width=1600)
+        widget.build(
+            width=width,
+            )
 
     def dump_settings_to_json(self, file):
         import json
