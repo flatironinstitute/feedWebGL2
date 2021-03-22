@@ -570,6 +570,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
     class WebGL2CrossingVoxels {
         constructor(options) {
+            debugger;
             this.settings = $.extend({
                 feedbackContext: null,    // the underlying FeedbackContext context to use
                 valuesArray: null,   // the array buffer of values to contour
@@ -594,6 +595,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 di: [1, 0, 0],
                 dj: [0, 1, 0],
                 dk: [0, 0, 1],
+                translation: [0, 0, 0],
                 fragment_shader: noop_fragment_shader,
                 base_intensity: 0.0,
                 max_intensity: 0.5,
@@ -663,6 +665,22 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     uValue: {
                         vtype: "1fv",
                         default_value: [s.threshold],
+                    },
+                    dk: {
+                        vtype: "3fv",
+                        default_value: s.dk,
+                    },
+                    dj: {
+                        vtype: "3fv",
+                        default_value: s.dj,
+                    },
+                    di: {
+                        vtype: "3fv",
+                        default_value: s.di,
+                    },
+                    translation: {
+                        vtype: "3fv",
+                        default_value: s.translation,
                     },
                     u_grid_min: {
                         vtype: "3fv",
@@ -954,6 +972,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     // global length of rows
     uniform int uRowSize;
 
+    // coordinate offsets
+    uniform vec3 dk, dj, di, translation;
+
     // global number of columnss
     uniform int uColSize;
 
@@ -992,7 +1013,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         //location = location_offset;
         vec3 rescaled = rescale_offset(vec3(0,0,0));
         //location = grid_location(vec3(0,0,0));
-        location = grid_xyz(rescaled);
+        vec3 vertex = grid_xyz(rescaled);
+        // xxxx should do this conversion in macros...
+        location = di * vertex[0] + dj * vertex[1] + dk * vertex[2] + translation;
 
         bool voxel_ok = true;
         if (u_grid_min[0] < u_grid_max[0]) {
@@ -1243,6 +1266,22 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                         vtype: "1fv",
                         default_value: [s.threshold],
                     },
+                    dk: {
+                        vtype: "3fv",
+                        default_value: s.dk,
+                    },
+                    dj: {
+                        vtype: "3fv",
+                        default_value: s.dj,
+                    },
+                    di: {
+                        vtype: "3fv",
+                        default_value: s.di,
+                    },
+                    translation: {
+                        vtype: "3fv",
+                        default_value: s.translation,
+                    },
                     u_grid_min: {
                         vtype: "3fv",
                         default_value: s.grid_min,
@@ -1349,6 +1388,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         
         // global contour threshold
         uniform float uValue;
+
+        // coordinate offsets
+        uniform vec3 dk, dj, di, translation;
     
         // global grid thresholds
         //  (I tried integers but it didn't work, couldn't debug...)
@@ -1374,7 +1416,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // default to invalid index indicating the voxel does not cross the value.
             index = -1;
             vec3 rescaled = rescale_offset(vec3(0,0,0));
-            location = grid_xyz(rescaled);
+            vec3 vertex = grid_xyz(rescaled);
+            // xxxx should do this conversion in macros...
+            location = di * vertex[0] + dj * vertex[1] + dk * vertex[2] + translation;
             bool voxel_ok = true;
             if (u_grid_min[0] < u_grid_max[0]) {
                 // voxel coordinate filtering is enabled
@@ -2396,6 +2440,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 dk: s.dk,
                 dj: s.dj,
                 di: s.di,
+                translation: s.translation,
             });
             // initialize segmenter upon first run.
             this.segments = null;
