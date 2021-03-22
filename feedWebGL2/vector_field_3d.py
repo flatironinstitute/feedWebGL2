@@ -152,6 +152,7 @@ class VectorFieldViewer:
         widget.build(
             width=width,
             )
+        return widget
 
     def dump_settings_to_json(self, file):
         import json
