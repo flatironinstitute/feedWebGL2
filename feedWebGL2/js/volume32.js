@@ -181,6 +181,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var gM = this.grid_maxes;
                 var maxes = [gM[2], gM[1], gM[0]];
                 this.surface.set_grid_limits(mins, maxes);
+            }
+            update_slice_info() {
+                var gm = this.grid_mins;
+                var gM = this.grid_maxes;
+                this.slice_info.html( 
+                    "[" +
+                    gm[2] + ":" + gM[2] + ", " +
+                    gm[1] + ":" + gM[1] + ", " +
+                    gm[0] + ":" + gM[0] +
+                    "]"
+                )
             };
             get_positions(buffer) {
                 // get positions for iso-surface triangles and streamline triangles
@@ -578,7 +589,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.slice_displays = [this.x_slicer, this.y_slicer, this.z_slicer];
 
                 // info area
-                this.info = $("<div/>").appendTo(container);
+                this.info_area = $("<div/>").appendTo(container);
+                this.info = $("<div/>").appendTo(this.info_area);
+                this.slice_info = $("<div/>").appendTo(this.info_area);
 
                 // button area
                 var button_area = $("<div/>").appendTo(container);
@@ -718,6 +731,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     sync = this.sync_check.is(':checked');
                 }
                 this.slice_displays.map(x => x.draw_frame());
+                this.update_slice_info();
                 this.kji_mesh.position.set(...this.kji);
                 if (sync) {
                     this.update_volume();
