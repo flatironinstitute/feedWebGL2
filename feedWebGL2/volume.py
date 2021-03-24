@@ -55,7 +55,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         self.element.html("Uninitialized Volume widget.")
         self.js_init("""
             element.ready_sync = function (message) {
-                element.html(message);
+                if (!element.V) {
+                    element.html(message);
+                }
                 return true;
             };
         """)
@@ -126,6 +128,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             dj=dict(x=0, y=1, z=0),  # xyz offset between ary[0,0,0] and ary[0,1,0]
             dk=dict(x=0, y=0, z=1),  # xyz offset between ary[0,0,0] and ary[0,0,1]
             ):
+        self.array = ary
         self.dk = self.positional_xyz(dk)
         self.di = self.positional_xyz(di)
         self.dj = self.positional_xyz(dj)
@@ -178,6 +181,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             element.get_normals_bytes = function() {
                 return new Uint8Array(positions_and_normals.normals.buffer);
             };
+            element.get_slicing = function () {
+                return element.V.get_array_slicing();
+            };
         """, length=nbytes)
         cursor = 0
         while cursor < nbytes:
@@ -192,6 +198,12 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
 
     def positional_xyz(self, dictionary):
         return [dictionary["x"], dictionary["y"], dictionary["z"], ]
+
+    def current_array_slicing(self):
+        slicing = self.element.get_slicing().sync_value(level=5)
+        self.last_slicing = slicing
+        [[lowI, highI], [lowJ, highJ], [lowK, highK]] = slicing
+        return self.array[lowI: highI, lowJ: highJ, lowK: highK]
 
     def triangles_and_normals(self, just_triangles=False):
         # new implementation should work for larger data sizes
