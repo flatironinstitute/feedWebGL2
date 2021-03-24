@@ -193,6 +193,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     "]"
                 )
             };
+            get_array_slicing() {
+                var gm = this.grid_mins;
+                var gM = this.grid_maxes;
+                return [
+                    [gm[2], gM[2]],
+                    [gm[1], gM[1]],
+                    [gm[0], gM[0]],
+                ];
+            };
             get_positions(buffer) {
                 // get positions for iso-surface triangles and streamline triangles
                 this.surface_positions = this.surface.get_positions(this.surface_positions);
