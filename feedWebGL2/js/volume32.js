@@ -101,7 +101,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             vscale(scalar, v) {
                 var result = [];
                 for (var k=0; k<3; k++) {
-                    result.push(scalra * v[k]);
+                    result.push(scalar * v[k]);
                 }
                 return result;
             };
