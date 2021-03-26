@@ -692,11 +692,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.threshold_slider.slider("option", "value", value);
             };
             zoom_out() {
-                // xxx this will not work right if dk, dj, di are not default valued!
                 var s = this.settings;
-                var cz = 0.5 * (s.num_cols - 1);
-                var cy = 0.5 * (s.num_rows - 1);
-                var cx = 0.5 * (s.num_layers - 1);
+                var cz0 = 0.5 * (s.num_cols - 1);
+                var cy0 = 0.5 * (s.num_rows - 1);
+                var cx0 = 0.5 * (s.num_layers - 1);
+                var center = this.vsum(
+                    this.vscale(cz0, s.dz),
+                    this.vsum(
+                        this.vscale(cy0, s.dy),
+                        this.vscale(cx0, s.dx)
+                    )
+                );
+                var [cx, cy, cz] = center;
                 var r = Math.max(cx, cy, cz)  * 2 + 2;
                 var crossing = this.surface.crossing;
                 var shift = 2.0;
