@@ -697,10 +697,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var cy0 = 0.5 * (s.num_rows - 1);
                 var cx0 = 0.5 * (s.num_layers - 1);
                 var center = this.vsum(
-                    this.vscale(cz0, s.dz),
+                    this.vscale(cz0, s.dk),
                     this.vsum(
-                        this.vscale(cy0, s.dy),
-                        this.vscale(cx0, s.dx)
+                        this.vscale(cy0, s.dj),
+                        this.vscale(cx0, s.di)
                     )
                 );
                 var [cx, cy, cz] = center;
