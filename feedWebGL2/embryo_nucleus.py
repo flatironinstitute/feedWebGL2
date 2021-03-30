@@ -20,6 +20,12 @@ class TimeSlice:
     Visualization for a 3d time slice with classifications.
     """
 
+    di=dict(x=0, y=0, z=4)  # xyz offset between ary[0,0,0] and ary[1,0,0]
+    dj=dict(x=0, y=1, z=0)  # xyz offset between ary[0,0,0] and ary[0,1,0]
+    dk=dict(x=1, y=0, z=0)  # xyz offset between ary[0,0,0] and ary[0,0,1]
+    width = 900  # width of each volume display
+    kj_stride = 2
+
     def __init__(
         self, 
         folder="/Users/awatters/misc/LisaBrown/mouse-embryo/mouse-embryo-nuclei", 
@@ -32,6 +38,7 @@ class TimeSlice:
         self.holder = holder
         self.raster_path_h5 = self.path_must_exist("Orig.h5")
         self.labels_path_tiff = self.path_must_exist("Labels.tiff")
+        self.selected_label = None
         self.get_raster_array()
         self.get_labels_array()
 
@@ -46,14 +53,27 @@ class TimeSlice:
 
     def set_array_limits(self, limits):
         [(i, I), (j, J), (k, K)] = limits
-        self.limited_raster = self.full_raster[i:I, j:J, k:K]
-        self.limited_labels = self.full_labels[i:I, j:J, k:K]
+        s = self.kj_stride
+        self.limited_raster = self.full_raster[i:I, j:J:s, k:K:s]
+        self.limited_labels = self.full_labels[i:I, j:J:s, k:K:s]
+
+    def get_selection_array(self):
+        selected = self.selected_label
+        labels = self.limited_labels
+        above0 = (labels > 0)
+        nz_selected = np.choose(above0, [0, 1])
+        # set value at 26 to 2
+        chosen = (labels == selected)
+        selection = np.choose(chosen, [nz_selected, 2])
+        return selection
 
     def get_raster_array(self):
         f = h5py.File(self.raster_path_h5, "r")
-        Data = f["Data"]
-        self.full_raster = np.array(Data)
-        f.close()
+        try:
+            Data = f["Data"]
+            self.full_raster = np.array(Data)
+        finally:
+            f.close()
 
     def get_labels_array(self):
         im = Image.open(self.labels_path_tiff)
@@ -64,10 +84,57 @@ class TimeSlice:
         All = np.zeros( (len(L),) + L[0].shape, dtype=np.int)
         for (i, aa) in enumerate(L):
             All[i] = aa
-        self.input_labels = np.unique(All)
+        labels = self.input_labels = np.unique(All)
+        selected = self.selected_label
+        if not selected or selected not in labels:
+            self.selected_label = max(labels)
         self.full_labels = All
         nzIJK = np.nonzero(All)
         self.labelled_range = [(nz.min(), nz.max()) for nz in nzIJK]
+
+    def make_widget(self):
+        self.left_label = widgets.HTML("Raster")
+        self.left_area = widgets.VBox(children=[self.left_label])
+        self.right_label = widgets.HTML("Labels")
+        self.right_area = widgets.VBox(children=[self.right_label])
+        self.container = widgets.HBox([
+            self.left_area,
+            self.right_area
+        ])
+        self.display_raster()
+        self.display_labels()
+        return self.container
+
+    def volume_widget(self, ary, threshold):
+        W = volume.Volume32()
+        def on_render(change):
+            if change['new']:
+                W.load_3d_numpy_array(
+                    ary, 
+                    threshold=threshold,
+                    di=self.di,
+                    dj=self.dj,
+                    dk=self.dk,
+                )
+                W.build(
+                    width=self.width,
+                )
+        W.observe(on_render, names='rendered')
+        return W
+
+    def display_raster(self):
+        ary = self.limited_raster
+        threshold = 0.5 * (ary.max() + ary.min())  # TEMP
+        W = self.volume_widget(ary, threshold)
+        print ("displaying raster", self.folder)
+        self.left_area.children = [self.left_label, W]
+
+    def display_labels(self):
+        ary = self.get_selection_array()
+        threshold = 1.5
+        W = self.volume_widget(ary, threshold)
+        print ("displaying labels", self.folder)
+        self.right_area.children = [self.right_label, W]
 
     def filepath(self, suffix):
         return os.path.join(self.folder, self.path_prefix + suffix)
@@ -82,20 +149,25 @@ class SliceComparison:
         self, 
         folder="/Users/awatters/misc/LisaBrown/mouse-embryo/mouse-embryo-nuclei", 
         path_prefix1="162954/162954",
-        path_prefix2="162111/162111",
+        path_prefix2="163636/163636",
         ):
         self.folder = folder
         self.path_prefix1 = path_prefix1
         self.path_prefix2 = path_prefix2
         candidates = self.get_candidate_prefixes()
+        """
         if path_prefix1 is None:
             for c in candidates:
                 if c != path_prefix2:
                     path_prefix1 = c
+                    break
         if path_prefix2 is None:
             for c in candidates:
                 if c != path_prefix1:
                     path_prefix2 = c
+                    break"""
+        path_prefix1 = path_prefix1 or SliceHolder.dummy_prefix
+        path_prefix2 = path_prefix2 or SliceHolder.dummy_prefix
         self.time_slice1 = None
         self.time_slice2 = None
         self.widget = None
@@ -202,7 +274,7 @@ class SliceHolder:
         candidates = [self.dummy_prefix] + self.holder.candidate_prefixes
         self.dropdown = widgets.Dropdown(options=candidates)
         self.dropdown.observe(self.dropdown_change)
-        self.slice_area = widgets.HBox(children=[self.info])
+        self.slice_area = widgets.VBox(children=[self.info])
         ly = widgets.Layout(border='solid')
         self.container = widgets.VBox([
             self.dropdown,
@@ -211,11 +283,8 @@ class SliceHolder:
         return self.container
 
     def display_slice(self):
-        pass
-
-    def display_slice(self):
         slice_widget = self.slice.make_widget()
-
+        self.slice_area.children = [slice_widget, self.info]
 
     def dropdown_change(self, change):
         if change['type'] != 'change' or change.get("name") != 'value':
