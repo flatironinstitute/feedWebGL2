@@ -106,6 +106,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         "Wait for the widget to initialize before proceeding. Widget must be displayed!"
         self.element.ready_sync(message).sync_value()
 
+    def set_slice_ijk(self, i, j, k, change_threshold=False):
+        self.element.V.set_slice_ijk(i, j, k, change_threshold)
+
     def load_stream_lines(
         self, 
         stream_lines, 
