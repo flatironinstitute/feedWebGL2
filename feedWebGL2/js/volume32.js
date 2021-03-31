@@ -431,10 +431,20 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // ??? eventually render on demand:
             // https://threejsfundamentals.org/threejs/lessons/threejs-rendering-on-demand.html
             animate() {
+                var render_ok = this.render();
+                if (render_ok) {
+                    this.surface_renderer.render(this.surface_scene, this.surface_camera);
+                    var that = this;
+                    requestAnimationFrame(function () { that.animate(); });
+                }
+            };
+            render() {
                 var container = this.container;
-                if (!container[0].isConnected) {
+                if ((!container) || (!container[0].isConnected)) {
                     console.log("Terminating volume animation because container is disconnected.");
-                    return this.dispose();
+                    this.dispose();
+                    this.container = null;
+                    return false;
                 }
                 var delta = this.voxelClock.getDelta();
                 this.update_surface_geometry(this.voxelClock.elapsedTime);
@@ -442,9 +452,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.voxel_renderer.render(this.voxel_scene, this.voxel_camera);
                 this.sync_cameras();
                 this.surface_renderer.render(this.surface_scene, this.surface_camera);
-                var that = this;
-                requestAnimationFrame(function () { that.animate(); });
-            }
+                return true;
+            };
             array_value(kji) {
                 // index into the values array at col_i row_j layer_k
                 var nc, nr, nl;
