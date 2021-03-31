@@ -190,8 +190,8 @@ class SliceComparison:
         ]
         self.time_slice1 = self.load_slice(self.path_prefix1, self.slice1_holder)
         self.time_slice2 = self.load_slice(self.path_prefix2, self.slice2_holder)
-        self.check_slices()
         self.widget = widgets.VBox(children=children)
+        self.check_slices()
         print("Build complete.")
         return self.widget
 
