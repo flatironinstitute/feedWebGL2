@@ -47,20 +47,30 @@ def load_requirements(widget=None, silent=True, additional=()):
         display(widget)
     REQUIREMENTS_LOADED = True
 
+MISC_JAVASCRIPT_SUPPORT = """
+
+element.load_mesh_from_bytes = function(positions_bytes, normals_bytes, color, wireframe) {
+    debugger;
+    var positions = new Float32Array(positions_bytes.buffer);
+    var normals = new Float32Array(normals_bytes.buffer);
+    element.V.add_mesh(positions, normals, color, wireframe);
+};
+
+element.ready_sync = function (message) {
+    if (!element.V) {
+        element.html(message);
+    }
+    return true;
+};
+"""
+
 class Volume32(jp_proxy_widget.JSProxyWidget):
 
     def __init__(self, *pargs, **kwargs):
         super(Volume32, self).__init__(*pargs, **kwargs)
         load_requirements(self)
         self.element.html("Uninitialized Volume widget.")
-        self.js_init("""
-            element.ready_sync = function (message) {
-                if (!element.V) {
-                    element.html(message);
-                }
-                return true;
-            };
-        """)
+        self.js_init(MISC_JAVASCRIPT_SUPPORT)
         self.options = None
         self.data = None
 
@@ -246,6 +256,13 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             return positions
         normals = float32array(normals_hex)
         return (positions, normals)
+
+    def add_mesh_to_surface_scene(self, positions, normals, colorhex=0x049EF4, wireframe=True):
+        p32 = np.array(positions, dtype=np.float32)
+        n32 = np.array(normals, dtype=np.float32)
+        pbytes = bytearray(p32.tobytes())
+        nbytes = bytearray(n32.tobytes())
+        self.element.load_mesh_from_bytes(pbytes, nbytes, colorhex, wireframe)
 
     def to_k3d_mesh(self, unify_vertices=False, *mesh_positional_args, **mesh_kw_args):
         """
