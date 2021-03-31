@@ -401,6 +401,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.voxelControls.update();
                 this.voxelClock = new THREE.Clock();
             };
+            add_mesh(vertices, normals, color, wireframe) {
+                // add a basic mesh to the surface_scene
+                // xxxx should add support for other kinds of material eventually.
+                var scene = this.surface_scene;
+                var geometry = new THREE.BufferGeometry();
+                geometry.setAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
+                geometry.setAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
+                var material = new THREE.MeshBasicMaterial( { color: color } );
+                material.wireframe = wireframe;
+                var mesh = new THREE.Mesh( geometry,  material );
+                scene.add(mesh);
+            };
             dispose() {
                 // call this when the object is no longer in use.  It tries to free up memory.
                 try {
