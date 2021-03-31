@@ -461,6 +461,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.voxel_renderer.render(this.voxel_scene, this.voxel_camera);
                 this.sync_cameras();
                 this.surface_renderer.render(this.surface_scene, this.surface_camera);
+                // automatically request another render if streamlines are active
+                if (this.stream_lines) {
+                    this.request_render();
+                }
                 return true;
             };
             array_value(kji) {
