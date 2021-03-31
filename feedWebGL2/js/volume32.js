@@ -433,12 +433,21 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             animate() {
                 var render_ok = this.render();
                 if (render_ok) {
-                    this.surface_renderer.render(this.surface_scene, this.surface_camera);
                     var that = this;
                     requestAnimationFrame(function () { that.animate(); });
                 }
             };
+            request_render() {
+                var requested = this.awaiting_render;
+                if (!requested) {
+                    this.surface_renderer.render(this.surface_scene, this.surface_camera);
+                    var that = this;
+                    requestAnimationFrame(function () { that.render(); });
+                    this.awaiting_render = true;
+                }
+            };
             render() {
+                this.awaiting_render = false;
                 var container = this.container;
                 if ((!container) || (!container[0].isConnected)) {
                     console.log("Terminating volume animation because container is disconnected.");
@@ -699,7 +708,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.threshold_slider = slider;
 
                 this.show_info();
-                this.animate()
+                //this.animate()
+                // render on change
+                this.voxelControls.addEventListener('change', function() { 
+                    that.request_render(); 
+                });
+                this.request_render();
             };
             set_tracking(onoff) {
                 this.tracking = onoff;
@@ -774,6 +788,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     this.update_volume();
                 }
                 this.show_info();
+                this.request_render();
             };
         };
 
