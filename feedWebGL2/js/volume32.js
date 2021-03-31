@@ -36,6 +36,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     camera_offset: {x:0, y:0, z:1},
                     camera_distance_multiple: 2.0,
                     axis_length: true,  // auto assign length
+                    ijk_highlight_corners: null,
                 }, options);
                 var s = this.settings;
                 var context = s.feedbackContext;
@@ -86,10 +87,23 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.surface = null;
                 this.stream_lines = null;
                 // intial slicing indices
-                this.kji = [0,0,0];
+                //this.kji = [0,0,0];
+                this.kji = [Math.floor(s.num_cols/2), Math.floor(s.num_rows/2), Math.floor(s.num_layers/2), ];
                 // for debugging
                 this.dump_events = false;
             };
+            set_slice_ijk(i, j, k, change_threshold) {
+                var kji = [k, j, i];
+                // array value validates values
+                var value = this.array_value(kji);
+                this.kji = kji;
+                if (change_threshold) {
+                    // redraw in implicit
+                    this.set_threshold(value);
+                } else {
+                    this.redraw();
+                }
+            }
             // xxxx really should get these from somewhere else
             vsum(v1, v2) {
                 var result = [];
