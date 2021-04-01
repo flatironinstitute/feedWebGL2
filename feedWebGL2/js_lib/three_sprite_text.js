@@ -4,7 +4,6 @@
 
 (function (THREE, $) {
     THREE.sprite_text = function (scene, text, positions, size, fillStyleColor, canvasWidth, options) {
-        debugger;
         var settings = $.extend({
             "transparent": true,
             "opacity": 1.0,
@@ -55,7 +54,6 @@
         scene.add(cloud);
     };
     THREE.sprite_text.example = function (element) {
-        debugger;
         var radius = 1000;
         var scene = new THREE.Scene();
         var camera = new THREE.PerspectiveCamera(75, 1.0, 1, 100000);

@@ -570,7 +570,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
     class WebGL2CrossingVoxels {
         constructor(options) {
-            debugger;
             this.settings = $.extend({
                 feedbackContext: null,    // the underlying FeedbackContext context to use
                 valuesArray: null,   // the array buffer of values to contour

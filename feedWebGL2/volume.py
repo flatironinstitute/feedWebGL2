@@ -50,7 +50,6 @@ def load_requirements(widget=None, silent=True, additional=()):
 MISC_JAVASCRIPT_SUPPORT = """
 
 element.load_mesh_from_bytes = function(positions_bytes, normals_bytes, color, wireframe) {
-    debugger;
     var positions = new Float32Array(positions_bytes.buffer);
     var normals = new Float32Array(normals_bytes.buffer);
     element.V.add_mesh(positions, normals, color, wireframe);
@@ -98,7 +97,6 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         )
         self.options = options
         self.js_init("""
-        debugger;
             element.V = element.volume32(options);
         """, options=options)
 
