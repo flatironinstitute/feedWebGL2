@@ -107,6 +107,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
     def set_slice_ijk(self, i, j, k, change_threshold=False):
         self.element.V.set_slice_ijk(i, j, k, change_threshold)
 
+    def set_threshold(self, value):
+        self.element.V.set_threshold(value)
+
     def load_stream_lines(
         self, 
         stream_lines, 
