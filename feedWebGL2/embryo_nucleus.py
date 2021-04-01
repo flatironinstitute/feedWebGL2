@@ -42,6 +42,37 @@ class TimeSlice:
         self.get_raster_array()
         self.get_labels_array()
 
+    def rendered(self):
+        return self.labels_widget.initialized and self.raster_widget.initialized
+    
+    def ijk_range_to_xyz(self, rnge):
+        D = np.array([
+            [self.di["x"], self.di["y"], self.di["z"],],
+            [self.dj["x"], self.dj["y"], self.dj["z"],],
+            [self.dk["x"], self.dk["y"], self.dk["z"],],
+        ]).transpose()
+        result = D.dot(rnge)
+        return result
+
+    def label_range(self, label=None):
+        if label is None:
+            label = self.selected_label
+        ll = self.limited_labels
+        selected = (ll == label)
+        ijk_range = non_zero_range(selected)
+        xyz_range = self.ijk_range_to_xyz(ijk_range)
+        return (ijk_range, xyz_range)
+
+    def annotate_range(self, ijk_range, xyz_range, colorhex, threshold=True, focus=True):
+        (vertices, normals) = range_box(xyz_range)
+        for (W, change) in ((self.labels_widget, False), (self.raster_widget, threshold)):
+            W.add_mesh_to_surface_scene(vertices, normals, wireframe=True, colorhex=colorhex)
+            ijk_midpoint = (0.5 * (ijk_range[:, 0] + ijk_range[:, 1])).astype(np.int)
+            [i,j,k] = ijk_midpoint
+            if focus:
+                W.set_slice_ijk(i, j, k, threshold)
+        self.labels_widget.set_threshold(1.5)
+
     def print_info(self):
         print("TimeSlice:")
         r = self.full_raster
@@ -89,8 +120,9 @@ class TimeSlice:
         if not selected or selected not in labels:
             self.selected_label = max(labels)
         self.full_labels = All
-        nzIJK = np.nonzero(All)
-        self.labelled_range = [(nz.min(), nz.max()) for nz in nzIJK]
+        #nzIJK = np.nonzero(All)
+        #self.labelled_range = [(nz.min(), nz.max()) for nz in nzIJK]
+        self.labelled_range = non_zero_range(All)
 
     def make_widget(self):
         self.left_label = widgets.HTML("Raster")
@@ -107,6 +139,7 @@ class TimeSlice:
 
     def volume_widget(self, ary, threshold):
         W = volume.Volume32()
+        W.initialized = False
         def on_render(change):
             if change['new']:
                 W.load_3d_numpy_array(
@@ -119,6 +152,9 @@ class TimeSlice:
                 W.build(
                     width=self.width,
                 )
+                W.sync()
+                W.initialized = True
+                self.holder.holder.check_annotations()
         W.observe(on_render, names='rendered')
         return W
 
@@ -126,6 +162,7 @@ class TimeSlice:
         ary = self.limited_raster
         threshold = 0.5 * (ary.max() + ary.min())  # TEMP
         W = self.volume_widget(ary, threshold)
+        self.raster_widget = W
         print ("displaying raster", self.folder)
         self.left_area.children = [self.left_label, W]
 
@@ -133,6 +170,7 @@ class TimeSlice:
         ary = self.get_selection_array()
         threshold = 1.5
         W = self.volume_widget(ary, threshold)
+        self.labels_widget = W
         print ("displaying labels", self.folder)
         self.right_area.children = [self.right_label, W]
 
@@ -201,11 +239,24 @@ class SliceComparison:
         self.time_slice2 = self.slice2_holder.slice
         if self.interactive():
             self.info.value = ("Slices are loaded...")
+            self.annotated = False
             self.select_array_limits()
             self.slice1_holder.display_slice()
             self.slice2_holder.display_slice()
         else:
             self.info.value = ("Slices not ready for display. Please load slices.")
+
+    def check_annotations(self):
+        if self.annotated:
+            return
+        ts1 = self.time_slice1
+        ts2 = self.time_slice2
+        if ts1.rendered() and ts2.rendered():
+            for (src, dst) in [(ts1, ts2), (ts2, ts1)]:
+                (ijk_range, xyz_range) = src.label_range()
+                src.annotate_range(ijk_range, xyz_range, 0xff0000, threshold=True, focus=True)
+                dst.annotate_range(ijk_range, xyz_range, 0x00ffff, threshold=False, focus=False)
+            self.annotated = True
 
     def select_array_limits(self):
         ts1 = self.time_slice1
@@ -257,6 +308,48 @@ class SliceComparison:
                     repr((prefix, candidates))
                 )
         return candidates
+
+def non_zero_range(ary):
+    nzIJK = np.nonzero(ary)
+    range = [(nz.min(), nz.max()) for nz in nzIJK]
+    return np.array(range)
+
+def range_box(range):
+    # xxx maybe use a THREE geometry?
+    m0 = range[:,0]
+    m1 = range[:,1]
+    corners = [
+        [m0[0], m0[1], m0[2]],
+        [m0[0], m0[1], m1[2]],
+        [m0[0], m1[1], m0[2]],
+        [m0[0], m1[1], m1[2]],
+        [m1[0], m0[1], m0[2]],
+        [m1[0], m0[1], m1[2]],
+        [m1[0], m1[1], m0[2]],
+        [m1[0], m1[1], m1[2]],
+    ]
+    triangles = []
+    normals = []
+    # normals are not used....
+    def add_triangle(i00, i01, i11):
+        triangle = [corners[i00], corners[i01], corners[i11]]
+        #print("triangle", triangle)
+        triangles.append(triangle)
+        normals.append([1,0,0])
+    def add_face(i00, i01, i10, i11):
+        #print("face", i00, i01, i10, i11)
+        add_triangle(i00, i01, i10)
+        add_triangle(i11, i10, i01)
+    add_face(0b000, 0b001, 0b010, 0b011)
+    add_face(0b000, 0b010, 0b100, 0b110)
+    add_face(0b000, 0b001, 0b100, 0b101)
+    #
+    add_face(0b100, 0b101, 0b110, 0b111)
+    add_face(0b001, 0b011, 0b101, 0b111)
+    add_face(0b010, 0b011, 0b110, 0b111)
+    #print("triangles")
+    #print(triangles)
+    return (triangles, normals)
 
 class SliceHolder:
 
