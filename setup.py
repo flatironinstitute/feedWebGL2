@@ -18,8 +18,9 @@ setup(
         "jp_doodle",
         "jp_proxy_widget",
         ],
-    dependency_links=[
-        'http://github.com/user/repo/zipball/master',
-        ],
+    # dependancy links doesn't work apparently because you need a tag.
+    #dependency_links=[
+    #    'https://github.com/AaronWatters/jp_doodle/tarball/master',
+    #    ],
     license="MIT"
 )
