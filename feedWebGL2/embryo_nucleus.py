@@ -90,6 +90,7 @@ class TimeSlice:
 
     def get_selection_array(self):
         selected = self.selected_label
+        self.right_label.value = "Selected label = " + repr(selected)
         labels = self.limited_labels
         above0 = (labels > 0)
         nz_selected = np.choose(above0, [0, 1])
