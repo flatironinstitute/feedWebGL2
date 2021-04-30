@@ -37,7 +37,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 dk: [1, 0, 0],
                 dj: [0, 1, 0],
                 di: [0, 0, 1],
-                translation: [-1, -1, 0],
+                translation: [0, 0, 0],
                 //color: [1, 1, 1],   ??? not used???
                 rasterize: false,
                 threshold: 0,  // value at contour
@@ -49,14 +49,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 location: "std", 
                 // parameters needed by location method if any.
                 location_parameters: null,
-                // rotate the color direction using unit matrix
-                //color_rotator: [
-                //    1, 0, 0,
-                //    0, 1, 0,
-                //    0, 0, 1,
-                //],
-                // use sorted voxel implementation by default.
-                //sorted: true,
             }, options);
             var s = this.settings;
             // for now don't support multiple blocks...
@@ -106,6 +98,24 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     threshold: s.threshold,
                 }
             );
+            this.positioner = $.fn.webGL2MarchingCubePositioner(
+                {
+                    feedbackContext: s.feedbackContext,
+                    num_edges: this.num_edges,
+                    edge_index_triples: this.edge_index_triples,
+                    // matching edge weight interpolations, ravelled
+                    edge_weight_triples: this.edge_weight_triples,
+                    // volume dimensions
+                    num_rows: s.num_rows,
+                    num_cols: s.num_cols,
+                    num_layers: s.num_layers,
+                    di: s.di,
+                    dj: s.dj,
+                    dk: s.dk,
+                    translation: s.translation,
+                    threshold: s.threshold,  // value at contour
+                }
+            );
             this.voxel_indices = null;
         };
         run() {
@@ -113,6 +123,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             indexer.run();
             this.voxel_indices = indexer.voxel_index_array;
             this.generate_triangles();
+            var positioner = this.positioner;
+            positioner.run();
+            this.positions = positioner.positions;
+            this.normals = positioner.normals;
         };
 
         create_templates() {
@@ -190,7 +204,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 for (var j=0; j<J1; j++) {
                     for (var k=0; k<K1; k++) {
                         var voxel_index = voxel_indices[voxel_number];
-                        // for well behaved surfaces this test mostly fails
+                        // for well behaved surfaces in larger volumes this test mostly fails
                         if (voxel_index > 0)
                         {
                             var edge_base_index = voxel_number * 3;
@@ -265,9 +279,19 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var triangle_number = edge_number_to_triangle_number[edge_index];
                 if (triangle_number >= 0) {
                     var first_column = 3 * edge_index;
+                    var edge_center_number = edge_index_triples[first_column];
+                    // find the rotation
+                    var rotation = null;
+                    for (var rotation_number=0; rotation_number<3; rotation_number++) {
+                        var triangle_index = triangle_number + rotation_number;
+                        if (triangle_index_triples[triangle_index] == edge_index) {
+                            rotation = TRIANGLE_ROTATIONS[rotation_number];
+                        }
+                    }
+                    // assert rotation is not null...
                     for (var column_index=1; column_index<3; column_index++) {
                         var entry_index = first_column + column_index;
-                        var triangle_index = triangle_number + column_index;
+                        var triangle_index = triangle_number + rotation[column_index];
                         var incident_edge_index = triangle_index_triples[triangle_index];
                         var incident_edge_first_column = 3 * incident_edge_index;
                         edge_index_triples[entry_index] = edge_index_triples[incident_edge_first_column];
@@ -277,6 +301,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
         };
     };
+
+    const TRIANGLE_ROTATIONS = [
+        [0, 1, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+    ]
 
     $.fn.webGL2MarchingCubes.example = function(container) {
         debugger;
@@ -306,7 +336,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 num_rows: 3,
                 num_cols: 3,
                 num_layers: 3,
-                threshold: 0.1,
+                threshold: 0.333,
+                dk: [1, 0, 0],
+                dj: [0, 10, 0],
+                di: [0, 0, 100],
+                translation: [1000, 1000, 1000],
             }
         );
         marching.run();
@@ -323,9 +357,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         var edge_index_triples = marching.edge_index_triples;
         var edge_weight_triples = marching.edge_weight_triples;
         var triangle_index_triples = marching.triangle_index_triples;
-        var triple_div = function(triple_array, index) {
+        var triple_div = function(triple_array, index, test_array) {
+            test_array = test_array || triples_array;
             var result = null;
-            if (triple_array[index] >= 0) {
+            if (test_array[index] >= 0) {
                 result = "<div>" + index + "::"
                 for (var i=index; i<index+3; i++) {
                     result += " " + triple_array[i];
@@ -334,9 +369,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
             return result
         };
-        var dump_triples = function (triples_array) {
+        var dump_triples = function (triples_array, test_array) {
+            test_array = test_array || triples_array;
             for (var index=0; index<triples_array.length; index+=3) {
-                var d = triple_div(triples_array, index);
+                var d = triple_div(triples_array, index, test_array);
                 if (d) {
                     $(d).appendTo(container)
                 } else {
@@ -350,6 +386,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         dump_triples(edge_weight_triples);
         report("triangle_index_triples");
         dump_triples(triangle_index_triples);
+        report("Positions")
+        dump_triples(marching.positions, edge_weight_triples);
+        report("Normals");
+        dump_triples(marching.normals, edge_weight_triples);
 
         report("Run completed successfully.")
     };
@@ -358,7 +398,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         return new WebGL2MarchingCubePositioner(options);
     };
 
-    class  WebGL2MarchingCubeCubePositioner {
+    class  WebGL2MarchingCubePositioner {
         constructor(options) {
             // There is a lot of similar code with WebGL2TriangulateVoxels xxxx refactor?
             this.settings = $.extend({
@@ -367,10 +407,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 edge_index_triples: null,
                 // matching edge weight interpolations, ravelled
                 edge_weight_triples: null,
-                // destination array: edge interpolation positions
-                positions: null,
-                // destination_array: edge interpolation normal vector
-                normals: null,
+                // number of edges (max)
+                num_edges: -1,
                 // volume dimensions
                 num_rows: null,
                 num_cols: null,
@@ -379,26 +417,156 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 dj: [0, 1, 0],
                 dk: [0, 0, 1],
                 translation: [0, 0, 0],
-                //color: [1, 1, 1],
-                rasterize: false,
                 threshold: 0,  // value at contour
-                // invalid_coordinate: -100000,  // invalidity marker for positions
-                //location: "std",
-                // samplers are prepared by caller if needed.  Descriptors provided by caller.
-                //samplers: {},
-                // rotate the color direction using unit matrix
-                //color_rotator: [
-                //    1, 0, 0,
-                //    0, 1, 0,
-                //    0, 0, 1,
-                //],
-                //fragment_shader: tetrahedra_fragment_shader,
-                //epsilon: 1e-10,
             }, options);
-            var s = this.settings;
+            this.initialize();
         };
-        // not finished
+        initialize() {
+            var s = this.settings;
+            var ctx = s.feedbackContext;
+            this.program = ctx.program({
+                vertex_shader: marchingCubesPositionerShader,
+                fragment_shader: noop_fragment_shader,
+                feedbacks: {
+                    vPosition: {num_components: 3},
+                    vNormal: {num_components: 3},
+                },
+            });
+
+            this.edge_index_buffer = ctx.buffer();
+            this.edge_index_buffer.initialize_from_array(s.edge_index_triples);
+            this.edge_weight_buffer = ctx.buffer();
+            this.edge_weight_buffer.initialize_from_array(s.edge_weight_triples);
+
+            this.runner = this.program.runner({
+                num_instances: 1,
+                vertices_per_instance: s.num_edges,
+                uniforms: {
+                    // threshold value
+                    threshold: {
+                        vtype: "1fv",
+                        default_value: [s.threshold],
+                    },
+                    uRowSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_cols],
+                    },
+                    uColSize: {
+                        vtype: "1iv",
+                        default_value: [s.num_rows],
+                    },
+                    // number of layers -- NOT USED AT PRESENT
+                    //uLayerSize: {
+                    //   vtype: "1iv",
+                    //    default_value: [s.num_layers],
+                    //},
+                    dk: {
+                        vtype: "3fv",
+                        default_value: s.dk,
+                    },
+                    dj: {
+                        vtype: "3fv",
+                        default_value: s.dj,
+                    },
+                    di: {
+                        vtype: "3fv",
+                        default_value: s.di,
+                    },
+                    translation: {
+                        vtype: "3fv",
+                        default_value: s.translation,
+                    },
+                },
+                inputs: {
+                    indices: {
+                        per_vertex: true,
+                        num_components: 3,
+                        type: "int",
+                        from_buffer: {
+                            name: this.edge_index_buffer.name,
+                        },
+                    },
+                    weights: {
+                        per_vertex: true,
+                        num_components: 3,
+                        from_buffer: {
+                            name: this.edge_weight_buffer.name,
+                        },
+                    },
+                },
+            });
+        };
+        run() {
+            var s = this.settings;
+            this.edge_index_buffer.copy_from_array(s.edge_index_triples);
+            this.edge_weight_buffer.copy_from_array(s.edge_weight_triples);
+            this.runner.install_uniforms();
+            this.runner.run();
+            // automatically load the indices into the output array
+            this.positions = this.runner.feedback_array("vPosition", this.positions);
+            this.normals = this.runner.feedback_array("vNormal", this.normals);
+        }
     };
+
+    const marchingCubesPositionerShader = `#version 300 es
+
+    // iso-surface theshold
+    uniform float threshold;
+
+    // global length of rows
+    uniform int uRowSize;
+
+    // global number of columnss
+    uniform int uColSize;
+
+    // global number of layers (if values are in multiple blocks, else 0)
+    //uniform int uLayerSize;
+
+    // uniform offsets in kji directions for array index a[i,j,k]
+    // applied after grid relative computations, compatible with triangulate_vertex_shader
+    uniform vec3 dk, dj, di, translation;
+
+    in vec3 weights;
+    in ivec3 indices;
+
+    // feedbacks out
+    out vec3 vPosition, vNormal;
+
+    vec3 interpolated_edge_position(in int edge_index, in float weight) {
+        int dimension = edge_index % 3;
+        int ijk = edge_index / 3;
+        float k = float(ijk % uRowSize);
+        int ij = ijk / uRowSize;
+        float j = float(ij % uColSize);
+        float i = float(ij / uColSize);
+        vec3 P0 = vec3(i, j, k);
+        vec3 P1 = vec3(i, j, k);
+        P1[dimension] += 1.0;
+        vec3 vertex = weight * P1 + (1.0 - weight) * P0;
+        vec3 location = (di * vertex[0]) + (dj * vertex[1]) + (dk * vertex[2]) + translation;
+        return location;
+    }
+
+    void main() {
+        // defaults
+        vPosition = vec3(-1.0, -1.0, -1.0);
+        vNormal = vec3(-1.0, 0.0, 0.0);
+        if (indices[0] >= 0) {
+            vec3 center = interpolated_edge_position(indices[0], weights[0]);
+            vec3 left = interpolated_edge_position(indices[1], weights[1]);
+            vec3 right = interpolated_edge_position(indices[2], weights[2]);
+            vec3 v_right = right - center;
+            vec3 v_left = left - center;
+            vec3 v_norm = cross(v_right, v_left);
+            // uncomment
+            vPosition = center;
+            vNormal = normalize(v_norm);
+        }
+        // debug only
+        //vPosition = weights;
+        //vNormal = vec3(float(indices[0]), float(indices[1]), float(indices[2]));
+    }
+    `;
 
     $.fn.webGL2MarchingCubeIndexer = function(options) {
         return new WebGL2MarchingCubeIndexer(options);
@@ -420,23 +588,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 grid_max: [-1, -1, -1],  // disabled grid coordinate filtering (invalid limits)
                 rasterize: false,
                 threshold: 0,  // value at contour
-                // when getting compact arrays
-                // shrink the array sizes by this factor.
-                //shrink_factor: 0.2,
-                // grid coordinate convention.
-                //location: "std",
-                // samplers are prepared by caller if needed.  Descriptors provided by caller.
-                //samplers: {},
-                // invalid marker
-                //location_fill: -1e12,
-                // coordinate vectors
-                //di: [1, 0, 0],
-                //dj: [0, 1, 0],
-                //dk: [0, 0, 1],
-                //translation: [0, 0, 0],
-                //fragment_shader: noop_fragment_shader,
-                //base_intensity: 0.0,
-                //max_intensity: 0.5,
             }, options);
 
             this.voxel_index_array = null;
@@ -475,7 +626,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             });
         };
         run() {
-            var s = this.settings;
             this.runner.install_uniforms();
             this.runner.run();
             // automatically load the indices into the output array
@@ -497,6 +647,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     flat out int voxel_index;
 
     void main() {
+        voxel_index = 0;   // default
         int i = 0;
         if (a000 > threshold) { i = i | 1; }
         if (a001 > threshold) { i = i | 2; }
