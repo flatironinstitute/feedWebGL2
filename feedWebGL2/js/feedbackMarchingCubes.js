@@ -187,8 +187,25 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // main logic:
             var [I, J, K] = this.shape;
             var [Ioffset, Joffset, Koffset] = [J*K, K, 1];
-            var [I1, J1, K1] = [I-1, J-1, K-1];
-            var voxel_number = 0;
+            var high_limits = [I-1, J-1, K-1];
+            var low_limits = [0, 0, 0]
+            var grid_min = s.grid_min;
+            var grid_max = s.grid_max;
+            for (var dimension=0; dimension<3; dimension++) {
+                var m = grid_min[dimension];
+                var M = grid_max[dimension];
+                var l = low_limits[dimension];
+                var L = high_limits[dimension];
+                if ((m > 0) && (m > l) && (m < L)) {
+                    low_limits[dimension] = m;
+                }
+                if ((M > 0) && (M < L)) {
+                    high_limits[dimension] = M;
+                }
+            }
+            var [I0, J0, K0] = low_limits;
+            var [I1, J1, K1] = high_limits;
+            //var voxel_number = 0;
             var edge_count = 0;
             var triangle_count = 0;
             var triangle_limit = num_triples - 3;
@@ -200,9 +217,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             //   edge_index_triples (first column index i*3)
             //   edge_weight_triples (first column index i*3)
             //   triangle_index_triples
-            for (var i=0; i<I1; i++) {
-                for (var j=0; j<J1; j++) {
-                    for (var k=0; k<K1; k++) {
+            for (var i=I0; i<I1; i++) {
+                for (var j=J0; j<J1; j++) {
+                    for (var k=K0; k<K1; k++) {
+                        var voxel_number = (i * Ioffset) + (j * Joffset) + (k * Koffset);
                         var voxel_index = voxel_indices[voxel_number];
                         // for well behaved surfaces in larger volumes this test mostly fails
                         if (voxel_index > 0)
@@ -264,15 +282,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                                 if (too_many_triangles) { break; }
                             }
                         }
-                        voxel_number += 1
+                        //voxel_number += 1
                     }
                     if (too_many_triangles) { break; }
                     // skip end of row (wraps)
-                    voxel_number += Koffset;
+                    //voxel_number += Koffset;
                 }
                 if (too_many_triangles) { break; }
                 // skip last row (wraps)
-                voxel_number += Joffset;
+                //voxel_number += Joffset;
             }
             // Calculate incident edges and copy their weights for edge triples
             for (var edge_index=0; edge_index<edge_count; edge_index++) {
