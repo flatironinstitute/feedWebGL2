@@ -75,6 +75,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // Allocate edge data structures
             this.num_edges = Math.trunc(s.shrink_factor * grid_size + 1);
             this.num_edge_triples = 3 * this.num_edges;
+            this.edge_number_to_triangle_number = new Int32Array(this.num_edges);
+            this.edge_number_to_triangle_rotation = new Int8Array(this.num_edges);
             this.edge_index_triples = new Int32Array(this.num_edge_triples);
             this.edge_weight_triples = new Float32Array(this.num_edge_triples);
             // Allocate triangle index data structure (xxxx same size as edges?)
@@ -170,8 +172,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // helpers
             // count of max recorded edges
             var num_edges = this.num_edges;
-            // store triangle number used to complete incident edges for each output edge
-            var edge_number_to_triangle_number = new Int32Array(num_edges);
+            // store triangle number and rotation used to complete incident edges for each output edge
+            var edge_number_to_triangle_number = this.edge_number_to_triangle_number;
+            var edge_number_to_triangle_rotation = this.edge_number_to_triangle_rotation;
+            //var edge_number_to_triangle_number = new Int32Array(num_edges);
             // initialize all output arrays to dummy values
             for (var index=0; index<num_triples; index++) {
                 edge_index_triples[index] = -1;
@@ -244,6 +248,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                                             edge_index_triples[first_column] = edge_index;
                                             edge_index_to_compressed_index[edge_index] = edge_count;
                                             edge_number_to_triangle_number[edge_count] = triangle_count;
+                                            edge_number_to_triangle_rotation[edge_count] = v_num;
                                             // calculate center edge interpolation weight (first column)
                                             // inline for speed
                                             var dimension = edge_index % 3;
@@ -297,15 +302,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var triangle_number = edge_number_to_triangle_number[edge_index];
                 if (triangle_number >= 0) {
                     var first_column = 3 * edge_index;
-                    var edge_center_number = edge_index_triples[first_column];
+                    //var edge_center_number = edge_index_triples[first_column];
                     // find the rotation
-                    var rotation = null;
-                    for (var rotation_number=0; rotation_number<3; rotation_number++) {
-                        var triangle_index = triangle_number + rotation_number;
-                        if (triangle_index_triples[triangle_index] == edge_index) {
-                            rotation = TRIANGLE_ROTATIONS[rotation_number];
-                        }
-                    }
+                    var rotation = TRIANGLE_ROTATIONS[edge_number_to_triangle_rotation[edge_index]];
                     // assert rotation is not null...
                     for (var column_index=1; column_index<3; column_index++) {
                         var entry_index = first_column + column_index;
