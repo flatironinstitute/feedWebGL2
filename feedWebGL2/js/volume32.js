@@ -370,12 +370,22 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 camera, radius_multiple, orbit_control, radius, cx, cy, cz, up, offset
             );
         };
+
+        get_points_mesh() {
+            var voxels = this.surface.crossing;
+            return voxels.get_points_mesh({
+                THREE: THREE,
+                colorize: true,
+                size: 0.5,
+            });
+        };
+
         initialize_voxels(container) {
             var s = this.settings;
             if (!this.surface) {
                 this.set_up_surface();
             }
-            var voxels = this.surface.crossing;
+            //var voxels = this.surface.crossing;
             container.empty();
             var canvas = document.createElement( 'canvas' );
             var context = canvas.getContext( 'webgl2', { alpha: false } ); 
@@ -391,11 +401,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.voxelControls = new THREE.OrbitControls(camera, renderer.domElement);
             // then reset the orbit center (and camera parameters again)
             this.reset_camera(camera, null, this.voxelControls);
-            var mesh = voxels.get_points_mesh({
-                THREE: THREE,
-                colorize: true,
-                size: 0.5,
-            });
+            var mesh = this.get_points_mesh();
             var scene = new THREE.Scene();
             scene.add(mesh);
 
@@ -687,10 +693,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 that.tracking = that.track_check.is(":checked");
             });
 
+            this.cutting = false;
             if (this.supports_cutting) {
                 var cut = $("<span> CUT</span>").appendTo(button_area)
                 this.cut_check = $('<input type="checkbox"/>').appendTo(cut);
-                this.cutting = false;
                 this.cut_check.change(function() {
                     that.cutting = that.cut_check.is(":checked");
                 });
@@ -713,8 +719,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 //that.threshold = threshold;
                 if (that.threshold != threshold) {
                     that.threshold = threshold;
-                    that.cut_check.prop("checked", false);
-                    that.cutting = false;
+                    if (that.supports_cutting) {
+                        that.cut_check.prop("checked", false);
+                        that.cutting = false;
+                    }
                 }
                 //that.update_volume();
                 that.redraw();
@@ -792,12 +800,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
             surface.set_seed(xyz_block);
             surface.run();
-            this.voxel_mesh.update_sphere_locations(surface.crossing.compact_locations);
+            //this.voxel_mesh.update_sphere_locations(surface.crossing.compact_locations);
+            this.set_sphere_locations();
             var wires = this.wires_check.is(":checked");
             this.surface_material.wireframe = wires;
             if (surface.check_update_link) {
                 surface.check_update_link();
             }
+        };
+        set_sphere_locations() {
+            var surface = this.surface;
+            this.voxel_mesh.update_sphere_locations(surface.crossing.compact_locations);
         };
         redraw(sync) {
             if (!sync) {
@@ -818,10 +831,68 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         // Volumw implemented using marching cubes
         custom_initialization() {
             // not yet implemented...
-            this.supports_cutting = true;
+            this.supports_cutting = false;
         };
         get_surface(options) { 
             return $.fn.webGL2MarchingCubes(options);
+        };
+        camera_owner() {
+            return this;
+        };
+        reset_three_camera(camera, radius_multiple, orbit_control, radius, cx, cy, cz, up, offset) {
+            // adjust three.js camera to look at current voxels
+            // xxxx cut/paste and modified from feedbackSurface.js
+            var marching = this.surface;
+            up = up || {x: 0, y:1, z:0};
+            offset = offset || {x: 0, y:0, z:1};
+            if (!radius) {
+                if ((!marching) || (!marching.mins)) {
+                    // no points -- punt
+                    return;
+                }
+                [cx, cy, cz] = marching.mid_point;
+                radius = marching.radius;
+            }
+            radius_multiple = radius_multiple || 3;
+            var radius_shift = radius_multiple * radius;
+            camera.position.x = cx + radius_shift * offset.x;
+            camera.position.y = cy + radius_shift * offset.y;
+            camera.position.z = cz + radius_shift * offset.z;
+            camera.up = new THREE.Vector3(up.x, up.y, up.z);
+            camera.lookAt(new THREE.Vector3(cx, cy, cz));
+            if (orbit_control) {
+                orbit_control.target.set(cx, cy, cz);
+                orbit_control.update();
+            }
+            return camera;
+        };
+        set_sphere_locations() {
+            var marching = this.surface;
+            this.voxel_mesh.update_sphere_locations(marching.positions);
+        };
+        get_points_mesh() {
+            // simplified from $.fn.webGL2crossingVoxels.pointsMesh
+            // xxx add autocoloration?
+            debugger;
+            var marching = this.surface;
+            var locations = marching.positions;
+            var geometry = new THREE.BufferGeometry();
+            geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( locations, 3 ) );
+            var [cx, cy, cz] = marching.mid_point;
+            var radius = marching.radius;
+            geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(cx, cy, cz), radius);
+            // xxx magic constant
+            var material = new THREE.PointsMaterial( { 
+                size: 0.5, 
+                color: 0x885588,
+                vertexColors: false 
+            } );
+            var points = new THREE.Points( geometry, material );
+            points.update_sphere_locations = function(locations) {
+                geometry.attributes.position.array = locations;
+                geometry.attributes.position.needsUpdate = true;
+            };
+            return points;
         };
     };
 
@@ -1062,6 +1133,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         return new Volume32(options);
     };
 
+    $.fn.marching_cubes32 = function (options) {
+        return new MarchingCubesVolume32(options);
+    };
+
     $.fn.volume32.example = function (container) {
         var valuesArray, num_rows, num_cols, num_layers, threshold;
         if (false) {
@@ -1101,7 +1176,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
             }
         }
-        var V = container.volume32({
+        var V = container.marching_cubes32({
             valuesArray: valuesArray,
             num_rows: num_rows,
             num_cols: num_cols,

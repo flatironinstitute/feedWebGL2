@@ -119,6 +119,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
             );
             this.voxel_indices = null;
+            this.positions = null;
+            this.normals = null;
+            this.after_run = null;
         };
         run() {
             var indexer = this.indexer;
@@ -127,10 +130,117 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.generate_triangles();
             var positioner = this.positioner;
             positioner.run();
-            this.positions = positioner.positions;
+            var positions = positioner.positions;
+            this.positions = positions;
             this.normals = positioner.normals;
+            // compute basic stats
+            var mins = [positions[0], positions[1], positions[2], ]
+            var maxes = [positions[0], positions[1], positions[2], ]
+            var active_vertex_count = this.active_vertex_count;
+            for (var vertex_num=0; vertex_num<active_vertex_count; vertex_num++) {
+                var first_column = vertex_num * 3;
+                for (var dimension=0; dimension<3; dimension++) {
+                    var vertex_coord = positions[first_column + dimension];
+                    maxes[dimension] = Math.max(maxes[dimension], vertex_coord);
+                    mins[dimension] = Math.min(mins[dimension], vertex_coord);
+                }
+            }
+            var radius = 0;
+            var mid = [0, 0, 0];
+            for (var dimension=0; dimension<3; dimension++) {
+                var m = mins[dimension];
+                var M = maxes[dimension];
+                var diff = M - m;
+                radius = Math.max(radius, diff);
+                mid[dimension] = 0.5 * (M + m);
+            }
+            this.radius = radius;
+            this.mid_point = mid;
+            this.mins = mins;
+            this.maxes = maxes;
+            if (this.after_run) {
+                // post processing callback
+                this.after_run();
+            }
         };
-
+        linearize_vectors(vectors, buffer) {
+            // for backwards compatibility -- de-index positions or normals
+            var num_triangle_triples = this.num_edge_triples;
+            if (!buffer0) {
+                var linearized_length = num_triangle_triples * 3;
+                buffer = Float32Array(linearized_length);
+            }
+            var triangle_index_triples = this.triangle_index_triples;
+            var count = 0;
+            for (var vertex_count=0; vertex_count<num_triangle_triples; vertex_count++) {
+                var vertex_first_column = triangle_index_triples[vertex_count] * 3;
+                for (var offset=0; offset<3; offset++) {
+                    buffer[count] = vectors[vertex_first_column + offset];
+                    count ++;
+                }
+            }
+            return buffer;
+        };
+        get_positions(buffer) {
+            // for compatibility -- get linearized triangle vertex positions.
+            return this.linearize_vectors(this.positions, buffer);
+        };
+        get_normals(buffer) {
+            // for compatibility -- get linearized triangle vertex normals.
+            return this.linearize_vectors(this.normals, buffer);
+        };
+        set_threshold(threshold) {
+            this.settings.threshold = threshold;
+            this.indexer.runner.change_uniform("threshold", [threshold]);
+        }
+        set_grid_limits(grid_mins, grid_maxes) {
+            var s = this.settings;
+            s.grid_min = grid_mins;
+            s.grid_max = grid_maxes;
+        };
+        set_seed (xyz_block) {
+            this.settings.seed_xyzblock = xyz_block;
+        };
+        linked_three_geometry(THREE, clean, normal_binning) {
+            // compatibility...
+            var that = this;
+            var triangle_index_triples = this.triangle_index_triples;
+            var positions = this.positions;
+            var normals = this.normals;
+            var geometry = new THREE.BufferGeometry();
+            //geometry.setIndex(new THREE.Int32BufferAttribute(triangle_index_triples, 3) );
+            geometry.setIndex(Array.from(triangle_index_triples));
+            geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
+            geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
+            var that = this;
+            that.link_needs_update = false;
+            var after_run = function() {
+                that.link_needs_update = true;
+            };
+            that.after_run = after_run;
+            var check_update_link = function () {
+                if (that.link_needs_update) {
+                    var mid = that.mid_point;
+                    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(mid[0], mid[1], mid[2]), that.radius);
+                    geometry.attributes.position.array = positions;
+                    geometry.attributes.position.needsUpdate = true;
+                    geometry.attributes.normal.array = normals;
+                    geometry.attributes.normal.needsUpdate = true;
+                    // https://stackoverflow.com/questions/43449909/update-indices-of-a-buffergeometry-in-three-js
+                    var index_array = geometry.index.array;
+                    var triangle_index_triples = that.triangle_index_triples;
+                    var ntriples = triangle_index_triples.length;
+                    for (var i=0; i<ntriples; i++) {
+                        index_array[i] = triangle_index_triples[i];
+                    }
+                    geometry.index.needsUpdate = true;
+                    that.link_needs_update = false;
+                }
+            }
+            this.check_update_link = check_update_link;
+            geometry.check_update_link = check_update_link;
+            return geometry;
+        }
         create_templates() {
             var [I, J, K] = this.shape;
             var [Ioffset, Joffset, Koffset] = [J*K, K, 1];
@@ -180,7 +290,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             for (var index=0; index<num_triples; index++) {
                 edge_index_triples[index] = -1;
                 edge_weight_triples[index] = -1.0;
-                triangle_index_triples[index] = -1;
+                // initialize all triangle indices to 0, a valid index (degenerate triangles)
+                triangle_index_triples[index] = 0;
             }
             for (var index=0; index<num_edges; index++) {
                 edge_number_to_triangle_number[index] = -1
@@ -297,7 +408,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // skip last row (wraps)
                 //voxel_number += Joffset;
             }
-            // Calculate incident edges and copy their weights for edge triples
+            // Calculate incident edges and copy their weights for edge triples, for computing vertex normals.
             for (var edge_index=0; edge_index<edge_count; edge_index++) {
                 var triangle_number = edge_number_to_triangle_number[edge_index];
                 if (triangle_number >= 0) {
@@ -316,6 +427,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     }
                 }
             }
+            this.active_vertex_count = edge_count;
         };
     };
 
@@ -407,6 +519,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         dump_triples(marching.positions, edge_weight_triples);
         report("Normals");
         dump_triples(marching.normals, edge_weight_triples);
+        report("radius " + marching.radius);
+        report("mins: " + marching.mins);
+        report("maxes: " + marching.maxes);
+        report("mid_point: " + marching.mid_point);
 
         report("Run completed successfully.")
     };
@@ -460,10 +576,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 vertices_per_instance: s.num_edges,
                 uniforms: {
                     // threshold value
-                    threshold: {
-                        vtype: "1fv",
-                        default_value: [s.threshold],
-                    },
+                    //threshold: {
+                    //    vtype: "1fv",
+                    //    default_value: [s.threshold],
+                    //},
                     uRowSize: {
                         vtype: "1iv",
                         default_value: [s.num_cols],
@@ -528,7 +644,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     const marchingCubesPositionerShader = `#version 300 es
 
     // iso-surface theshold
-    uniform float threshold;
+    //uniform float threshold;
 
     // global length of rows
     uniform int uRowSize;
@@ -549,6 +665,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     // feedbacks out
     out vec3 vPosition, vNormal;
 
+    const float very_negative = -1e20;
+
     vec3 interpolated_edge_position(in int edge_index, in float weight) {
         int dimension = edge_index % 3;
         int ijk = edge_index / 3;
@@ -566,7 +684,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
     void main() {
         // defaults
-        vPosition = vec3(-1.0, -1.0, -1.0);
+        vPosition = vec3(very_negative, very_negative, very_negative);
         vNormal = vec3(-1.0, 0.0, 0.0);
         if (indices[0] >= 0) {
             vec3 center = interpolated_edge_position(indices[0], weights[0]);
