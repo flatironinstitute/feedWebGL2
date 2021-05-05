@@ -125,6 +125,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.voxel_indices = null;
             this.positions = null;
             this.normals = null;
+            this.linearized_positions = null;
+            this.linearized_normals = null;
             this.after_run = null;
         };
         run() {
@@ -167,31 +169,43 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 this.after_run();
             }
         };
-        linearize_vectors(vectors, buffer) {
+        get_linearized_vectors(vectors, buffer, clean) {
             // for backwards compatibility -- de-index positions or normals
             var num_triangle_triples = this.num_edge_triples;
-            if (!buffer0) {
-                var linearized_length = num_triangle_triples * 3;
-                buffer = Float32Array(linearized_length);
+            var linearized_length = num_triangle_triples * 3;
+            if (!buffer) {
+                buffer = new Float32Array(linearized_length);
             }
             var triangle_index_triples = this.triangle_index_triples;
             var count = 0;
-            for (var vertex_count=0; vertex_count<num_triangle_triples; vertex_count++) {
+            var drawn_vertex_count = this.drawn_vertex_count;
+            for (var vertex_count=0; vertex_count<drawn_vertex_count; vertex_count++) {
                 var vertex_first_column = triangle_index_triples[vertex_count] * 3;
                 for (var offset=0; offset<3; offset++) {
                     buffer[count] = vectors[vertex_first_column + offset];
                     count ++;
                 }
             }
+            if (clean) {
+                // zero out remainder
+                while (count < linearized_length) {
+                    buffer[count] = 0;
+                    count ++;
+                }
+            }
             return buffer;
         };
-        get_positions(buffer) {
-            // for compatibility -- get linearized triangle vertex positions.
-            return this.linearize_vectors(this.positions, buffer);
+        get_positions(buffer, clean) {
+            //  get linearized triangle vertex positions.
+            buffer = buffer || this.linearized_positions;
+            this.linearized_positions = this.get_linearized_vectors(this.positions, buffer, clean);
+            return this.linearized_positions;
         };
-        get_normals(buffer) {
-            // for compatibility -- get linearized triangle vertex normals.
-            return this.linearize_vectors(this.normals, buffer);
+        get_normals(buffer, clean) {
+            //  get linearized triangle vertex normals.
+            buffer = buffer || this.linearized_normals;
+            this.linearized_normals = this.get_linearized_vectors(this.normals, buffer, clean);
+            return this.linearized_normals;
         };
         set_threshold(threshold) {
             this.settings.threshold = threshold;
@@ -205,7 +219,41 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         set_seed (xyz_block) {
             this.settings.seed_xyzblock = xyz_block;
         };
+        
         linked_three_geometry(THREE, clean, normal_binning) {
+            var that = this;
+            var linearized_positions = this.get_positions();
+            var linearized_normals = this.get_normals();
+            var geometry = new THREE.BufferGeometry();
+            geometry.setAttribute( 'position', new THREE.BufferAttribute( linearized_positions, 3 ) );
+            geometry.setAttribute( 'normal', new THREE.BufferAttribute( linearized_normals, 3 ) );
+            geometry.setDrawRange( 0, that.drawn_vertex_count );
+            that.link_needs_update = false;
+            var after_run = function() {
+                that.link_needs_update = true;
+            };
+            that.after_run = after_run;
+            var check_update_link = function () {
+                if (that.link_needs_update) {
+                    var mid = that.mid_point;
+                    var linearized_positions = this.get_positions();
+                    var linearized_normals = this.get_normals();
+                    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(mid[0], mid[1], mid[2]), that.radius);
+                    geometry.attributes.position.array = linearized_positions;
+                    geometry.attributes.position.needsUpdate = true;
+                    geometry.attributes.normal.array = linearized_normals;
+                    geometry.attributes.normal.needsUpdate = true;
+                    geometry.setDrawRange( 0, that.drawn_vertex_count );
+                    that.link_needs_update = false;
+                }
+            }
+            this.check_update_link = check_update_link;
+            geometry.check_update_link = check_update_link;
+            return geometry;
+        }
+
+        xxx_linked_three_geometry_indexed(THREE, clean, normal_binning) {
+            // this doesn't work for large models on my Mac Laptop.  I think it's a GPU limitation...
             // compatibility...
             var that = this;
             var triangle_index_triples = this.triangle_index_triples;
@@ -233,12 +281,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     geometry.attributes.normal.array = normals;
                     geometry.attributes.normal.needsUpdate = true;
                     // https://stackoverflow.com/questions/43449909/update-indices-of-a-buffergeometry-in-three-js
+                    /*
                     var index_array = geometry.index.array;
                     var triangle_index_triples = that.triangle_index_triples;
                     var ntriples = triangle_index_triples.length;
                     for (var i=0; i<ntriples; i++) {
                         index_array[i] = triangle_index_triples[i];
                     }
+                    */
+                    geometry.index.array = triangle_index_triples;
                     geometry.index.needsUpdate = true;
                     that.link_needs_update = false;
                 }
@@ -247,6 +298,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             geometry.check_update_link = check_update_link;
             return geometry;
         }
+
         create_templates() {
             var [I, J, K] = this.shape;
             var [Ioffset, Joffset, Koffset] = [J*K, K, 1];
@@ -272,7 +324,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
         generate_triangles() {
             // input arrays
-            debugger;
             var s = this.settings;
             var threshold = s.threshold;
             var voxel_indices = this.voxel_indices;
@@ -406,6 +457,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                                         triangle_index_triples[triangle_index] = compressed_index;
                                     }
                                     triangle_count += 3;
+                                    //this.DEBUG_check_triangle_indices(triangle_count, edge_count);
                                 }
                                 if (too_many_triangles) { break; }
                             }
@@ -440,6 +492,82 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 }
             }
             this.active_vertex_count = edge_count;
+            this.drawn_vertex_count = Math.min(triangle_count, triangle_limit);
+        };
+        DEBUG_check_triangle_indices(triangle_count, edge_count) {
+            var s = this.settings;
+            var threshold = s.threshold;
+            //var voxel_indices = this.voxel_indices;
+            //var assignment_offsets = this.assignment_offsets;
+            var valuesArray = s.valuesArray;
+            // output arrays
+            var num_triples = this.num_edge_triples;
+            var edge_index_triples = this.edge_index_triples;
+            var edge_weight_triples = this.edge_weight_triples;
+            var triangle_index_triples = this.triangle_index_triples;
+            // count of all possible edges
+            var nedges = this.nedges;
+            var edge_index_to_compressed_index = this.edge_index_to_compressed_index
+            // helpers
+            // count of max recorded edges
+            var edge_limit = this.edge_limit;
+            // store triangle number and rotation used to complete incident edges for each output edge
+            var edge_number_to_triangle_number = this.edge_number_to_triangle_number;
+            var edge_number_to_triangle_rotation = this.edge_number_to_triangle_rotation;
+            var [I, J, K] = this.shape;
+            var [Ioffset, Joffset, Koffset] = [J*K, K, 1];
+            var anomaly = function(message) {
+                console.log(message);
+                debugger;
+                // don't throw an error to permit debug test runs
+            };
+            if ((triangle_count % 3) != 0) {
+                anomaly("bad triangle count: " + triangle_count);
+            }
+            var triangle_edge_indices = [-1, -1, -1];
+            var edge_vertices = [];
+            for (var v_num=0; v_num < 3; v_num++) {
+                var triangle_index = triangle_count + v_num;
+                var compressed_index = triangle_index_triples[triangle_index];
+                if ((compressed_index < 0) || (compressed_index >= edge_count)) {
+                    anomaly("bad compressed_index: " + compressed_index);
+                }
+                var edge_first_column = compressed_index * 3;
+                var edge_index = edge_index_triples[edge_first_column];
+                if ((edge_index < 0) || (edge_index > nedges)) {
+                    anomaly("bad edge_index: "+ edge_index);
+                }
+                triangle_edge_indices[v_num] = edge_index;
+                var dimension = edge_index % 3;
+                // ijk is sometimes not the same as voxel number.
+                var ijk = (edge_index / 3) | 0; //Math.floor(edge_index / 3);
+                var k0 = ijk % K;
+                var ij = (ijk / K) | 0;
+                var j0 = ij % J;
+                var i0 = (ij / J) | 0;
+                var P0 = [i0, j0, k0];
+                var P1 = [i0, j0, k0];
+                P1[dimension] += 1;
+                edge_vertices.push(P1);
+                edge_vertices.push(P0);
+            }
+            // check the edge vertices
+            var mins = [...[edge_vertices[0]]];
+            var maxes = [...mins];
+            for (var i=0; i<edge_vertices.length; i++) {
+                var v = edge_vertices[i];
+                for (var dim=0; dim<3; dim++) {
+                    var vdim = v[dim];
+                    mins[dim] = Math.min(mins[dim], vdim);
+                    maxes[dim] = Math.max(maxes[dim], vdim);
+                }
+            }
+            for (var dim=0; dim<3; dim++) {
+                var diff = maxes[dim] - mins[dim];
+                if ((diff < 0) || (diff > 1)) {
+                    anomaly("bad vertex diff" + [diff, dim]);
+                }
+            }
         };
     };
 
