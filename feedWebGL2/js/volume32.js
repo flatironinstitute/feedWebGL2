@@ -867,8 +867,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             return camera;
         };
         set_sphere_locations() {
-            var marching = this.surface;
-            this.voxel_mesh.update_sphere_locations(marching.positions);
+            //var marching = this.surface;
+            this.voxel_mesh.update_sphere_locations();
         };
         get_points_mesh() {
             // simplified from $.fn.webGL2crossingVoxels.pointsMesh
@@ -876,21 +876,27 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             debugger;
             var marching = this.surface;
             var locations = marching.positions;
+            var colors = marching.colors;
             var geometry = new THREE.BufferGeometry();
             geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( locations, 3 ) );
+            geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 3 ) );
             var [cx, cy, cz] = marching.mid_point;
             var radius = marching.radius;
             geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(cx, cy, cz), radius);
+            geometry.setDrawRange( 0, marching.active_vertex_count );
             // xxx magic constant
             var material = new THREE.PointsMaterial( { 
                 size: 0.5, 
-                color: 0x885588,
-                vertexColors: false 
+                //color: 0x885588,
+                vertexColors: true,
             } );
             var points = new THREE.Points( geometry, material );
-            points.update_sphere_locations = function(locations) {
-                geometry.attributes.position.array = locations;
+            points.update_sphere_locations = function(s) {
+                geometry.attributes.position.array = marching.positions;
                 geometry.attributes.position.needsUpdate = true;
+                geometry.attributes.color.array = marching.colors;
+                geometry.attributes.color.needsUpdate = true;
+                geometry.setDrawRange( 0, marching.active_vertex_count );
             };
             return points;
         };

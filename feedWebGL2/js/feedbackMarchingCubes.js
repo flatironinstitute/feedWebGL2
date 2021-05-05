@@ -125,6 +125,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.voxel_indices = null;
             this.positions = null;
             this.normals = null;
+            this.colors = null;
             this.linearized_positions = null;
             this.linearized_normals = null;
             this.after_run = null;
@@ -139,6 +140,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var positions = positioner.positions;
             this.positions = positions;
             this.normals = positioner.normals;
+            this.colors = positioner.colors;
             // compute basic stats
             var mins = [positions[0], positions[1], positions[2], ]
             var maxes = [positions[0], positions[1], positions[2], ]
@@ -703,6 +705,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 feedbacks: {
                     vPosition: {num_components: 3},
                     vNormal: {num_components: 3},
+                    vColor: {num_components: 3},
                 },
             });
 
@@ -778,6 +781,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // automatically load the indices into the output array
             this.positions = this.runner.feedback_array("vPosition", this.positions);
             this.normals = this.runner.feedback_array("vNormal", this.normals);
+            this.colors = this.runner.feedback_array("vColor", this.colors);
         }
     };
 
@@ -803,7 +807,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     in ivec3 indices;
 
     // feedbacks out
-    out vec3 vPosition, vNormal;
+    out vec3 vPosition, vNormal, vColor;
 
     const float very_negative = -1e20;
 
@@ -826,6 +830,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         // defaults
         vPosition = vec3(very_negative, very_negative, very_negative);
         vNormal = vec3(-1.0, 0.0, 0.0);
+        vColor = vec3(1.0, 0, 0);
         if (indices[0] >= 0) {
             vec3 center = interpolated_edge_position(indices[0], weights[0]);
             vec3 left = interpolated_edge_position(indices[1], weights[1]);
@@ -833,9 +838,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             vec3 v_right = right - center;
             vec3 v_left = left - center;
             vec3 v_norm = cross(v_right, v_left);
+            v_norm = normalize(v_norm);
             // uncomment
             vPosition = center;
-            vNormal = normalize(v_norm);
+            vNormal = v_norm;
+            vColor = 0.5 * (1.0 + v_norm);
         }
         // debug only
         //vPosition = weights;
