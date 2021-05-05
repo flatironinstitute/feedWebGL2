@@ -72,20 +72,20 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // Set up fixed length data arrays:
             // voxel indexing (xxxx this could be unsigned byte...)
             //this.voxel_indices = new Int32Array(grid_size);
-            // Allocate edge data structures
-            this.num_edges = Math.trunc(s.shrink_factor * grid_size + 1);
+            // Allocate edge data structures -- each originates 3 edges
+            this.edge_limit = 3 * Math.trunc(s.shrink_factor * grid_size + 1);
             // XXXX DEBUG ONLY
-            //this.num_edges = 7;
+            //this.edge_limit = 7;
             // XXXX end debug
-            this.num_edge_triples = 3 * this.num_edges;
-            this.edge_number_to_triangle_number = new Int32Array(this.num_edges);
-            this.edge_number_to_triangle_rotation = new Int8Array(this.num_edges);
+            this.num_edge_triples = 3 * this.edge_limit;
+            this.edge_number_to_triangle_number = new Int32Array(this.edge_limit);
+            this.edge_number_to_triangle_rotation = new Int8Array(this.edge_limit);
             // must be UInt32Array to get three.js to use the index correctly
             this.edge_index_triples = new Uint32Array(this.num_edge_triples);
             this.edge_weight_triples = new Float32Array(this.num_edge_triples);
             // Allocate triangle index data structure (xxxx same size as edges?)
             this.triangle_index_triples = new Uint32Array(this.num_edge_triples);
-            // edge indices: 3 directions for each voxel
+            // totaal number of edges: 3 directions for each voxel
             this.nedges = grid_size * 3;
             this.edge_index_to_compressed_index = new Int32Array(this.nedges);
             // set up tables for this shape
@@ -107,7 +107,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.positioner = $.fn.webGL2MarchingCubePositioner(
                 {
                     feedbackContext: s.feedbackContext,
-                    num_edges: this.num_edges,
+                    edge_limit: this.edge_limit,
                     edge_index_triples: this.edge_index_triples,
                     // matching edge weight interpolations, ravelled
                     edge_weight_triples: this.edge_weight_triples,
@@ -272,6 +272,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
         generate_triangles() {
             // input arrays
+            debugger;
             var s = this.settings;
             var threshold = s.threshold;
             var voxel_indices = this.voxel_indices;
@@ -287,11 +288,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var edge_index_to_compressed_index = this.edge_index_to_compressed_index
             // helpers
             // count of max recorded edges
-            var num_edges = this.num_edges;
+            var edge_limit = this.edge_limit;
             // store triangle number and rotation used to complete incident edges for each output edge
             var edge_number_to_triangle_number = this.edge_number_to_triangle_number;
             var edge_number_to_triangle_rotation = this.edge_number_to_triangle_rotation;
-            //var edge_number_to_triangle_number = new Int32Array(num_edges);
+            //var edge_number_to_triangle_number = new Int32Array(edge_limit);
             // initialize all output arrays to dummy values
             for (var index=0; index<num_triples; index++) {
                 edge_index_triples[index] = -1;
@@ -299,7 +300,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // initialize all triangle indices to 0, a valid index (degenerate triangles)
                 triangle_index_triples[index] = 0;
             }
-            for (var index=0; index<num_edges; index++) {
+            for (var index=0; index<edge_limit; index++) {
                 edge_number_to_triangle_number[index] = -1
             }
             for (var index=0; index<nedges; index++) {
@@ -364,7 +365,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                                     triangle_edge_indices[v_num] = edge_index;
                                     // initialize the edge data structures (first column) if needed
                                     if (edge_index_to_compressed_index[edge_index] < 0) {
-                                        if (edge_count < num_edges) {
+                                        if (edge_count < edge_limit) {
                                             // populate "center" entry for edge triple
                                             var first_column = 3 * edge_count;
                                             edge_index_triples[first_column] = edge_index;
@@ -552,7 +553,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // matching edge weight interpolations, ravelled
                 edge_weight_triples: null,
                 // number of edges (max)
-                num_edges: -1,
+                edge_limit: -1,
                 // volume dimensions
                 num_rows: null,
                 num_cols: null,
@@ -584,7 +585,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
             this.runner = this.program.runner({
                 num_instances: 1,
-                vertices_per_instance: s.num_edges,
+                vertices_per_instance: s.edge_limit,
                 uniforms: {
                     // threshold value
                     //threshold: {
