@@ -74,13 +74,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             //this.voxel_indices = new Int32Array(grid_size);
             // Allocate edge data structures
             this.num_edges = Math.trunc(s.shrink_factor * grid_size + 1);
+            // XXXX DEBUG ONLY
+            //this.num_edges = 7;
+            // XXXX end debug
             this.num_edge_triples = 3 * this.num_edges;
             this.edge_number_to_triangle_number = new Int32Array(this.num_edges);
             this.edge_number_to_triangle_rotation = new Int8Array(this.num_edges);
-            this.edge_index_triples = new Int32Array(this.num_edge_triples);
+            // must be UInt32Array to get three.js to use the index correctly
+            this.edge_index_triples = new Uint32Array(this.num_edge_triples);
             this.edge_weight_triples = new Float32Array(this.num_edge_triples);
             // Allocate triangle index data structure (xxxx same size as edges?)
-            this.triangle_index_triples = new Int32Array(this.num_edge_triples);
+            this.triangle_index_triples = new Uint32Array(this.num_edge_triples);
             // edge indices: 3 directions for each voxel
             this.nedges = grid_size * 3;
             this.edge_index_to_compressed_index = new Int32Array(this.nedges);
@@ -209,7 +213,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var normals = this.normals;
             var geometry = new THREE.BufferGeometry();
             //geometry.setIndex(new THREE.Int32BufferAttribute(triangle_index_triples, 3) );
-            geometry.setIndex(Array.from(triangle_index_triples));
+            //geometry.setIndex(Array.from(triangle_index_triples));
+            var index = new THREE.Uint32BufferAttribute(triangle_index_triples, 1);
+            geometry.setIndex(index);
             geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
             geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
             var that = this;
@@ -346,6 +352,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                             for (var t_num=0; t_num<triangles_edge_offsets.length; t_num++) {
                                 var triangle_edge_offset = triangles_edge_offsets[t_num];
                                 var triangle_ok = true;
+                                // debug:
+                                triangle_edge_indices[0] = 0;
+                                triangle_edge_indices[1] = 0;
+                                triangle_edge_indices[2] = 0;
+                                // end debug
                                 for (var v_num=0; v_num < 3; v_num++) {
                                     // determine the edge index for this vertex
                                     var edge_offset = triangle_edge_offset[v_num];
