@@ -227,7 +227,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         };
         get_positions(buffer) {
             // get positions for iso-surface triangles and streamline triangles
-            this.surface_positions = this.surface.get_positions(this.surface_positions);
+            // xxxx could optimize to not copy/draw degenerate triangles
+            var clean = true;
+            this.surface_positions = this.surface.get_positions(this.surface_positions, clean);
             this.stream_positions = this.stream_lines.vertex_positions(this.stream_positions);
             var length = this.surface_positions.length + this.stream_positions.length;
             if (buffer) {
@@ -287,6 +289,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var cycle_duration = s.stream_lines_parameters.cycle_duration;
                 var interpolate = (for_time % cycle_duration)/cycle_duration;
                 this.stream_lines.run(interpolate);
+                // xxxx could optimize to not draw degenerate triangles...
                 var positions = this.get_positions();
                 var normals = this.get_normals();
                 //var positions = this.get_positions(geometry.attributes.position.array);
