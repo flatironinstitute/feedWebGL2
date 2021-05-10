@@ -47,8 +47,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 //after_run_callback: null,   // call this after each run.
                 // method of conversion from grid coordinates to world coordinates
                 location: "std", 
-                // parameters needed by location method if any.
+                // parameters needed by location method if any. (not used yet)
                 location_parameters: null,
+                // seed for "cut" feature [i, j, k, block], no cut if null
+                seed_xyzblock: null,
             }, options);
             var s = this.settings;
             // for now don't support multiple blocks...
@@ -362,6 +364,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // main logic:
             var [I, J, K] = this.shape;
             var [Ioffset, Joffset, Koffset] = [J*K, K, 1];
+            // Compute array index limits
             var high_limits = [I-1, J-1, K-1];
             var low_limits = [0, 0, 0]
             var grid_min = s.grid_min;
@@ -381,6 +384,72 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var [I0, J0, K0] = low_limits;
             var [I1, J1, K1] = high_limits;
             //var voxel_number = 0;
+            var seed_xyzblock = s.seed_xyzblock;
+            if (seed_xyzblock) {
+                var seed_ok = true;
+                for (var dim=0; dim<3; dim++) {
+                    seed_ok = seed_ok && (low_limits[dim]<=seed_xyzblock[dim]) && (high_limits[dim]>seed_xyzblock[dim])
+                }
+                if (!seed_ok) {
+                    console.log("Seed for surface cut not in range", low_limits, seed_xyzblock, high_limits);
+                } else {
+                    // Cut out voxels connected to the seed index, using transitive closure
+                    var [i, j, k, b] = seed_xyzblock;
+                    var voxel_number = (i * Ioffset) + (j * Joffset) + (k * Koffset);
+                    var horizon = [voxel_number];
+                    if (voxel_indices[voxel_number] < 0) {
+                        throw new Error("Invalid negative voxel index before cutting.")
+                    }
+                    voxel_indices[voxel_number] = - voxel_indices[voxel_number];
+                    // visit all voxels with positive voxel numbers reachable from horizon.
+                    // When the loop is complete negative voxel_indices represent visited voxels.
+                    while (horizon.length > 0) {
+                        var next_horizon = [];
+                        for (var index=0; index<horizon.length; index++) {
+                            var ijk = horizon[index];
+                            // mark ijk as visited (negate the voxel index)
+                            //voxel_indices[ijk] = - voxel_indices[ijk] NOT HERE!
+                            // look for unvisited adjacent voxels...
+                            var k0 = ijk % K;
+                            var ij = (ijk / K) | 0;
+                            var j0 = ij % J;
+                            var i0 = (ij / J) | 0;
+                            for (var di=-1; di<=1; di++) {
+                                var i1 = i0 + di;
+                                if ((i1 >= I0) && (i1 < I1)) {
+                                    for (var dj=-1; dj<=1; dj++) {   
+                                        var j1 = j0 + dj;
+                                        if ((j1 >= J0) && (j1 < J1)) {
+                                            for (var dk=-1; dk<=1; dk++) {
+                                                var k1 = k0 + dk;
+                                                if ((k1 >= K0) && (k1 < K1)) {
+                                                    var ijk1 = (i1 * Ioffset) + (j1 * Joffset) + (k1 * Koffset);
+                                                    var test = voxel_indices[ijk1];
+                                                    if (test > 0) {
+                                                        voxel_indices[ijk1] = - test;  // mark ijk1 visited HERE.
+                                                        next_horizon.push(ijk1)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        horizon = next_horizon;
+                    }
+                    // Finally, negate all voxel numbers in range -- invalidate all unvisited voxels.
+                    for (var i=I0; i<I1; i++) {
+                        for (var j=J0; j<J1; j++) {
+                            for (var k=K0; k<K1; k++) {
+                                var voxel_number = (i * Ioffset) + (j * Joffset) + (k * Koffset);
+                                voxel_indices[voxel_number] = - voxel_indices[voxel_number];
+                            }
+                        }
+                    }
+                }
+            }
+            // Main loops: For all voxels with positive voxel indices generate edge interpolations and triangles (up to index limits).
             var edge_count = 0;
             var triangle_count = 0;
             var triangle_limit = num_triples - 3;
@@ -397,7 +466,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     for (var k=K0; k<K1; k++) {
                         var voxel_number = (i * Ioffset) + (j * Joffset) + (k * Koffset);
                         var voxel_index = voxel_indices[voxel_number];
-                        // for well behaved surfaces in larger volumes this test mostly fails
+                        // for well behaved surfaces in larger volumes this test fails "almost everywhere"
                         if (voxel_index > 0)
                         {
                             var edge_base_index = voxel_number * 3;

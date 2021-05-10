@@ -834,7 +834,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         // Volumw implemented using marching cubes
         custom_initialization() {
             // not yet implemented...
-            this.supports_cutting = false;
+            this.supports_cutting = true;
         };
         get_surface(options) { 
             return $.fn.webGL2MarchingCubes(options);
