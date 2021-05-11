@@ -17,7 +17,8 @@ required_javascript_modules = [
     local_files.vendor_path("js_lib/OrbitControls.js"),
     local_files.vendor_path("js_lib/three_sprite_text.js"),
     local_files.vendor_path("js/feedWebGL.js"),
-    local_files.vendor_path("js/feedbackSurfaces.js"),
+    local_files.vendor_path("js/feedbackSurfaces.js"),  # deprecate?
+    local_files.vendor_path("js/feedbackMarchingCubes.js"),
     local_files.vendor_path("js/streamLiner.js"),
     local_files.vendor_path("js/volume32.js"),
 ]
@@ -97,7 +98,8 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         )
         self.options = options
         self.js_init("""
-            element.V = element.volume32(options);
+            //element.V = element.volume32(options);
+            element.V = element.marching_cubes32(options);
         """, options=options)
 
     def sync(self, message="Volume widget is ready"):
