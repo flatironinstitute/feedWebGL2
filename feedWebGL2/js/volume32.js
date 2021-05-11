@@ -1105,7 +1105,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var mouse_up = function(event) {
                 //cl("mouse_up")
                 event_info_dump(event);
-                that.draggine = null;
+                that.dragging = null;
                 volume.dragging_slice = null;
             };
             this.container.on_canvas_event("mouseup", mouse_up);
