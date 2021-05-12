@@ -7,7 +7,8 @@ from . import local_files
 import numpy as np
 import jp_proxy_widget
 from jp_doodle.data_tables import widen_notebook
-from jp_doodle import dual_canvas
+#from jp_doodle import dual_canvas
+from jp_doodle import bounded_value_slider
 
 # need to add camera positioning support
 # https://stackoverflow.com/questions/14271672/moving-the-camera-lookat-and-rotations-in-three-js
@@ -42,7 +43,7 @@ def load_requirements(widget=None, silent=True, additional=()):
     # load additional jQuery plugin code.
     all_requirements = list(required_javascript_modules) + list(additional)
     widget.load_js_files(all_requirements)
-    dual_canvas.load_requirements(widget, silent=silent)
+    bounded_value_slider.load_requirements(widget)
     if not silent:
         widget.element.html("<div>Requirements for <b>volume viewer</b> have been loaded.</div>")
         display(widget)
