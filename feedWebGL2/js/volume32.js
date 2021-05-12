@@ -594,14 +594,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
             var contour_side = width * 0.5;
             var slice_side = contour_side * 0.5;
-            //var slider_breadth = slice_portion - slice_side;
+            var slider_breadth = slice_side * 0.1;
             container.empty();
             container.css({
                 "display": "grid",
-                "grid-template-columns": `auto ${slice_side}px ${slice_side}px ${contour_side}px`,
+                "grid-template-columns": `${slider_breadth}px ${slice_side}px ${slice_side}px ${contour_side}px`,
                 "grid-template-rows": `${slice_side}px ${slice_side}px auto auto`,
                 "grid-gap": "3px",
             });
+
             // Bounded value sliders for I, J, K.
             var j_slider_div = $("<div/>").appendTo(container);
             j_slider_div.html("JS");
@@ -611,6 +612,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 "grid-row": "1",
                 "height": `${slice_side}px`,
             });
+            var slider_length = slice_side;
+            this.j_slider = new DimSlider(this, 1, j_slider_div, false, slider_length, slider_breadth);
+
             var k_slider_div = $("<div/>").appendTo(container);
             k_slider_div.html("KS");
             k_slider_div.css({
@@ -619,6 +623,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 "grid-row": "2",
                 "height": `${slice_side}px`,
             });
+            this.k_slider = new DimSlider(this, 0, k_slider_div, false, slider_length, slider_breadth);
+
             var i_slider_div = $("<div/>").appendTo(container);
             i_slider_div.html("IS");
             i_slider_div.css({
@@ -626,6 +632,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 "grid-column": "2",
                 "grid-row": "3",
             });
+            this.i_slider = new DimSlider(this, 2, i_slider_div, true, slider_length, slider_breadth);
+
+            this.dim_sliders = [this.i_slider, this.j_slider, this.k_slider];
+
             // volume slices
             var x_div = $("<div/>").appendTo(container);
             x_div.html("X DIV HERE");
@@ -870,6 +880,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 sync = this.sync_check.is(':checked');
             }
             this.slice_displays.map(x => x.draw_frame());
+            this.dim_sliders.map(x => x.update_display());
             this.update_slice_info();
             this.kji_mesh.position.set(...this.kji);
             if (sync) {
@@ -953,6 +964,61 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
             return points;
         };
+    };
+
+    class DimSlider {
+        constructor(volume, dimension, container, horizontal, length, breadth) {
+            this.volume = volume;
+            this.dimension = dimension;
+            this.container = container;
+            var shape = volume.shape;
+            var maximum = shape[dimension];
+            //container.html("D" + dimension + " :: " + maximum);
+            var aspect_ratio = breadth * 1.0 / length;
+            var on_change = this.on_change_handler();
+            container.empty();
+            this.slider = container.bounded_value_slider({
+                horizontal: horizontal,
+                length: length,
+                aspect_ratio: aspect_ratio,
+                maximum: maximum,
+                //on_change: on_change,
+                on_stop: on_change,
+                call_on_init: false,
+                integral: true,
+            });
+        };
+        on_change_handler() {
+            var that = this;
+            var volume = this.volume;
+            var dimension = this.dimension;
+            return function(values) {
+                var maxes = volume.grid_maxes;
+                var mins = volume.grid_mins;
+                var kji = volume.kji;
+                maxes[dimension] = values.HIGH;
+                kji[dimension] = values.CURRENT;
+                mins[dimension] = values.LOW;
+                if (values.last_changed == "CURRENT") {
+                    var threshold = volume.array_value(kji);
+                    volume.set_threshold(threshold);
+                } else {
+                    volume.redraw();
+                }
+                //volume.redraw();
+            };
+        };
+        update_display() {
+            var volume = this.volume;
+            var dimension = this.dimension;
+            var maxes = volume.grid_maxes;
+            var mins = volume.grid_mins;
+            var kji = volume.kji;
+            var slider = this.slider;
+            slider.update_model("HIGH", maxes[dimension]); 
+            slider.update_model("LOW", mins[dimension]); 
+            slider.update_model("CURRENT", kji[dimension]);
+        }
     };
 
     var cross_hairs_normal = "rgba(0,0,0,0.5)";
@@ -1179,7 +1245,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // attach to mouseout jQuery event (not canvas event)
             //this.container.on("mouseout", mouse_up);
             */
-            this.container.fit(null, 10);
+            this.container.fit(null, 5);
         };
         set_kji(event) {
             // set the kji focus and the threshold and redraw
