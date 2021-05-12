@@ -594,18 +594,44 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
             var contour_side = width * 0.5;
             var slice_side = contour_side * 0.5;
+            //var slider_breadth = slice_portion - slice_side;
             container.empty();
             container.css({
                 "display": "grid",
-                "grid-template-columns": `${slice_side}px ${slice_side}px ${contour_side}px`,
-                "grid-template-rows": `${slice_side}px ${slice_side}px auto`,
+                "grid-template-columns": `auto ${slice_side}px ${slice_side}px ${contour_side}px`,
+                "grid-template-rows": `${slice_side}px ${slice_side}px auto auto`,
                 "grid-gap": "3px",
             });
+            // Bounded value sliders for I, J, K.
+            var j_slider_div = $("<div/>").appendTo(container);
+            j_slider_div.html("JS");
+            j_slider_div.css({
+                "background-color": "#feF",
+                "grid-column": "1",
+                "grid-row": "1",
+                "height": `${slice_side}px`,
+            });
+            var k_slider_div = $("<div/>").appendTo(container);
+            k_slider_div.html("KS");
+            k_slider_div.css({
+                "background-color": "#feF",
+                "grid-column": "1",
+                "grid-row": "2",
+                "height": `${slice_side}px`,
+            });
+            var i_slider_div = $("<div/>").appendTo(container);
+            i_slider_div.html("IS");
+            i_slider_div.css({
+                "background-color": "#feF",
+                "grid-column": "2",
+                "grid-row": "3",
+            });
+            // volume slices
             var x_div = $("<div/>").appendTo(container);
             x_div.html("X DIV HERE");
             x_div.css({
                 "background-color": "#fee",
-                "grid-column": "2",
+                "grid-column": "3",
                 "grid-row": "1",
                 "height": `${slice_side}px`,
             });
@@ -616,7 +642,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             y_div.html("Y DIV HERE");
             y_div.css({
                 "background-color": "#efe",
-                "grid-column": "1",
+                "grid-column": "2",
                 "grid-row": "2",
                 "height": `${slice_side}px`,
             });
@@ -627,7 +653,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             z_div.html("Z DIV HERE");
             z_div.css({
                 "background-color": "#eef",
-                "grid-column": "1",
+                "grid-column": "2",
                 "grid-row": "1",
                 "height": `${slice_side}px`,
             });
@@ -638,7 +664,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             dots_div.html("DOTS DIV HERE");
             dots_div.css({
                 "background-color": "#fef",
-                "grid-column": "2",
+                "grid-column": "3",
                 "grid-row": "2",
                 "height": `${slice_side}px`,
             });
@@ -648,7 +674,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             contour_div.html("CONTOUR DIV HERE");
             contour_div.css({
                 "background-color": "#eff",
-                "grid-column": "3",
+                "grid-column": "4",
                 "grid-row": "1 / 3",
                 "height": `${contour_side}px`,
             });
@@ -658,11 +684,29 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
             // info area
             this.info_area = $("<div/>").appendTo(container);
+            this.info_area.css({
+                "background-color": "#eff",
+                "grid-column": "3",
+                "grid-row": "3",
+            });
             this.info = $("<div/>").appendTo(this.info_area);
-            this.slice_info = $("<div/>").appendTo(this.info_area);
+
+            this.slice_info = $("<div/>").appendTo(container);
+            
+            this.slice_info.css({
+                "background-color": "#ffe",
+                "grid-column": "3",
+                "grid-row": "4",
+            });
 
             // button area
             var button_area = $("<div/>").appendTo(container);
+            
+            button_area.css({
+                "background-color": "#eff",
+                "grid-column": "4",
+                "grid-row": "4",
+            });
             this.zoom_out_button = $("<button>Zoom out</button>").appendTo(button_area);
             this.zoom_out_button.click(function() { that.zoom_out(); });
 
@@ -707,6 +751,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
 
             // threshold slider
             var slider =  $("<div/>").appendTo(container);
+            slider.css({
+                "background-color": "#eff",
+                "grid-column": "4",
+                "grid-row": "3",
+            });
             slider.css("background-image", "linear-gradient(to right, blue, yellow)");
             var bmin = this.buffer[0];
             var bmax = this.buffer[0];
@@ -741,6 +790,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.threshold_slider = slider;
 
             this.show_info();
+            this.update_slice_info();
             //this.animate()
             // render on change
             this.voxelControls.addEventListener('change', function() { 
@@ -1119,6 +1169,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // attach to mouseout jQuery event (not canvas event)
             //this.container.on("mouseout", mouse_up);
             */
+            this.container.fit(null, 10);
         };
         set_kji(event) {
             // set the kji focus and the threshold and redraw
