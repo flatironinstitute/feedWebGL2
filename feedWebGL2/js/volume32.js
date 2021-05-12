@@ -63,7 +63,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.shape = [s.num_cols, s.num_rows, s.num_layers];
             this.grid_mins = [0, 0, 0];
             this.grid_maxes = this.shape.slice();
-            this.dragging_slice = null;
+            //this.dragging_slice = null;
             this.threshold = s.threshold;
 
             var size = s.num_rows * s.num_cols * s.num_layers;
@@ -751,7 +751,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         set_tracking(onoff) {
             this.tracking = onoff;
             this.track_check.prop("checked", onoff);
-            this.dragging_slice = null;
+            //this.dragging_slice = null;
         };
         set_threshold(value) {
             value = value || this.bmin
@@ -953,10 +953,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             [d0, d1] = this.shape;
             var grid_mins = [volume.grid_mins[i0], volume.grid_mins[i1]];
             var grid_maxes = [volume.grid_maxes[i0], volume.grid_maxes[i1]];
+            /*
             if (volume.dragging_slice == that) {
                 // update the min/max marker rects
-                this.Mins.change({x: grid_mins[0], y: grid_mins[1]});
-                this.Maxes.change({x: grid_maxes[0], y: grid_maxes[1]});
+                //this.Mins.change({x: grid_mins[0], y: grid_mins[1]});
+                //this.Maxes.change({x: grid_maxes[0], y: grid_maxes[1]});
                 this.m0.change({x: grid_mins[0], y:0, w:-grid_mins[0], h:d1,});
                 this.m1.change({x: 0, y:grid_mins[1], w:d0, h:-grid_mins[1],});
                 this.M0.change({x: grid_maxes[0], y:0, w:d0-grid_maxes[0], h:d1,});
@@ -964,6 +965,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 // don't replot the dragging frame
                 return;
             }
+            */
             var m = this.maxdim;
             var blue = [0,0,255,255]
             var yellow = [255,255,0,255]
@@ -1013,6 +1015,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // max boundaries
             this.M0 = frame.frame_rect({x: grid_maxes[0], y:0, w:d0-grid_maxes[0], h:d1, color:"rgba(255,255,255,0.5)", name:true});
             this.M1 = frame.frame_rect({x: 0, y:grid_maxes[1], w:d0, h:d1-grid_maxes[1], color:"rgba(255,255,255,0.5)", name:true});
+
+            /*
             // boundary draggers
             var Mins = frame.rect({x: grid_mins[0], y: grid_mins[1], w:-20, h:-20, color:"black", name:"Mins"})
             var Maxes = frame.rect({x: grid_maxes[0], y: grid_maxes[1], w:20, h:20, color:"black", name:"Maxes"})
@@ -1031,21 +1035,23 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 var dragging = that.dragging;
                 volume.info.html("event name: " + name + ", type: " + type + ", dragging=" +dragging);
             };
+            */
 
             var click = function(event) {
-                event_info_dump(event);
+                //event_info_dump(event);
                 volume.set_tracking(false);
                 //cl("click: " + event.canvas_name);
-                if (volume.dragging_slice == that) {
-                    //cl("click: let mouse up handler deal with it...");
-                    return;
-                }
+                //if (volume.dragging_slice == that) {
+                //    //cl("click: let mouse up handler deal with it...");
+                //    return;
+                //}
                 //cl("click: resetting kji");
-                volume.dragging_slice = null;
+                //volume.dragging_slice = null;
                 that.set_kji(event);
             };
             event_rect.on("click", click);
 
+            /*
             //this.dragging = null;
             var mouse_down = function(event) {
                 event_info_dump(event);
@@ -1112,6 +1118,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             //this.container.on_canvas_event("mouseout", mouse_up);
             // attach to mouseout jQuery event (not canvas event)
             //this.container.on("mouseout", mouse_up);
+            */
         };
         set_kji(event) {
             // set the kji focus and the threshold and redraw
