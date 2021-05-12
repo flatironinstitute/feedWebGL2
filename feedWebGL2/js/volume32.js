@@ -1101,6 +1101,16 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             };
             event_rect.on("click", click);
 
+
+            var mouse_move = function(event) {
+                //event_info_dump(event);
+                if (volume.tracking) {
+                    that.set_kji(event);
+                    return;
+                }
+            };
+            event_rect.on("mousemove", mouse_move);
+
             /*
             //this.dragging = null;
             var mouse_down = function(event) {
