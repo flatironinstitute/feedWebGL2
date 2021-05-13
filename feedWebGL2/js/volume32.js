@@ -832,7 +832,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 )
             );
             var [cx, cy, cz] = center;
-            var r = Math.max(cx, cy, cz)  * 2 + 2;
+            var r = Math.max(cx, cy, cz)  * 2;
             var crossing = this.surface.crossing;
             var shift = 2.0;
             //crossing.reset_three_camera(this.surface_camera, shift, null, r, cx, cy, cz);
@@ -937,7 +937,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         get_points_mesh() {
             // simplified from $.fn.webGL2crossingVoxels.pointsMesh
             // xxx add autocoloration?
-            debugger;
             var marching = this.surface;
             var locations = marching.positions;
             var colors = marching.colors;
@@ -1086,7 +1085,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var blue = [0,0,255,255]
             var yellow = [255,255,0,255]
             frame.reset_frame();
-            var event_rect = frame.frame_rect({x:-1, y:-1, w:d0+1, h:d1+1, color:"rgba(0,0,0,0)", name:"event_rect"})
+            //var event_rect = frame.frame_rect({x:-1, y:-1, w:d0+1, h:d1+1, color:"rgba(0,0,0,0)", name:"event_rect"})
             var slice_info = this.volume.array_slice(this.volume.kji, this.dimensions);
             this.container.name_image_data(self.name, slice_info.bytes, slice_info.cols, slice_info.rows, blue, yellow);
             var ff = this.frame_factor;
@@ -1152,6 +1151,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 volume.info.html("event name: " + name + ", type: " + type + ", dragging=" +dragging);
             };
             */
+
+            // rectangle for receiving events -- on top of all other artifacts
+            var event_rect = frame.frame_rect({x:-1, y:-1, w:d0+1, h:d1+1, color:"rgba(0,0,0,0)", name:"event_rect"})
 
             var click = function(event) {
                 //event_info_dump(event);

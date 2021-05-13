@@ -589,7 +589,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var [Ioffset, Joffset, Koffset] = [J*K, K, 1];
             var anomaly = function(message) {
                 console.log(message);
-                debugger;
+                //debugger;
                 // don't throw an error to permit debug test runs
             };
             if ((triangle_count % 3) != 0) {
@@ -649,7 +649,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
     ]
 
     $.fn.webGL2MarchingCubes.example = function(container) {
-        debugger;
         var gl = $.fn.feedWebGL2.setup_gl_for_example(container);
 
         var context = container.feedWebGL2({
