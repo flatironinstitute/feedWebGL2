@@ -77,7 +77,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
 
     def set_options(
             self, num_rows, num_cols, num_layers, 
-            threshold=0, shrink_factor=0.2, method="tetrahedra",
+            threshold=0, shrink_factor=0.2, method="cubes",
             sorted=True,
             camera_up=None, 
             camera_offset=None,
@@ -86,8 +86,9 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             dj=None,
             dk=None,
             ):
-        methods = ("tetrahedra", "diagonal")
+        methods = ("tetrahedra", "diagonal", "cubes")
         assert method in methods, "method must be in " + repr(methods)
+        self.method = method
         options = jp_proxy_widget.clean_dict(
             num_rows=num_rows, num_cols=num_cols, num_layers=num_layers, 
             threshold=threshold, shrink_factor=shrink_factor, method=method,
@@ -99,8 +100,11 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         )
         self.options = options
         self.js_init("""
-            //element.V = element.volume32(options);
-            element.V = element.marching_cubes32(options);
+            if (options.method == "cubes") {
+                element.V = element.marching_cubes32(options);
+            } else {
+                element.V = element.volume32(options);
+            }
         """, options=options)
 
     def sync(self, message="Volume widget is ready"):
@@ -136,7 +140,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
 
     def load_3d_numpy_array(
             self, ary, 
-            threshold=None, shrink_factor=None, chunksize=10000000, method="tetrahedra",
+            threshold=None, shrink_factor=None, chunksize=10000000, method="cubes",
             sorted=True,
             camera_up=dict(x=0, y=1, z=0),
             camera_offset=dict(x=0, y=0, z=1),
@@ -405,7 +409,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         swatch.fit(0.6)
 
 def display_isosurface(
-        for_array, threshold=None, save=False, method="tetrahedra",
+        for_array, threshold=None, save=False, method="cubes",
         sorted=True
         ):
     W = Volume32()
