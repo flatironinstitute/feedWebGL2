@@ -844,7 +844,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var s = this.settings;
             // the avg dimension offset
             var offset = (this.vnorm(s.di) + this.vnorm(s.dj) + this.vnorm(s.dk)) / 3.0;
-            return offset * 0.5;
+            return offset;
         };
         focus_volume() {
             var crossing = this.surface.crossing;
