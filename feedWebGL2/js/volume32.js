@@ -1045,7 +1045,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.vname = names[d1];
             var vshape = volume.shape;
             this.shape = [vshape[d0], vshape[d1]];
-            var maxdim = Math.max(...this.shape);
+            var [s0, s1] = this.shape;
+            //var maxdim = Math.max(...this.shape);
             this.container = container;
             this.side = side;
             var config = {
@@ -1056,10 +1057,11 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             container.dual_canvas_helper(config);
             this.frame = container.frame_region(
                 0, 0, side, side,
-                0, 0, maxdim, maxdim
+                0, 0, s0, s1,
             );
-            this.frame_factor = side * 1.0 / maxdim;
-            this.maxdim = maxdim;
+            this.wframe_factor = side * 1.0 / s0;
+            this.hframe_factor = side * 1.0 / s1;
+            this.radius_factor = Math.min(this.wframe_factor, this.hframe_factor);
             this.dragging = null;
             //this.cross_hairs_color = "rgba(0,0,0,0.5)";
             this.draw_frame();
@@ -1087,32 +1089,35 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 return;
             }
             */
-            var m = this.maxdim;
+            //var m = this.maxdim;
             var blue = [0,0,255,255]
             var yellow = [255,255,0,255]
             frame.reset_frame();
             //var event_rect = frame.frame_rect({x:-1, y:-1, w:d0+1, h:d1+1, color:"rgba(0,0,0,0)", name:"event_rect"})
             var slice_info = this.volume.array_slice(this.volume.kji, this.dimensions);
             this.container.name_image_data(self.name, slice_info.bytes, slice_info.cols, slice_info.rows, blue, yellow);
-            var ff = this.frame_factor;
-            frame.named_image({image_name: self.name, x:0, y:0, w:ff*slice_info.cols, h:ff*slice_info.rows})
+            //var ff = this.frame_factor;
+            var wf = this.wframe_factor;
+            var hf = this.hframe_factor;
+            frame.named_image({image_name: self.name, x:0, y:0, w:wf*slice_info.cols, h:hf*slice_info.rows})
             frame.lower_left_axes({
                 min_x:0, min_y:0, max_x:this.shape[0], max_y:this.shape[1],
                 x_anchor: 0, y_anchor:0, max_tick_count:3,
             });
             var font =  "normal 20px Courier"
-            frame.text({x:-0.1*m, y:d1 * 0.5, align:"right", text: this.vname, font:font})
-            frame.text({y:-0.1*m, x:d0 * 0.5, text: this.hname, degrees:-90, font:font})
+            frame.text({x:-0.1*d0, y:d1 * 0.5, align:"right", text: this.vname, font:font})
+            frame.text({y:-0.1*d1, x:d0 * 0.5, text: this.hname, degrees:-90, font:font})
             // circles marking crossing pixels
             var threshold = this.volume.threshold;
             var mins = slice_info.mins;
             var maxes = slice_info.maxes;
+            var rf = this.radius_factor;
             for (var i=0; i<d0; i++) {
                 for (var j=0; j<d1; j++) {
                     var m = mins[j][i];
                     var M = maxes[j][i];
                     if ((m <= threshold) && (M >= threshold)) {
-                        frame.frame_circle({x: i + 0.5, y: j + 0.5, fill:false, color:"white", r:0.35});
+                        frame.circle({x: i + 0.5, y: j + 0.5, fill:false, color:"white", r: rf * 0.35});
                     }
                 }
             }
@@ -1127,8 +1132,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             frame.line({x1:hx, y1:0, x2:hx, y2:d1, color:cccolor, lineWidth:2});
             //frame.line({x1:0, y1:hy, x2:d0, y2:hy, color:this.cross_hairs_color});
             //frame.line({x1:hx, y1:0, x2:hx, y2:d1, color:this.cross_hairs_color});
-            frame.frame_circle({x: hx, y:hy, r:0.25, color:"rgba(255,255,255,0.7)"});
-            frame.frame_circle({x: hx, y:hy, r:0.25, color:"black", fill:false});
+            frame.circle({x: hx, y:hy, r:rf * 0.25, color:"rgba(255,255,255,0.7)"});
+            frame.circle({x: hx, y:hy, r:rf * 0.25, color:"black", fill:false});
 
             // min boundaries
             this.m0 = frame.frame_rect({x: grid_mins[0], y:0, w:-grid_mins[0], h:d1, color:"rgba(255,255,255,0.5)", name:true});
