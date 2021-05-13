@@ -379,7 +379,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             return voxels.get_points_mesh({
                 THREE: THREE,
                 colorize: true,
-                size: 0.5,
+                size: this.point_size(),
             });
         };
 
@@ -840,6 +840,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.reset_camera(this.surface_camera, shift, null, r, cx, cy, cz);
             this.reset_camera(this.voxel_camera, shift, this.voxelControls, r, cx, cy, cz);
         }
+        point_size() {
+            var s = this.settings;
+            // the avg dimension offset
+            var offset = (this.vnorm(s.di) + this.vnorm(s.dj) + this.vnorm(s.dk)) / 3.0;
+            return offset * 0.5;
+        };
         focus_volume() {
             var crossing = this.surface.crossing;
             var shift = 2.0;
@@ -949,7 +955,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             geometry.setDrawRange( 0, marching.active_vertex_count );
             // xxx magic constant
             var material = new THREE.PointsMaterial( { 
-                size: 0.5, 
+                size: this.point_size(), 
                 //color: 0x885588,
                 vertexColors: true,
             } );
