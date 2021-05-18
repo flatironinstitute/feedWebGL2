@@ -68,9 +68,15 @@ element.ready_sync = function (message) {
 
 element.buffer_to_send = null;
 
-element.send_snapshot_surface = function() {
+element.send_voxel_pixels = function () {
+    var current_pixels = element.V.get_voxel_pixels();
+    element.send_snapshot_surface(current_pixels);
+};
+
+element.send_snapshot_surface = function(current_pixels) {
+    debugger;
     //console.log("send snapsnot surface");
-    var current_pixels = element.V.get_pixels();
+    current_pixels = current_pixels || element.V.get_pixels();
     var data = current_pixels.data;
     // store the buffer for sending in chunks
     element.buffer_to_send = data;
@@ -151,13 +157,21 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
 
     def get_pixels(self, chunksize=RECV_BUFFER_SIZE_DEFAULT, sanity_limit=20):
         #print ("get pixels", chunksize)
+        self.element.send_snapshot_surface(None)
+        return self.await_pixels(chunksize, sanity_limit)
+
+    def get_cloud_pixels(self, chunksize=RECV_BUFFER_SIZE_DEFAULT, sanity_limit=20):
+        #print ("get pixels", chunksize)
+        self.element.send_voxel_pixels(None)
+        return self.await_pixels(chunksize, sanity_limit)
+
+    def await_pixels(self, chunksize, sanity_limit):
         self.snapshot_info = None
         self.buffer_sanity_limit = sanity_limit
         self.buffer_chunk_size = chunksize
         self.buffer_chunks = []
         self.received_end = None
         # XXXX bug in js_proxy_widget -- must call with argument ???
-        self.element.send_snapshot_surface(123)
         #self.js_init("""
         #    debugger;
         #    element.send_snapshot_surface();
