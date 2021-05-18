@@ -310,7 +310,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var s = this.settings;
             container.empty();
             var canvas = document.createElement( 'canvas' );
-            var context = canvas.getContext( 'webgl2', { alpha: false } ); 
+            //var context = canvas.getContext( 'webgl2', { alpha: false } ); 
+            var context = get_webgl_context(canvas);
             var renderer = new THREE.WebGLRenderer( { canvas: canvas, context: context } );
             renderer.setPixelRatio( window.devicePixelRatio );
             renderer.setClearColor(s.SurfaceClearColorHex, 1);
@@ -335,6 +336,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 THREE.sprite_text(scene, "Y", [[0, ln1, 0]], ln2, "green", 20);
                 THREE.sprite_text(scene, "Z", [[0, 0, ln1]], ln2, "blue", 20);
             }
+            this.surface_context = context;
             this.surface_material = material;
             this.surface_scene = scene;
             this.surface_mesh = mesh;
@@ -344,6 +346,17 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.reset_camera(camera);
             this.sync_cameras();
             //renderer.render( scene, camera );
+        };
+        get_pixels(context) {
+            debugger;
+            context = context || this.surface_context;
+            var width = context.drawingBufferWidth;
+            var height = context.drawingBufferHeight;
+            var buffer = new Uint8Array(4 * height * width);
+            var format = context.RGBA;
+            var typ = context.UNSIGNED_BYTE;
+            context.readPixels(0, 0, width, height, format, typ, buffer)
+            return {"data": buffer, "height": height, "width": width};
         };
         sync_cameras() {
             var surface_camera = this.surface_camera;
@@ -391,7 +404,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             //var voxels = this.surface.crossing;
             container.empty();
             var canvas = document.createElement( 'canvas' );
-            var context = canvas.getContext( 'webgl2', { alpha: false } ); 
+            //var context = canvas.getContext( 'webgl2', { alpha: false } ); 
+            var context = get_webgl_context(canvas);
             var renderer = new THREE.WebGLRenderer( { canvas: canvas, context: context } );
             renderer.setClearColor(s.VoxelClearColorHex, 1);
             renderer.setPixelRatio( window.devicePixelRatio );
@@ -417,6 +431,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             scene.add(c);
 
             //renderer.render( scene, camera );
+            this.voxel_context = context;
             this.voxel_scene = scene;
             this.voxel_mesh = mesh;
             this.voxel_camera = camera;
@@ -425,6 +440,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             //this.voxelControls.userZoom = false;
             this.voxelControls.update();
             this.voxelClock = new THREE.Clock();
+        };
+        get_voxel_pixels() {
+            return this.get_pixels(this.voxel_context);
         };
         add_mesh(vertices, normals, color, wireframe) {
             // add a basic mesh to the surface_scene
@@ -1284,6 +1302,15 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
         };
     };
+
+    // helper: get a properly configured webgl context
+    var get_webgl_context = function(from_canvas) {
+        var options = {
+            alpha: false,  // I think three.js requires this?
+            preserveDrawingBuffer: true,  // make it possible get the pixel data after render.
+        }
+        return from_canvas.getContext( 'webgl2', options ); 
+    }
 
     $.fn.volume32 = function (options) {
         return new Volume32(options);
