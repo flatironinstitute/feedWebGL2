@@ -63,7 +63,41 @@ element.ready_sync = function (message) {
     }
     return true;
 };
+
+// XXXX this buffer send functionality should be folded into jp_proxy_widget eventually...
+
+element.buffer_to_send = null;
+
+element.send_snapshot_surface = function() {
+    //console.log("send snapsnot surface");
+    var current_pixels = element.V.get_pixels();
+    var data = current_pixels.data;
+    // store the buffer for sending in chunks
+    element.buffer_to_send = data;
+    receive_snapshot_info({length: data.length, width: current_pixels.width, height: current_pixels.height});
+    return true;
+};
+
+element.send_buffer_chunk = function (start, end) {
+    //console.log("send buffer chunk", start, end);
+    var data = element.buffer_to_send;
+    if (!data) {
+        throw new Error("No send buffer initialized");
+    }
+    start = start || 0;
+    end = end  || 0;
+    var len = data.length;
+    end = Math.min(end, len);
+    var chunk = data.slice(start, end);
+    receive_bytes({start: start, end: end, length: len, data: chunk,});
+    return true;
+};
+
+
 """
+
+RECV_BUFFER_SIZE_DEFAULT = 2000000
+SEND_BUFFER_SIZE_DEFAULT = 10000000
 
 class Volume32(jp_proxy_widget.JSProxyWidget):
 
@@ -71,7 +105,11 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         super(Volume32, self).__init__(*pargs, **kwargs)
         load_requirements(self)
         self.element.html("Uninitialized Volume widget.")
-        self.js_init(MISC_JAVASCRIPT_SUPPORT)
+        callbacks = {
+            "receive_snapshot_info": self.receive_snapshot_info,
+            "receive_bytes": self.receive_bytes,
+        }
+        self.js_init(MISC_JAVASCRIPT_SUPPORT, **callbacks)
         self.options = None
         self.data = None
 
@@ -111,6 +149,107 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         "Wait for the widget to initialize before proceeding. Widget must be displayed!"
         self.element.ready_sync(message).sync_value()
 
+    def get_pixels(self, chunksize=RECV_BUFFER_SIZE_DEFAULT, sanity_limit=20):
+        #print ("get pixels", chunksize)
+        self.snapshot_info = None
+        self.buffer_sanity_limit = sanity_limit
+        self.buffer_chunk_size = chunksize
+        # XXXX bug in js_proxy_widget -- must call with argument ???
+        self.element.send_snapshot_surface(123)
+        #self.js_init("""
+        #    debugger;
+        #    element.send_snapshot_surface();
+        #""")
+        data = self.await_buffer_to_send()
+        snapshot_info = self.snapshot_info
+        assert type(snapshot_info) is dict, "Snapshot info not received: " + repr(snapshot_info)
+        snapshot_info["data"] = data
+        return self.pixels_to_array(snapshot_info)
+
+    def pixels_to_array(self, imgData):
+        from jp_proxy_widget.hex_codec import hex_to_bytearray
+        #print ("pixels to array", imgData.keys())
+        w = imgData["width"]
+        h = imgData["height"]
+        data = imgData["data"]
+        data_bytes = hex_to_bytearray(data)
+        array1d = np.array(data_bytes, dtype=np.ubyte)
+        bytes_per_pixel = 4
+        image_array = array1d.reshape((h, w, bytes_per_pixel))
+        # invert the first index to get the rows "right side up" (???)
+        return image_array[::-1]
+
+    buffer_chunk_size = RECV_BUFFER_SIZE_DEFAULT  # default
+    buffer_sanity_limit = 150
+    buffer_length = None
+    received_end = None
+    received_count = 0
+
+    def request_first_buffer_chunk(self, length, sanity_limit=None):
+        "prepare to receive buffer from JS."
+        #print ("request first buffer", length, sanity_limit)
+        if sanity_limit is not None:
+            self.buffer_sanity_limit = sanity_limit
+        self.buffer_chunks = []
+        self.buffer_length = length
+        self.received_end = None
+        start = 0
+        end = self.buffer_chunk_size
+        self.element.send_buffer_chunk(start, end)
+        #self.js_init("""
+        #    // should be equivalent???
+        #    element.send_buffer_chunk(start, end);
+        #""", start=start, end=end)
+
+    def await_buffer_to_send(self):
+        "poll until the buffer arrives. Construct the buffer from chunks and return it."
+        from jupyter_ui_poll import run_ui_poll_loop
+        #print("await buffer")
+        run_ui_poll_loop(self.buffer_has_arrived)
+        ##pr("polling loop complete")
+        # return combined string
+        data = "".join(self.buffer_chunks)
+        return data
+
+    def buffer_has_arrived(self):
+        #import time  # DEBUG ONLY
+        received_end = self.received_end
+        if received_end is not None:
+            length = self.buffer_length
+            ##pr (" check", received_end, "against", length)
+            #time.sleep(0.1)  # DEBUG ONLY!
+            if received_end >= length:
+                ##pr ("  BUFFER HAS ARRIVED.")
+                return True   # buffer has arrived
+        ##pr (" keep polling...")
+        return None   # missing data, continue polling
+
+    def receive_snapshot_info(self, info, sanity_limit=None):
+        #pr("receive snapshot info", info, sanity_limit)
+        self.snapshot_info = info
+        length = info["length"]
+        # request the first chunk
+        self.request_first_buffer_chunk(length, sanity_limit)
+
+    def receive_bytes(self, info):
+        self.received_count += 1
+        if self.received_count > self.buffer_sanity_limit:
+            raise ValueError("buffer sanity callback limit exceeded.")
+        data = info["data"]
+        end = info["end"]
+        ##pr(self.received_count, "receive bytes", len(data), "ending at", end, "expecting", self.buffer_length)
+        self.received_end = end
+        self.buffer_chunks.append(data)
+        # request the next chunk
+        next_start = end
+        next_end = end + self.buffer_chunk_size
+        if next_start < self.buffer_length:
+            self.element.send_buffer_chunk(next_start, next_end)
+            #self.js_init("""
+            #    // should be equivalent???
+            #    element.send_buffer_chunk(start, end);
+            #""", start=next_start, end=next_end)
+
     def set_slice_ijk(self, i, j, k, change_threshold=False):
         self.element.V.set_slice_ijk(i, j, k, change_threshold)
 
@@ -140,7 +279,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
 
     def load_3d_numpy_array(
             self, ary, 
-            threshold=None, shrink_factor=None, chunksize=10000000, method="cubes",
+            threshold=None, shrink_factor=None, chunksize=SEND_BUFFER_SIZE_DEFAULT, method="cubes",
             sorted=True,
             camera_up=dict(x=0, y=1, z=0),
             camera_offset=dict(x=0, y=0, z=1),
@@ -255,10 +394,10 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             normals_hex = self.element.get_normals_bytes().sync_value()
         def float32array(hex):
             # xxx this should be a convenience provided in jp_proxy_widget...
-            #print("converting", hex)
+            ##pr("converting", hex)
             bytes_array = hex_to_bytearray(hex)
             floats_array = np.frombuffer(bytes_array, dtype=np.float32)
-            #print("got floats", floats_array)
+            ##pr("got floats", floats_array)
             assert floats_array.shape == (float_count,), "bad data received " + repr((floats_array.shape, float_count))
             triangles = float_count // 9
             return floats_array.reshape((triangles, 3, 3))
@@ -386,7 +525,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
                             color = "#770" # darker yellow
                         corners = ary[x:x+2, y:y+2, z:z+2]
                         fill = False 
-                        #print(x,y,z, corners.max(), threshold, corners.min())
+                        ##pr(x,y,z, corners.max(), threshold, corners.min())
                         if crossing:
                             if (corners.max() > threshold and corners.min() < threshold):
                                 fill = True
