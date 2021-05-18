@@ -347,8 +347,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.sync_cameras();
             //renderer.render( scene, camera );
         };
+        get_voxel_pixels() {
+            return this.get_pixels(self.voxel_context);
+        };
         get_pixels(context) {
-            debugger;
             context = context || this.surface_context;
             var width = context.drawingBufferWidth;
             var height = context.drawingBufferHeight;
