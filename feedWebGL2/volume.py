@@ -154,6 +154,8 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         self.snapshot_info = None
         self.buffer_sanity_limit = sanity_limit
         self.buffer_chunk_size = chunksize
+        self.buffer_chunks = []
+        self.received_end = None
         # XXXX bug in js_proxy_widget -- must call with argument ???
         self.element.send_snapshot_surface(123)
         #self.js_init("""
