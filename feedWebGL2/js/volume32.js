@@ -261,7 +261,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             buffer.set(this.stream_normals, this.surface_normals.length);
             return buffer;
         };
-        surface_geometry() {
+        get_surface_geometry() {
             var s = this.settings;
             var geometry;
             if (s.stream_lines_parameters) {
@@ -321,7 +321,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var camera = new THREE.PerspectiveCamera( 45, container.width()/container.height(), 0.1, 10000 );
             var material = new THREE.MeshNormalMaterial( {  } );
             material.side = THREE.DoubleSide;
-            var geometry = this.surface_geometry();
+            var geometry = this.get_surface_geometry();
             var mesh = new THREE.Mesh( geometry,  material );
             var scene = new THREE.Scene();
             scene.add(mesh);
