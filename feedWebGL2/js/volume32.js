@@ -21,7 +21,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 threshold: 0,  // value at contour
                 // when getting compact arrays
                 // shrink the array sizes by this factor.
-                shrink_factor: 0.2,
+                //shrink_factor: 0.2,
                 di: [1,0,0],
                 dj: [0,1,0],
                 dk: [0,0,1],
@@ -35,7 +35,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 camera_distance_multiple: 2.0,
                 axis_length: true,  // auto assign length
                 ijk_highlight_corners: null,
-                shrink_factor: null,   // how much to strink internal buffers in [0..1]
+                //shrink_factor: null,   // how much to strink internal buffers in [0..1] LEAVE UNSET
             }, options);
             var s = this.settings;
             var context = s.feedbackContext;
