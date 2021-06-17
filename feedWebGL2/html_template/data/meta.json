@@ -1,0 +1,35 @@
+{
+    "num_rows": 5,
+    "num_cols": 5,
+    "num_layers": 5,
+    "threshold": -0.2756681655013124,
+    "method": "cubes",
+    "camera_up": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+    },
+    "camera_offset": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+    },
+    "camera_distance_multiple": 2.0,
+    "di": [
+        1,
+        0,
+        0
+    ],
+    "dj": [
+        0,
+        1,
+        0
+    ],
+    "dk": [
+        0,
+        0,
+        1
+    ],
+    "_description": "Volume array meta data.",
+    "binary_file": "bytes.bin"
+}
