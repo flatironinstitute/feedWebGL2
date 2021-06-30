@@ -6,7 +6,7 @@ var metadata_path = null;
 var binary_path = null;
 var json_data = null;
 var binary_data = null;
-var width = 1200;
+var default_width = 1200;
 
 var setup = function (mpath, bpath) {
     debugger;
@@ -53,6 +53,7 @@ var create_volume_viz = function () {
     debugger;
     info.html("creating visualization.")
     var options = json_data;  // copy ?
+    var width = options.width || default_width;
     volume = element.marching_cubes32(options);
     volume.buffer = binary_data;
     element.V_container = $("<div/>").appendTo(element);
