@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>VOLUME</title>
+    <meta charset="utf-8" />
+    <link
+      href="https://fonts.googleapis.com/css?family=Open+Sans"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./css/normalize.css" />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <link rel="stylesheet" href="./css/jquery-ui.css" />
+  </head>
+
+  <body class="container">
+
+
+    <h4>VOLUME</h4>
+    <p>
+        INTRODUCTION
+    </p>
+
+    <div id="info">Data not yet loaded.</div>
+
+    <div id="VolumeTarget">
+        The volume visualization should load here...
+    </div>
+
+    <script src="./js_lib/three.min.js"></script>
+    <script src="./js_lib/OrbitControls.js"></script>
+    <script src="./js_lib/jquery.min.js"></script>
+    <script src="./js_lib/jquery-ui.js"></script>
+    <script src="./js/feedWebGL.js"></script>
+    <script src="./js/feedbackSurfaces.js"></script>
+    <script src="./js/volume32.js"></script>
+    <script src="./js/feedbackMarchingCubes.js"></script>
+    <script src="./js_lib/canvas_2d_widget_helper.js"></script>
+    <script src="./js_lib/dual_canvas_helper.js"></script>
+    <script src="./js_lib/bounded_value_slider.js"></script>
+    <script src="./js_lib/three_sprite_text.js"></script>
+    <script src="./main.js"></script>
+
+    <script>
+      setup("data/meta.json", "data/bytes.bin")
+    </script>
+
+  </body>
+</html>
