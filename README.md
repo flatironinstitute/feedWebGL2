@@ -2,9 +2,24 @@
 
 [![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/AaronWatters/feedWebGL2/master)
 
-Tools for implementing WebGL2 feedback processing stages for graphics preprocessing or other purposes
+The `feedWebGL2` package is a collection of Javascript and Python code that include tools for
+exploring scientific data such as the volume viewer shown below.
+
 
 <img src="magnetic_field.png" width=600/>
+
+These tools use GPU accelerated WebGL2 transform/feedback processing stages to provide
+graphics preprocessing or other general purpose computations.
+
+## What exploration tools?
+
+There are a number of tools implemented in the package.
+
+[Probably the most useful tools are the Javascript/WebGL volume explorer and the Jupyter widget
+wrapper for the isosurface volume viewer.](volume_viewer.md)
+
+
+## What is transform/feedback?
 
 <blockquote>
 <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebGLTransformFeedback"><em>
