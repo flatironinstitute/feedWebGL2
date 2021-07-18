@@ -62,7 +62,7 @@ difficult to interpret using only two dimensional projections.
 The following screenshot shows 
 <a href="https://aaronwatters.github.io/feedWebGL2/torus_html/volume.html" target="_blank" >
 a "standalone HTML" instance of the volume viewer published on github pages. Follow this link
-to open "https://aaronwatters.github.io/feedWebGL2/torus_html/volume.html" in a new window or tab.</a>
+to open "aaronwatters.github.io/feedWebGL2/torus_html/volume.html" in a new window or tab.</a>
 
 <img src="star_volume.png" width=1000/>
 
