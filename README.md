@@ -52,6 +52,12 @@ The package includes a Python package embedding of the Javascript functionality 
 
 ## How to install the Python package in development mode
 
+This package is still experimental.  In order to easily include enhancements and bugfixes
+I recommend installing the package in development mode at this time.  If you have any problems
+with the installation procedure below please let me know by creating 
+<a href="https://github.com/flatironinstitute/feedWebGL2/issues">
+an issue in the repository.</a>
+
 The Python package for <code>feedWebGL2</code> defines Jupyter widget interfaces to underlying
 Javascript based features.  To use the Python package you will need a recent version of Jupyter
 configured with Python 3 kernels.  Please use `git` to clone the repository in order to
