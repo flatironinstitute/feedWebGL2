@@ -43,9 +43,11 @@ such as:
 
 * <a href="https://github.com/flatironinstitute/Fermi_surface_visualization">Fermi surface data explorers</a>.
 
+<!--- Comment out doc link for now
 <a href="https://flatironinstitute.github.io/feedWebGL2/">
 Go to demos and additional information.
 </a>
+-->
 
 
 The package includes a Python package embedding of the Javascript functionality into Jupyter using widgets.
