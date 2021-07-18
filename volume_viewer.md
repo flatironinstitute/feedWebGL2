@@ -16,13 +16,14 @@ and mathematical properties of the array.
 
 ## The presentation
 
-The viewer presents three views of the volume: two dimensional slices (I-J, I-K, and J-K),
-an isosurface solid view, and an isosurface dot cloud view.  In addition to the views the
+The viewer presents three kinds of views of the volume: two dimensional slices (I-J, I-K, and J-K),
+a three dimensional isosurface solid view, and an isosurface dot cloud view.  In addition to the views the
 viewer provides a number of interactive controls and mouse interactions which allow the user
 to change the volume views.  It is hoped that by interacting with the controls
-and examining the views the user will.
+and examining the views the user will gain insight into the mathematical and geometric
+characteristics of the volume data.
 
-At all times the presentation has an isosurface threshold value and an IJK focus point.
+At all times the presentation records an isosurface threshold value and an IJK index focus point.
 In the image below the threshold is 8.13 and the IJK focus is (51, 34, 42).
 
 ## I-J, I-K, and J-K slices
@@ -56,7 +57,12 @@ user to "see through" the figure.
 The image below is a screen shot of the volume viewer displaying a volume which would be
 difficult to interpret using only two dimensional projections.
 
-LINKS TO DEMOS AND SOURCES...
+## Screenshot
+
+The following screenshot shows 
+<a href="https://aaronwatters.github.io/feedWebGL2/torus_html/volume.html" target="_blank" >
+a "standalone HTML" instance of the volume viewer published on github pages. Follow this link
+to open "https://aaronwatters.github.io/feedWebGL2/torus_html/volume.html" in a new window or tab.</a>
 
 <img src="star_volume.png" width=1000/>
 
