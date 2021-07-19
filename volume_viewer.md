@@ -99,14 +99,113 @@ mousing over the IJ, JK, or IK slice views.  Restore normal mode by clicking on 
 
 ### Slicing
 
+It is possible to view a sub-section of the whole volume by adjusting the I, J, and K sliders.
+In the image below the user has selected to view the subsection 
+described by the numeric python slicing notation `Array[0:43, 0:42, 47:80]`.
+
 <img src="annotated_sliced.png" width=1000/>
+
+Move the lower and upper boundary rectangles in the sliders to bound the sub-volume of interest.
 
 ### Disabling automatic syncing
 
-the 
+By default the three dimensional views sync automatically with the two dimensional slices and other
+controls.  For larger arrays the 3d rendering may become cumbersomely slow, and this can make the
+tool difficult to use.  **Uncheck the auto checkbox** to decouple the 3d rendering from the other controls.
+To sync the 3d views with the current settings **press the sync button**.
 
 ### Wireframe mode
 
+**Check the wires checkbox** to enable a wireframe view of the isosurface render area.  The wireframe
+view can allow the user to see through the figure to some extent in order to see internal features
+which are obscured in a solid render.
+
+# Creating a viewer
+
+There are a number of ways to create a volume viewer.  The text below describes how to create a
+viewer in a Jupyter widget, or as a stand alone HTML page using Python.
+
 ### Making a viewer in a Jupyter notebook
 
+The `volume` module allows the user to display a volume viewer as a Jupyter widget
+within a Jupyter notebook.  The following interaction displays a
+numeric Python array `A` in a volume
+viewer using the default settings.
+
+```Python
+from feedWebGL2 import volume
+
+volume.widen_notebook()
+
+W = volume.Volume32()
+
+W.load_3d_numpy_array(
+    A, 
+    #threshold=0.5 * (A.max() + A.min()), 
+    #di=dict(x=1, y=0, z=0),  # xyz offset between ary[0,0,0] and ary[1,0,0]
+    #dj=dict(x=0, y=2, z=0),  # xyz offset between ary[0,0,0] and ary[0,1,0]
+    #dk=dict(x=0, y=0, z=1),  # xyz offset between ary[0,0,0] and ary[0,0,1]
+)
+
+x = W.build(1500)
+```
+
+The commented lines show some override settings which will specify the initial threshold
+for the isosurface, and set the projection of the J offset into the Y component of the 
+three dimensional view to twice the I and J offsets.  The `di, dj, dk` arguments can also
+switch axes assignments.  Please see
+<a href="https://github.com/AaronWatters/feedWebGL2/blob/master/feedWebGL2/volume.py">
+the volume.py source code
+</a>
+for additional options.  The `build` method builds the widget setting the widget width to 1500 pixels.
+
+It may be useful to use the volume viewer to extract a sub-volume of interest
+for downstream processing.
+The
+```
+Slicing = W.current_array_slicing()
+```
+method will extract the currently viewed slicing for the volume widget `W` corresponding to
+the slice slider settings.
+
 ### Making a "stand alone HTML viewer"
+
+The `html_generator` module builds a file system folder containing all components
+needed for a stand alone web page containing a volume viewer.
+
+The following script will create a folder `../doc/test_torus_html`
+containing the "main" page `../doc/test_torus_html/volume.html` which
+presents a volume viewer for the the numeric Python array `A`.
+
+```Python
+target_folder = "../doc/test_torus_html"
+
+from feedWebGL2 import html_generator
+
+html_generator.generate_volume_html(
+    A, 
+    target_folder, 
+    force=False, 
+    width=1500,
+    #threshold=0.5 * (A.mean() + A.min()), 
+    #di=dict(x=1, y=0, z=0),  # xyz offset between ary[0,0,0] and ary[1,0,0]
+    #dj=dict(x=0, y=2, z=0),  # xyz offset between ary[0,0,0] and ary[0,1,0]
+    #dk=dict(x=0, y=0, z=1),  # xyz offset between ary[0,0,0] and ary[0,0,1]
+)
+```
+
+The `volume.html` page must be viewed using an HTTP server (not via the `file:` protocol)
+due to web browser security defaults.  For testing and development you can start a simple
+web server in a folder above the generated folder as follows:
+
+```bash
+$ python -m http.server
+Serving HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...
+```
+
+After starting the server navigate to the `volume.html` page in a web browser from the
+server root URL (here `http://0.0.0.0:8000/`).
+
+### Array size issues
+
+
