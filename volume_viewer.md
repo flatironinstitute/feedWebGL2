@@ -51,7 +51,7 @@ other soft tissues.
 ## The dot cloud
 
 The dot cloud is an alternative view of the iso-surface which presents the interpolation
-points of the surface without joining them into solid figure.  This allows the
+points of the surface without joining them into a solid figure.  This allows the
 user to "see through" the figure.
 
 The image below is a screen shot of the volume viewer displaying a volume which would be
@@ -61,8 +61,12 @@ difficult to interpret using only two dimensional projections.
 
 The following screenshot shows 
 <a href="https://aaronwatters.github.io/feedWebGL2/torus_html/volume.html" target="_blank" >
-a "standalone HTML" instance of the volume viewer published on github pages. Follow this link
-to open "aaronwatters.github.io/feedWebGL2/torus_html/volume.html" in a new window or tab.</a>
+a "standalone HTML" instance of the volume viewer published on github pages
+at the web location "aaronwatters.github.io/feedWebGL2/torus_html/volume.html".</a>
+The code for creating the demo is in the notebook
+<a href="https://github.com/AaronWatters/feedWebGL2/blob/master/notebooks/star%20with%20toruses.ipynb">
+/notebooks/star with toruses.ipynb
+</a> in the repository.
 
 <img src="star_volume.png" width=1000/>
 
@@ -71,7 +75,6 @@ to open "aaronwatters.github.io/feedWebGL2/torus_html/volume.html" in a new wind
 ### Slicing
 
 <img src="sliced.png" width=1000/>
-
 
 ### Making a viewer in a Jupyter notebook
 
