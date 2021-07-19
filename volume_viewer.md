@@ -77,7 +77,7 @@ The code for creating the demo is in the notebook
 
 <img src="star_volume.png" width=1000/>
 
-### Controls
+## Controls
 
 The user can change the volume view presentation using a number of mouse interactions.
 
@@ -99,9 +99,11 @@ mousing over the IJ, JK, or IK slice views.  Restore normal mode by clicking on 
 
 ### Slicing
 
-<img src="sliced.png" width=1000/>
+<img src="annotated_sliced.png" width=1000/>
 
 ### Disabling automatic syncing
+
+the 
 
 ### Wireframe mode
 
