@@ -206,6 +206,25 @@ Serving HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...
 After starting the server navigate to the `volume.html` page in a web browser from the
 server root URL (here `http://0.0.0.0:8000/`).
 
+### Other techniques
+
+It is also possible to build volume viewers in to web interfaces using other methods.
+Please examine the source code for the standard generators and the volume component
+for insight on how to do this.  If you have questions or special requests, please post
+an issue to the repository.
+
 ### Array size issues
+
+The volume viewer may not work well for arrays that are oddly shaped or that are too large.
+
+It may be possible to make the viewer work better for oddly shaped arrays by adjusting the
+`di, dj, dk` transformation vectors shown above to remove the distortion.  
+
+On my laptop
+arrays that are significantly larger than shape `(100, 100, 100)` can cause the viewer
+to have performance issues.   To get around these issues you can disable auto-sync as described
+above or you can 
+view a subsample the large array for previewing and focus in to a subsection of
+interest in a separate presentation, among other possibilities.
 
 
