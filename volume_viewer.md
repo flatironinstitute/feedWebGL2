@@ -81,9 +81,29 @@ The code for creating the demo is in the notebook
 
 The user can change the volume view presentation using a number of mouse interactions.
 
+**Rotate** both the isosurface and dot cloud views by **dragging the mouse over the dot cloud**.
+
+**Change the threshold** without changing the IJK focus by **adjusting the threshold slider**.
+
+**Change the threshold and the IJK focus** by **clicking** on any of the IJ, JK, or IK slice views.
+
+Adjust the three dimensional camera to fit the current isosurface using the **Focus** button.
+
+Restore the three dimensional camera to the default using the **Zoom out** button.
+
+Restrict the volume view to an isolated surface component by **selecting the CUT** checkbox
+and then clicking on a voxel of the component in the slice views.
+
+**Dynamically change the threshold and the IJK focus** by **selecting the Track checkbox** and then
+mousing over the IJ, JK, or IK slice views.  Restore normal mode by clicking on a slice view.
+
 ### Slicing
 
 <img src="sliced.png" width=1000/>
+
+### Disabling automatic syncing
+
+### Wireframe mode
 
 ### Making a viewer in a Jupyter notebook
 
