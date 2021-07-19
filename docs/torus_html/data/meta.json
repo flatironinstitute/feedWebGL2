@@ -1,0 +1,35 @@
+{
+    "num_rows": 80,
+    "num_cols": 80,
+    "num_layers": 80,
+    "threshold": 5.39398540875576,
+    "camera_up": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+    },
+    "camera_offset": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+    },
+    "camera_distance_multiple": 2.0,
+    "di": [
+        1,
+        0,
+        0
+    ],
+    "dj": [
+        0,
+        1,
+        0
+    ],
+    "dk": [
+        0,
+        0,
+        1
+    ],
+    "width": 1500,
+    "_description": "Volume array meta data.",
+    "binary_file": "../docs/torus_html/data/bytes.bin"
+}

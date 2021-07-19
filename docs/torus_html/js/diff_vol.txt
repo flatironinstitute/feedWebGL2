@@ -1,0 +1,203 @@
+46c46,48
+<                 this.shape = [s.num_rows, s.num_cols, s.num_layers];
+---
+>                 //this.shape = [s.num_rows, s.num_cols, s.num_layers];
+>                 this.shape = [s.num_layers, s.num_cols, s.num_rows];
+>                 this.indexer = $.fn.webGL2voxelSorter.get_indexer(s.num_rows, s.num_cols, s.num_layers);
+69,73c71,75
+<                 debugger;
+<                 var shape = this.shape;
+<                 var num_cols, num_rows, num_layers;
+<                 [num_cols, num_rows, num_layers] = shape;
+<                 var size = num_rows * num_cols * num_layers;
+---
+>                 //var shape = this.shape;
+>                 //var num_cols, num_rows, num_layers;
+>                 //[num_cols, num_rows, num_layers] = shape;
+>                 var s = this.settings;
+>                 var size = s.num_rows * s.num_cols * s.num_layers;
+78d79
+<                 var s = this.settings;
+86,88c87,89
+<                     num_rows: num_rows,
+<                     num_cols: num_cols,
+<                     num_layers: num_layers,
+---
+>                     num_rows: s.num_rows,
+>                     num_cols: s.num_cols,
+>                     num_layers: s.num_layers,
+217c218,219
+<                 var ravelled_index = i + nc * (j + nr * k);
+---
+>                 //var ravelled_index = i + nc * (j + nr * k);
+>                 var ravelled_index = this.indexer([i, j, k, 0]);
+230,231c232,236
+<                 var ijk_clone = ijk.slice();
+<                 var vmax = this.array_value(ijk);
+---
+>                 //var ijk_clone = ijk.slice();
+>                 var ijkb = [ijk[0], ijk[1], ijk[2], 0];
+>                 var indexer = this.indexer;
+>                 var buffer = this.buffer;
+>                 var vmax = buffer[indexer(ijkb)];
+236,238c241,243
+<                         ijk_clone[d0] = loc0;
+<                         ijk_clone[d1] = loc1;
+<                         var v = this.array_value(ijk_clone);
+---
+>                         ijkb[d0] = loc0;
+>                         ijkb[d1] = loc1;
+>                         var v = buffer[indexer(ijkb)];
+272a278
+>                 /*
+281a288,298
+>                 }*/
+>                 var byte_index = 0;
+>                 for (var colnum=0; colnum<n0; colnum++) {
+>                     for (var rownum=0; rownum<n1; rownum++) {
+>                         ijkb[d0] = colnum;
+>                         ijkb[d1] = rownum;
+>                         var unscaled = buffer[indexer(ijkb)];
+>                         var scaled = Math.floor(255 * (unscaled - vmin) / diff);
+>                         bytes[byte_index] = scaled;
+>                         byte_index++;
+>                     }
+372c389
+<                 var auto_sync = $("<span> auto</span>").appendTo(button_area)
+---
+>                 var auto_sync = $("<span> Auto</span>").appendTo(button_area)
+378c395
+<                 var wires = $("<span> wires</span>").appendTo(button_area)
+---
+>                 var wires = $("<span> Wires</span>").appendTo(button_area)
+383a401,414
+>                 var track = $("<span> Track</span>").appendTo(button_area)
+>                 this.track_check = $('<input type="checkbox"/>').appendTo(track);
+>                 this.tracking = false;
+>                 this.track_check.change(function() {
+>                     that.tracking = that.track_check.is(":checked");
+>                 });
+> 
+>                 var cut = $("<span> CUT</span>").appendTo(button_area)
+>                 this.cut_check = $('<input type="checkbox"/>').appendTo(cut);
+>                 this.cutting = false;
+>                 this.cut_check.change(function() {
+>                     that.cutting = that.cut_check.is(":checked");
+>                 });
+> 
+398c429,433
+<                     that.threshold = threshold;
+---
+>                     if (that.threshold != threshold) {
+>                         that.threshold = threshold;
+>                         that.cut_check.prop("checked", false);
+>                         that.cutting = false;
+>                     }
+414a450,454
+>             set_tracking(onoff) {
+>                 this.tracking = onoff;
+>                 this.track_check.prop("checked", onoff);
+>                 this.dragging_slice = null;
+>             }
+429c469,474
+<                 this.info.html("ijk: " + this.ijk + ", threshold: " + this.threshold.toExponential(2))
+---
+>                 var connected = this.surface.connected_voxel_count();
+>                 var cinfo = "";
+>                 if (connected !== null) {
+>                     cinfo = " [" + connected + "]";
+>                 }
+>                 this.info.html("ijk: " + this.ijk + ", threshold: " + this.threshold.toExponential(2) + cinfo);
+434a480,485
+>                 var xyz_block = null;
+>                 if (this.cutting) {
+>                     var [i, j, k] = this.ijk;
+>                     xyz_block = [i, j, k, 0];
+>                 }
+>                 surface.set_seed(xyz_block);
+453a505,507
+>         var cross_hairs_normal = "rgba(0,0,0,0.5)";
+>         var cross_hairs_cut = "rgba(255,0,0,1)";
+> 
+485c539
+<                 this.cross_hairs_color = "rgba(0,0,0,0.5)";
+---
+>                 // this.cross_hairs_color = cross_hairs_normal;
+502c556,558
+<                 this.container.name_image_data(self.name, slice_info.bytes, slice_info.cols, slice_info.rows, blue, yellow);
+---
+>                 this.slice_info = slice_info;
+>                 //this.container.name_image_data(self.name, slice_info.bytes, slice_info.cols, slice_info.rows, blue, yellow);
+>                 this.container.name_image_data(self.name, slice_info.bytes, slice_info.rows, slice_info.cols, blue, yellow);
+527,528c583,588
+<                 frame.line({x1:0, y1:hy, x2:d0, y2:hy, color:this.cross_hairs_color});
+<                 frame.line({x1:hx, y1:0, x2:hx, y2:d1, color:this.cross_hairs_color});
+---
+>                 var cccolor = cross_hairs_normal;
+>                 if (volume.tracking) {
+>                     cccolor = cross_hairs_cut;
+>                 }
+>                 frame.line({x1:0, y1:hy, x2:d0, y2:hy, color:cccolor, lineWidth:2});
+>                 frame.line({x1:hx, y1:0, x2:hx, y2:d1, color:cccolor, lineWidth:2});
+538,540d597
+<                 // boundary draggers
+<                 var Mins = frame.rect({x: grid_mins[0], y: grid_mins[1], w:-20, h:-20, color:"black", name:"Mins"})
+<                 var Maxes = frame.rect({x: grid_maxes[0], y: grid_maxes[1], w:20, h:20, color:"black", name:"Maxes"})
+547a605
+>                     volume.set_tracking(false);
+556,567c614
+<                     var frame_location = that.frame.event_model_location(event);
+<                     var x = Math.floor(frame_location.x);
+<                     var y = Math.floor(frame_location.y);
+<                     if ((x >= 0) && (x < d0) && (y >= 0) && (y < d1)) {
+<                         debugger;
+<                         that.volume.ijk[i0] = x;
+<                         that.volume.ijk[i1] = y;
+<                         //that.volume.threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+<                         var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+<                         that.volume.set_threshold(threshold)
+<                         that.volume.redraw();
+<                     }
+---
+>                     that.set_ijk(event);
+572a620
+>                     volume.set_tracking(false);
+584,585c632,638
+<                 Mins.on("mousedown", mouse_down);
+<                 Maxes.on("mousedown", mouse_down);
+---
+>                 if (!volume.tracking) {
+>                     // boundary draggers
+>                     var Mins = frame.rect({x: grid_mins[0], y: grid_mins[1], w:-20, h:-20, color:"black", name:"Mins"})
+>                     var Maxes = frame.rect({x: grid_maxes[0], y: grid_maxes[1], w:20, h:20, color:"black", name:"Maxes"})
+>                     Mins.on("mousedown", mouse_down);
+>                     Maxes.on("mousedown", mouse_down);
+>                 }
+587a641,644
+>                     if (volume.tracking) {
+>                         that.set_ijk(event);
+>                         return;
+>                     }
+625a683,702
+>             set_ijk(event) {
+>                 // set the ijk focus and the threshold and redraw
+>                 var that = this;
+>                 var frame_location = that.frame.event_model_location(event);
+>                 var x = Math.floor(frame_location.x);
+>                 var y = Math.floor(frame_location.y);
+>                 var [d0, d1] = this.shape;
+>                 if ((x >= 0) && (x < d0) && (y >= 0) && (y < d1)) {
+>                     var [i0, i1] = that.dimensions;
+>                     that.volume.ijk[i0] = x;
+>                     that.volume.ijk[i1] = y;
+>                     //that.volume.threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+>                     //var mins = that.slice_info.mins;
+>                     //var maxes = that.slice_info.maxes;
+>                     //var threshold = 0.5 * (mins[y][x] + maxes[y][x]);
+>                     var threshold = that.volume.array_value(that.volume.ijk);
+>                     that.volume.set_threshold(threshold)
+>                     //that.volume.redraw(); redraw is triggered by set_threshold
+>                 }
+>             }
+670d746
+<         debugger;
