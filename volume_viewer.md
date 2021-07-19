@@ -14,6 +14,13 @@ It is hoped that by interacting with the controls
 and examining the views the user will gain insight into the geometric
 and mathematical properties of the array.
 
+This document describes the viewer, its interactive controls, and the interface
+for creating a viewer.
+<a href="README.md">
+Please see the repository README for information on how to install the feedWebGL package
+which includes the viewer software.
+</a>
+
 ## The presentation
 
 The viewer presents three kinds of views of the volume: two dimensional slices (I-J, I-K, and J-K),
@@ -71,6 +78,8 @@ The code for creating the demo is in the notebook
 <img src="star_volume.png" width=1000/>
 
 ### Controls
+
+The user can change the volume view presentation using a number of mouse interactions.
 
 ### Slicing
 
