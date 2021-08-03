@@ -90,6 +90,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.kji = [Math.floor(s.num_cols/2), Math.floor(s.num_rows/2), Math.floor(s.num_layers/2), ];
             // for debugging
             this.dump_events = false;
+            this.label_to_color_mapping = null;
 
             // custom init for subclassing
             this.custom_initialization();
@@ -108,7 +109,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             } else {
                 this.redraw();
             }
-        }
+        };
+        load_label_to_color_mapping(label_to_color_mapping) {
+            this.label_to_color_mapping = label_to_color_mapping;
+        };
         // xxxx really should get these from somewhere else
         vsum(v1, v2) {
             var result = [];
@@ -336,6 +340,19 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 THREE.sprite_text(scene, "Y", [[0, ln1, 0]], ln2, "green", 20);
                 THREE.sprite_text(scene, "Z", [[0, 0, ln1]], ln2, "blue", 20);
             }
+            // add labelled meshes if specified
+            var label_to_color_mapping = this.label_to_color_mapping;
+            if (label_to_color_mapping) {
+                debugger;
+                for (var string_label in label_to_color_mapping) {
+                    var color_array = label_to_color_mapping[string_label];
+                    var int_label = parseInt(string_label);
+                    var label_geometry = this.surface.integer_label_geometry(THREE, int_label);
+                    var label_material = this.label_material(color_array);
+                    var label_mesh = new THREE.Mesh( label_geometry,  label_material );
+                    scene.add(label_mesh);
+                }
+            }
             this.surface_context = context;
             this.surface_material = material;
             this.surface_scene = scene;
@@ -346,6 +363,16 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.reset_camera(camera);
             this.sync_cameras();
             //renderer.render( scene, camera );
+        };
+        label_material(color_array) {
+            var [R, G, B] = color_array;
+            var three_color = new THREE.Color(R / 256.0, G / 256.0, B / 256.0, );
+            var parameters = {
+                wireframe: true,
+                color: three_color
+            };
+            var material = new THREE.MeshBasicMaterial(parameters);
+            return material;
         };
         get_voxel_pixels() {
             return this.get_pixels(self.voxel_context);
