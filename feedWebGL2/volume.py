@@ -293,6 +293,14 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             element.V.settings.stream_lines_parameters = parameters;
         """, parameters=parameters)
 
+    def load_label_to_color_mapping(self, label_to_color_mapping):
+        mapping = {}
+        # convert labels to strings for json compatibility
+        for (key, value) in label_to_color_mapping.items():
+            skey = str(key)
+            mapping[skey] = value
+        self.element.V.load_label_to_color_mapping(mapping)
+
     def load_3d_numpy_array(
             self, ary, 
             threshold=None, shrink_factor=None, chunksize=SEND_BUFFER_SIZE_DEFAULT, method="cubes",
