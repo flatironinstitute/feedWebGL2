@@ -132,7 +132,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.linearized_normals = null;
             this.after_run = null;
         };
-        run() {
+        run(no_after_run) {
             var indexer = this.indexer;
             indexer.run();
             this.voxel_indices = indexer.voxel_index_array;
@@ -168,7 +168,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.mid_point = mid;
             this.mins = mins;
             this.maxes = maxes;
-            if (this.after_run) {
+            if ((!no_after_run) && (this.after_run)) {
                 // post processing callback
                 this.after_run();
             }
@@ -254,7 +254,36 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.check_update_link = check_update_link;
             geometry.check_update_link = check_update_link;
             return geometry;
-        }
+        };
+
+        integer_label_geometry(THREE, int_value) {
+            // return a three geometry corresponding to values near int_value in the initial_array
+            if (int_value < 1) {
+                throw new Error("int_value should be a positive integer: " + int_value);
+            }
+            var min_value = int_value - 0.5;
+            var max_value = int_value + 0.5;
+            var default_value = -1.0;
+            // clamp the array to the range
+            this.indexer.clamp_array(min_value, max_value, default_value);
+            // process isosurface without calling after_run callback
+            this.run(true); 
+            // extract the clamped geometry
+            var geometry = new THREE.BufferGeometry();
+            var linearized_positions = this.get_positions()
+            var linearized_normals = this.get_normals();
+            //var num_triangle_triples = this.num_edge_triples;
+            var drawn_vertex_count = this.drawn_vertex_count;
+            var linearized_length = drawn_vertex_count * 3;
+            // slice out only relevant values into fresh arrays
+            var fresh_positions = linearized_positions.slice(0, linearized_length)
+            var fresh_normals = linearized_normals.slice(0, linearized_length)
+            geometry.setAttribute( 'position', new THREE.BufferAttribute( fresh_positions, 3 ) );
+            geometry.setAttribute( 'normal', new THREE.BufferAttribute( fresh_normals, 3 ) );
+            // unclamp the array for general use (xxx this could be optimized to lazy evaluation maybe)
+            this.indexer.unclamp_array();
+            return geometry;
+        };
 
         xxx_linked_three_geometry_indexed(THREE, clean, normal_binning) {
             // this doesn't work for large models on my Mac Laptop.  I think it's a GPU limitation...
@@ -954,6 +983,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     voxel_index: {type: "int"},
                 }
             });
+            this.initial_array = s.valuesArray;
             var inputs = {};
             var nvalues = s.valuesArray.length;
             // allocate and load buffer with a fresh name
@@ -974,6 +1004,21 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 },
                 inputs: inputs,
             });
+        };
+        // Special feature introduced for mouse embryo project
+        clamp_array(min_value, max_value, default_value) {
+            var valuesArray = this.initial_array;
+            var clampArray = new Float32Array(valuesArray);
+            for (var i=0; i<clampArray.length; i++) {
+                var value = clampArray[i];
+                if ((value < min_value) || (value > max_value)) {
+                    clampArray[i] = default_value;
+                }
+            }
+            this.buffer.copy_from_array(clampArray);
+        };
+        unclamp_array() {
+            this.buffer.copy_from_array(this.initial_array);
         };
         run() {
             this.runner.install_uniforms();
