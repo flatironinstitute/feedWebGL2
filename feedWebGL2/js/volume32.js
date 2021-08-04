@@ -836,10 +836,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 //that.update_volume();
                 that.redraw();
             };
+            // allow slider to go below and above limits
+            var slider_range = bmax - bmin;
+            var slider_margin = slider_range * 0.05;
             slider.slider({
-                min: bmin,
-                max: bmax,
-                step: 0.01 * (bmax - bmin),
+                min: bmin - slider_margin,
+                max: bmax + slider_margin,
+                step: 0.01 * slider_range,
                 value: this.threshold,
                 slide: update,
                 change: update,
