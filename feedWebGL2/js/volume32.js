@@ -91,6 +91,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // for debugging
             this.dump_events = false;
             this.label_to_color_mapping = null;
+            this.label_meshes = null;
 
             // custom init for subclassing
             this.custom_initialization();
@@ -343,7 +344,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             // add labelled meshes if specified
             var label_to_color_mapping = this.label_to_color_mapping;
             if (label_to_color_mapping) {
-                debugger;
+                var label_meshes = [];
                 for (var string_label in label_to_color_mapping) {
                     var color_array = label_to_color_mapping[string_label];
                     var int_label = parseInt(string_label);
@@ -351,7 +352,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     var label_material = this.label_material(color_array);
                     var label_mesh = new THREE.Mesh( label_geometry,  label_material );
                     scene.add(label_mesh);
+                    this.voxel_scene.add(label_mesh.clone())
+                    label_meshes.push(label_mesh)
                 }
+                this.label_meshes = label_meshes;
             }
             this.surface_context = context;
             this.surface_material = material;
@@ -450,6 +454,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var mesh = this.get_points_mesh();
             var scene = new THREE.Scene();
             scene.add(mesh);
+
+            // clone label meshes if available
+            //var label_meshes = this.label_meshes;
+            //for (var i=0; i<label_meshes.length; i++) {
+            //    var label_mesh = label_meshes[i].clone();
+            //    scene.add(label_meshes)
+            //}
 
             var g = new THREE.SphereGeometry(0.5, 6,6);
             var m = new THREE.MeshNormalMaterial();
@@ -736,6 +747,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 "height": `${contour_side}px`,
             });
             this.initialize_surface_display(contour_div);
+            //this.initialize_voxels(dots_div);  // doesn't work -- camera not initialized.
 
             this.slice_displays = [this.x_slicer, this.y_slicer, this.z_slicer];
 

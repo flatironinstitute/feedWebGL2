@@ -261,11 +261,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             if (int_value < 1) {
                 throw new Error("int_value should be a positive integer: " + int_value);
             }
+            var save_threshold = this.settings.threshold;
             var min_value = int_value - 0.5;
             var max_value = int_value + 0.5;
             var default_value = -1.0;
             // clamp the array to the range
             this.indexer.clamp_array(min_value, max_value, default_value);
+            this.set_threshold(min_value);
             // process isosurface without calling after_run callback
             this.run(true); 
             // extract the clamped geometry
@@ -282,6 +284,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             geometry.setAttribute( 'normal', new THREE.BufferAttribute( fresh_normals, 3 ) );
             // unclamp the array for general use (xxx this could be optimized to lazy evaluation maybe)
             this.indexer.unclamp_array();
+            this.set_threshold(save_threshold);
             return geometry;
         };
 
