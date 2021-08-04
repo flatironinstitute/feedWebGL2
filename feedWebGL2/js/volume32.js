@@ -632,6 +632,34 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     bytes[ravelled_index] = scaled;
                 }
             }
+            // translate to colors if label colors are provided
+            var label_colors = this.label_colors
+            if (label_colors) {
+                var color_bytes = new Uint8Array(4 * size);
+                for (var rownum=0; rownum<n1; rownum++) {
+                    var ravelled_offset = n0 * (n1 - rownum - 1);
+                    var row = result[rownum];
+                    for (var colnum=0; colnum<n0; colnum++) {
+                        var ravelled_index = colnum + ravelled_offset;
+                        var unscaled = row[colnum];
+                        var scaled = bytes[ravelled_index];
+                        var color_index = ravelled_index * 4;
+                        var possible_label = unscaled | 0;  // Math.floor(unscaled)
+                        var color = label_colors[possible_label];
+                        if (color) {
+                            for (var c=0; c<3; c++) {
+                                color_bytes[color_index + c] = color[c]
+                            }
+                        } else {
+                            for (var c=0; c<3; c++) {
+                                color_bytes[color_index + c] = scaled;
+                            }
+                        }
+                        color_bytes[color_index + 3] = 255;
+                    }
+                }
+                bytes = color_bytes;
+            }
             return {
                 array: result,
                 mins: mins,
@@ -650,6 +678,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             if (!container[0].isConnected) {
                 throw new Error("scaffolding must be built on a connected DOM element.")
             }
+            // preprocess label imformatation
+            var label_to_color_mapping = this.label_to_color_mapping;
+            var label_colors = null;
+            if (label_to_color_mapping) {
+                label_colors = new Array();
+                for (var string_label in label_to_color_mapping) {
+                    var color_array = label_to_color_mapping[string_label];
+                    var int_label = parseInt(string_label);
+                    label_colors[int_label] = color_array;
+                }
+            }
+            this.label_colors = label_colors;
             var contour_side = width * 0.5;
             var slice_side = contour_side * 0.5;
             var slider_breadth = slice_side * 0.1;
