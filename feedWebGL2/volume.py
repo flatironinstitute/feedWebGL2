@@ -76,7 +76,7 @@ element.send_voxel_pixels = function () {
 element.send_snapshot_surface = function(current_pixels) {
     debugger;
     //console.log("send snapsnot surface");
-    current_pixels = current_pixels || element.V.get_pixels();
+    var current_pixels = current_pixels || element.V.get_pixels();
     var data = current_pixels.data;
     // store the buffer for sending in chunks
     element.buffer_to_send = data;
@@ -211,6 +211,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         self.received_end = None
         start = 0
         end = self.buffer_chunk_size
+        self.received_count = 0
         self.element.send_buffer_chunk(start, end)
         #self.js_init("""
         #    // should be equivalent???
@@ -253,18 +254,22 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             raise ValueError("buffer sanity callback limit exceeded.")
         data = info["data"]
         end = info["end"]
-        ##pr(self.received_count, "receive bytes", len(data), "ending at", end, "expecting", self.buffer_length)
+        #(self.received_count, "receive bytes", len(data), "ending at", end, "expecting", self.buffer_length)
         self.received_end = end
         self.buffer_chunks.append(data)
         # request the next chunk
         next_start = end
         next_end = end + self.buffer_chunk_size
         if next_start < self.buffer_length:
+            #("requesting", next_start, next_end)
             self.element.send_buffer_chunk(next_start, next_end)
             #self.js_init("""
             #    // should be equivalent???
             #    element.send_buffer_chunk(start, end);
             #""", start=next_start, end=next_end)
+        else:
+            #("finished receiving", next_start, self.buffer_length)
+            self.received_count = 0
 
     def set_slice_ijk(self, i, j, k, change_threshold=False):
         self.element.V.set_slice_ijk(i, j, k, change_threshold)
