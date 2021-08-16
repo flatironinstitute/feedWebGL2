@@ -348,6 +348,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 for (var string_label in label_to_color_mapping) {
                     var color_array = label_to_color_mapping[string_label];
                     var int_label = parseInt(string_label);
+                    if (int_label < 1) {
+                        console.log("Invalid volume label -- ignored: " + int_label);
+                        continue;
+                    }
                     var label_geometry = this.surface.integer_label_geometry(THREE, int_label);
                     var label_material = this.label_material(color_array);
                     var label_mesh = new THREE.Mesh( label_geometry,  label_material );
