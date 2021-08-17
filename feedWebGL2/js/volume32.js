@@ -938,7 +938,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 )
             );
             var [cx, cy, cz] = center;
-            var r = Math.max(cx, cy, cz)  * 2;
+            //var r = Math.max(cx, cy, cz)  * 2;
+            var r = Math.max(cx, cy, cz)  * s.camera_distance_multiple;
             var crossing = this.surface.crossing;
             var shift = 2.0;
             //crossing.reset_three_camera(this.surface_camera, shift, null, r, cx, cy, cz);
