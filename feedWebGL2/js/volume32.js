@@ -502,6 +502,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         };
         dispose() {
             // call this when the object is no longer in use.  It tries to free up memory.
+            console.log("disposing of marching squares instance");
+            var container = this.container;
             try {
                 this.feedbackContext.lose_context();
             } catch (e) {};
@@ -513,6 +515,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             } catch (e) {};
             for (var name in this) {
                 this[name] = null;
+            }
+            if (container) {
+                container.empty();
             }
         };
         // ??? eventually render on demand:
