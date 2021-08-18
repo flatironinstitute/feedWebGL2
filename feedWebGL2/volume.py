@@ -154,7 +154,13 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         "Attempt to release all resources in self."
         if verbose:
             print ("Disposing of volume widget.")
-        self.element.V.dispose()
+        #self.element.V.dispose()
+        self.js_init("""
+            if (element.V) {
+                element.V.dispose();
+            };
+            element.V = null;
+        """)
 
     def sync(self, message="Volume widget is ready"):
         "Wait for the widget to initialize before proceeding. Widget must be displayed!"
