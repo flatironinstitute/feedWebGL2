@@ -74,7 +74,6 @@ element.send_voxel_pixels = function () {
 };
 
 element.send_snapshot_surface = function(current_pixels) {
-    debugger;
     //console.log("send snapsnot surface");
     var current_pixels = current_pixels || element.V.get_pixels();
     var data = current_pixels.data;
@@ -151,6 +150,12 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             }
         """, options=options)
 
+    def dispose(self, verbose=True):
+        "Attempt to release all resources in self."
+        if verbose:
+            print ("Disposing of volume widget.")
+        self.element.V.dispose()
+
     def sync(self, message="Volume widget is ready"):
         "Wait for the widget to initialize before proceeding. Widget must be displayed!"
         self.element.ready_sync(message).sync_value()
@@ -173,7 +178,6 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         self.received_end = None
         # XXXX bug in js_proxy_widget -- must call with argument ???
         #self.js_init("""
-        #    debugger;
         #    element.send_snapshot_surface();
         #""")
         data = self.await_buffer_to_send()
