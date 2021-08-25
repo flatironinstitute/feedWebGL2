@@ -34,7 +34,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 camera_offset: {x:0, y:0, z:1},
                 camera_distance_multiple: 2.0,
                 axis_length: true,  // auto assign length
-                ijk_highlight_corners: null,
+                solid_labels: false,  // if set then make labels solid and add lighting
+                //ijk_highlight_corners: null,
                 //shrink_factor: null,   // how much to strink internal buffers in [0..1] LEAVE UNSET
             }, options);
             var s = this.settings;
@@ -330,6 +331,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var mesh = new THREE.Mesh( geometry,  material );
             var scene = new THREE.Scene();
             scene.add(mesh);
+            if (s.solid_labels) {
+                this.add_lighting(scene);
+            }
             if (s.axis_length) {
                 // add axes indicator
                 var ln = s.axis_length;
@@ -372,14 +376,38 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.sync_cameras();
             //renderer.render( scene, camera );
         };
+        add_lighting(scene) {
+            var ambientLight = new THREE.AmbientLight( 0xffffff, 0.5 );
+            scene.add( ambientLight );
+            this.add_point_light(scene, -1, -1, -1, 0xffff00);
+            this.add_point_light(scene, +1, +1, -1, 0xff00ff);
+            this.add_point_light(scene, -1, +1, +1, 0x00ffff);
+            this.add_point_light(scene, +1, -1, +1, 0xff8888);
+        };
+        add_point_light(scene, dx, dy, dz, intcolor) {
+            var pointLight = new THREE.PointLight( intcolor, 0.5 );
+            pointLight.position.x = dx * 2500;
+            pointLight.position.y = dy * 2500;
+            pointLight.position.z = dz * 2500;
+            scene.add( pointLight );
+        };
         label_material(color_array) {
             var [R, G, B] = color_array;
             var three_color = new THREE.Color(R / 256.0, G / 256.0, B / 256.0, );
-            var parameters = {
-                wireframe: true,
-                color: three_color
-            };
-            var material = new THREE.MeshBasicMaterial(parameters);
+            var material;
+            if (this.settings.solid_labels) {
+                var parameters = {
+                    color: three_color,
+                    side: THREE.DoubleSide
+                };
+                material = new THREE.MeshStandardMaterial(parameters);
+            } else {
+                var parameters = {
+                    wireframe: true,
+                    color: three_color
+                };
+                var material = new THREE.MeshBasicMaterial(parameters);
+            }
             return material;
         };
         get_voxel_pixels() {
@@ -458,6 +486,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var mesh = this.get_points_mesh();
             var scene = new THREE.Scene();
             scene.add(mesh);
+            if (s.solid_labels) {
+                this.add_lighting(scene);
+            }
 
             // clone label meshes if available
             //var label_meshes = this.label_meshes;
