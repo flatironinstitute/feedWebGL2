@@ -289,6 +289,14 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
     def set_threshold(self, value):
         self.element.V.set_threshold(value)
 
+    def set_camera_offset(self, dx, dy, dz, camera_distance_multiple=None):
+        test = dx * dx + dy * dy + dz * dz
+        if test < 0.5 or test > 1.5:
+            raise ValueError("offset should be a vector with norm between 0.5 and 1.5: " + repr([dx,dy,dz]))
+        if camera_distance_multiple is not None and (camera_distance_multiple < 0.1) or (camera_distance_multiple > 10.0):
+            raise ValueError("camera distance multiple should be in range 0.1 .. 10.0: " + repr(camera_distance_multiple))
+        self.element.V.set_camera_offset(dx, dy, dz, camera_distance_multiple)
+
     def load_stream_lines(
         self, 
         stream_lines, 

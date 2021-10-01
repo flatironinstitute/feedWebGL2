@@ -100,6 +100,25 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         custom_initialization() {
             this.supports_cutting = true;
         };
+        set_camera_offset(dx, dy, dz, camera_distance_multiple) {
+            // sanity check
+            var sq = dx*dx + dy*dy + dz*dz;
+            if ((!sq) || (sq < 0.5) || (sq > 1.5)) {
+                console.log("set_camera_offset sanity check failed -- offset out of range: ", dx, dy, dz);
+                throw new Error("camera offset sanity check failed -- bad offset.");
+            }
+            var s = this.settings;
+            camera_distance_multiple = camera_distance_multiple || s.camera_distance_multiple;
+            if ((camera_distance_multiple < 0.1) || (camera_distance_multiple > 10.0)) {
+                console.log("set_camera_offset sanity check failed -- multiple out of range: ", camera_distance_multiple);
+                throw new Error("camera offset sanity check failed -- bad multiple.");
+            }
+            s.camera_offset = {x:dx, y:dy, z:dz};
+            s.camera_distance_multiple = camera_distance_multiple;
+            this.reset_camera(this.surface_camera);
+            this.reset_camera(this.voxel_camera);
+            this.request_render();
+        };
         set_slice_ijk(i, j, k, change_threshold) {
             var kji = [k, j, i];
             // array value validates values
