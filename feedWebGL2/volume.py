@@ -129,6 +129,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             dj=None,
             dk=None,
             solid_labels=None,
+            axis_length=True,
             ):
         methods = ("tetrahedra", "diagonal", "cubes")
         assert method in methods, "method must be in " + repr(methods)
@@ -142,6 +143,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             camera_distance_multiple=camera_distance_multiple,
             di=di, dj=dj, dk=dk,
             solid_labels=solid_labels,
+            axis_length=axis_length,
         )
         self.options = options
         self.js_init("""
@@ -337,6 +339,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             dj=dict(x=0, y=1, z=0),  # xyz offset between ary[0,0,0] and ary[0,1,0]
             dk=dict(x=0, y=0, z=1),  # xyz offset between ary[0,0,0] and ary[0,0,1]
             solid_labels=None,
+            axis_length=True,
             ):
         self.array = ary
         self.dk = self.positional_xyz(dk)
@@ -362,6 +365,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             dj=self.dj,
             di=self.di,
             solid_labels=solid_labels,
+            axis_length=axis_length,
             )
         self.data = ary32
         ary_bytes = bytearray(ary32.tobytes())
