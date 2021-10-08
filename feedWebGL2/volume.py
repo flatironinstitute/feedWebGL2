@@ -423,6 +423,10 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
     def triangles_and_normals(self, just_triangles=False):
         # new implementation should work for larger data sizes
         from . import segmented_caller
+        if self.method != "tetrahedra":
+            raise ValueError(
+                "Please call load_3d_numpy_array using method='tetrahedra' to allow geometry export: method="
+                +repr(self.method))
         # Must call position_count -- this loads the data from the GPU to javascript.
         float_count = self.element.position_count().sync_value()
         def get_3_by_3(method):
