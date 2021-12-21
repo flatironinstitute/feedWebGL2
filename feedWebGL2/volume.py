@@ -1,6 +1,6 @@
 
 """
-Jupyter widget for viewing a dense 3d matrix.
+Jupyter widget for viewing a dense 3d matrix isosurfaces.
 """
 
 from . import local_files
