@@ -172,3 +172,38 @@ class VolumeComponent(gz.jQueryComponent):
         # xxx cut/paste
         c = (n*m + m*k + n*k) * self.shrink_multiple / (n*m*k)
         return min(c, self.shrink_max)
+
+class SnapshotVolumeComponent(gz.Stack):
+
+    def __init__(self, width=1200):
+        self.volume = VolumeComponent(width)
+        self.label = gz.Html("PNG file name:")
+        self.input = gz.Input("volume_snapshot.png")
+        self.volume_button = gz.Button("Snapshot volume", on_click=self.snapshot_volume)
+        self.voxel_button = gz.Button("Snapshot voxels", on_click=self.snapshot_voxels)
+        self.info = gz.Html("Click to save view.")
+        self.snap_row = gz.Shelf([self.label, self.input, self.volume_button, self.voxel_button, self.info])
+        self.snap_row.resize(width=width)
+        children = [self.volume, self.snap_row]
+        super().__init__(children)
+
+    async def load_3d_numpy_array(self, ary, **other_arguments):
+        return await self.volume.load_3d_numpy_array(ary, **other_arguments)
+
+    def snapshot_volume(self, *args):
+        self.info.html("scheduling snapshot volume")
+        gz.schedule_task(self.snapshot_task())
+
+    def snapshot_voxels(self, *args):
+        self.info.html("Snapshot voxels not yet implemented.")
+
+    async def snapshot_task(self, getter=None):
+        from imageio import imsave
+        getter = getter or self.volume.get_volume_array
+        self.info.html("waiting for image")
+        array = await getter()
+        self.info.html("getting filename")
+        filename = await self.input.get_value()
+        self.info.html("got filename: " + repr(filename))
+        imsave(filename, array)
+        self.info.html("%s saved as %s" % (array.shape, repr(filename)))
