@@ -57,6 +57,7 @@ class VolumeComponent(gz.jQueryComponent):
         self.dispose(verbose=False)
         if threshold is None:
             threshold = 0.5 * (ary.min() + ary.max());
+        gz.do(self.element.css({"background-color": "#ddd"}))
         gz.do(self.element.html("Loading shape: " + repr(ary.shape) + " " + repr([threshold, shrink_factor])))
         self.array = ary
         self.dk = self.positional_xyz(dk)
@@ -96,6 +97,27 @@ class VolumeComponent(gz.jQueryComponent):
 
     def create_volume_container(self, options):
         self.V = self.cache("V", self.element.marching_cubes32(options))
+
+    async def get_volume_array(self):
+        assert self.V is not None, "No gizmo displayed."
+        pixel_info = await gz.get(self.V.get_pixels())
+        return self.pixel_info_as_array(pixel_info)
+
+    async def get_voxel_array(self):
+        assert self.V is not None, "No gizmo displayed."
+        pixel_info = await gz.get(self.V.get_voxel_pixels())
+        return self.pixel_info_as_array(pixel_info)
+
+    def pixel_info_as_array(self, pixel_info):
+        data_bytes = gz.hex_to_bytearray(pixel_info["data"])
+        width = pixel_info["width"]
+        height = pixel_info["height"]
+        bytes_per_pixel = 4
+        array1d = np.array(data_bytes, dtype=np.ubyte)
+        image_array = array1d.reshape((height, width, bytes_per_pixel))
+        # invert the rows
+        image_array = image_array[::-1]
+        return image_array
 
     def set_options(
             self, num_rows, num_cols, num_layers, 
