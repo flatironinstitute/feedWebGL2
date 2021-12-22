@@ -195,7 +195,8 @@ class SnapshotVolumeComponent(gz.Stack):
         gz.schedule_task(self.snapshot_task())
 
     def snapshot_voxels(self, *args):
-        self.info.html("Snapshot voxels not yet implemented.")
+        self.info.html("scheduling snapshot voxels")
+        gz.schedule_task(self.snapshot_task(self.volume.get_voxel_array))
 
     async def snapshot_task(self, getter=None):
         from imageio import imsave
