@@ -1098,6 +1098,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             }
             return camera;
         };
+        get_positions_and_normals(threshold) {
+            return this.surface.get_positions_and_normals(threshold);
+        };
+        reset_array(replacement_array) {
+            return this.surface.reset_array(replacement_array);
+        };
         set_sphere_locations() {
             //var marching = this.surface;
             this.voxel_mesh.update_sphere_locations();
