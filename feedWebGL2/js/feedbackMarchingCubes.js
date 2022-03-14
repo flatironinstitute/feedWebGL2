@@ -57,7 +57,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             if (s.num_blocks > 1) {
                 throw new Error("multiple blocks not yet supported " + s.num_blocks)
             }
-            this.shape = [s.num_layers, s.num_rows, s.num_cols]
+            this.shape = [s.num_layers, s.num_rows, s.num_cols];
+            this.original_array = s.valuesArray;
             var [I, J, K] = this.shape;
             var grid_size = I * J * K;
             if (s.valuesArray.length != grid_size) {
@@ -286,6 +287,32 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.indexer.unclamp_array();
             this.set_threshold(save_threshold);
             return geometry;
+        };
+
+        get_positions_and_normals(threshold) {
+            // copy/pasted -- should refactor.
+            this.set_threshold(threshold);
+            this.run(true);
+            var linearized_positions = this.get_positions()
+            var linearized_normals = this.get_normals();
+            var drawn_vertex_count = this.drawn_vertex_count;
+            var linearized_length = drawn_vertex_count * 3;
+            // slice out only relevant values into fresh arrays
+            var fresh_positions = linearized_positions.slice(0, linearized_length)
+            var fresh_normals = linearized_normals.slice(0, linearized_length)
+            return {
+                positions: fresh_positions,
+                normals: fresh_normals,
+            }
+        }
+
+        reset_array(replacement_array) {
+            var s = this.settings;
+            //if (!replacement_array) {
+            //    replacement_array = this.original_array;
+            //}
+            s.valuesArray = replacement_array;
+            this.indexer.reset_array(replacement_array);
         };
 
         xxx_linked_three_geometry_indexed(THREE, clean, normal_binning) {
@@ -621,7 +648,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var [Ioffset, Joffset, Koffset] = [J*K, K, 1];
             var anomaly = function(message) {
                 console.log(message);
-                //debugger;
                 // don't throw an error to permit debug test runs
             };
             if ((triangle_count % 3) != 0) {
@@ -1022,6 +1048,19 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         };
         unclamp_array() {
             this.buffer.copy_from_array(this.initial_array);
+        };
+        reset_array(replacement_array) {
+            var initial_array = this.initial_array;
+            if (replacement_array) {
+                if (replacement_array.length != initial_array.length) {
+                    throw new Error("Array must be of same length as initial array.");
+                }
+                // xxxx should not be needed???
+                //this.initial_array = replacement_array;
+            } else {
+                replacement_array = initial_array;
+            }
+            this.buffer.copy_from_array(replacement_array);
         };
         run() {
             this.runner.install_uniforms();
