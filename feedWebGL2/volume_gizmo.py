@@ -95,6 +95,25 @@ class VolumeComponent(gz.jQueryComponent):
         self.V_container = self.cache("V_container", gizmo.jQuery("<div/>").appendTo(element))
         gz.do(self.V.build_scaffolding(self.V_container, self.width))
 
+    async def get_positions_and_normals(self, threshold, replacement_array=None):
+        if replacement_array is not None:
+            assert replacement_array.shape == self.data.shape, "cannot change array shape."
+            vname = "volume_data"
+            self.data_ref = await self.store_array(replacement_array, vname, dtype=np.float32)
+            # Store array in volume component buffer
+            gz.do(self.V.reset_array(self.data_ref)) 
+            # Break volume_data reference to possibly save memory.
+            self.cache(vname, None)
+        # cache positions and normal on js side
+        gname = "positions_and_normals"
+        geometry_ref = self.cache(gname, self.V.get_positions_and_normals(threshold))
+        positions = await self.get_array_from_buffer(geometry_ref.positions, dtype=np.float32)
+        normals = await self.get_array_from_buffer(geometry_ref.normals, dtype=np.float32)
+        assert positions.shape == normals.shape, "shapes should match " + repr((positions.shape,normals.shape))
+        N = len(positions) // (3 * 3)
+        reshape = (N, 3, 3)
+        return (positions.reshape(reshape), normals.reshape(reshape))
+
     def create_volume_container(self, options):
         self.V = self.cache("V", self.element.marching_cubes32(options))
 
@@ -177,11 +196,11 @@ class SnapshotVolumeComponent(gz.Stack):
 
     def __init__(self, width=1200):
         self.volume = VolumeComponent(width)
-        self.label = gz.Html("PNG file name:")
+        self.label = gz.Html("<b>PNG file name:</b>")
         self.input = gz.Input("volume_snapshot.png")
         self.volume_button = gz.Button("Snapshot volume", on_click=self.snapshot_volume)
         self.voxel_button = gz.Button("Snapshot voxels", on_click=self.snapshot_voxels)
-        self.info = gz.Html("Click to save view.")
+        self.info = gz.Html("<b>Click to save view.</b>")
         self.snap_row = gz.Shelf([self.label, self.input, self.volume_button, self.voxel_button, self.info])
         self.snap_row.resize(width=width)
         children = [self.volume, self.snap_row]
