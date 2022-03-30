@@ -114,6 +114,21 @@ class VolumeComponent(gz.jQueryComponent):
         reshape = (N, 3, 3)
         return (positions.reshape(reshape), normals.reshape(reshape))
 
+    async def get_geometry_for_range(self, values_array, low, high, blur=None):
+        """
+        Get positions and normals for isosurface around elements of values_array between low and high.
+        """
+        mask = np.logical_and((values_array >= low), (values_array <= high)).astype(np.byte)
+        r = (m, M) = (mask.min(), mask.max())
+        assert m < M, "Cannot find geometry, range is trivial in array: " + repr(r)
+        if blur is not None:
+            from scipy.ndimage import gaussian_filter
+            mask = mask.astype(np.float)
+            print (mask.dtype)
+            mask = gaussian_filter(mask, sigma=blur)
+        (p, n) = await self.get_positions_and_normals(0.5, mask)
+        return (p, n, mask)
+
     def create_volume_container(self, options):
         self.V = self.cache("V", self.element.marching_cubes32(options))
 
