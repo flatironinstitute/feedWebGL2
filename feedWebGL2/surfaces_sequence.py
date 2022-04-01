@@ -96,6 +96,11 @@ class NamedSurfaces:
         center = (MM + mm) / 2
         from jp_doodle import nd_frame
         swatch = nd_frame.swatch3d(pixels=800, model_height=diameter)
+        self.doodle_draw(swatch)
+        swatch.orbit_all(center3d=center, radius=diameter)
+        swatch.fit(0.6)
+
+    def doodle_draw(self, swatch):
         for surface in self.surfaces.values():
             ii = surface.indices
             pp = surface.positions
@@ -109,8 +114,6 @@ class NamedSurfaces:
                 #t0 = triangle[0]
                 #v = t0 + nn[i1]
                 #swatch.line(t0, v, color="red")
-        swatch.orbit_all(center3d=center, radius=diameter)
-        swatch.fit(0.6)
 
 class SurfacesSequence:
 
