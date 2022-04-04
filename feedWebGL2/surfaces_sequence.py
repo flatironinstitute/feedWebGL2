@@ -8,6 +8,12 @@ For displaying related isosurfaces.
 import H5Gizmos as gz
 import numpy as np
 
+def multiple_list(array, multiplier):
+    "return flattened list of integers for semi-optimized json transfer"
+    m = array.ravel() * multiplier
+    i = m.astype(np.int)
+    return i.tolist()
+
 class SurfaceInfo:
 
     "A named and colored indexed surface."
@@ -22,6 +28,19 @@ class SurfaceInfo:
             self.sanity_check()
         self.max_position = self.positions.max(axis=0)
         self.min_position = self.positions.min(axis=0)
+
+    def json_repr(self, multiplier=999):
+        "semi-optimized json repr for transfer to javascript."
+        return dict(
+            name=self.name,
+            multiplier=multiplier,
+            color=multiple_list(self.color, multiplier),
+            indices=multiple_list(self.indices, multiplier),
+            normals=multiple_list(self.normals, multiplier),
+            positions=multiple_list(self.positions, multiplier),
+            max_position=multiple_list(self.max_position, multiplier),
+            min_positions=multiple_list(self.min_position, multiplier),
+        )
 
     def sanity_check(self):
         sc = self.color.shape
@@ -84,12 +103,23 @@ class NamedSurfaces:
         self.surfaces = {}
         self.max_position = self.min_position = None
 
+    def json_repr(self, multiplier=999):
+        "semi-optimized json repr for transfer to javascript."
+        s_json = { name: s.json_repr(multiplier) for (name, s) in self.surfaces.items() }
+        return dict(
+            surfaces=s_json,
+            multiplier=multiplier,
+            max_position=multiple_list(self.max_position, multiplier),
+            min_positions=multiple_list(self.min_position, multiplier),
+        )
+
     def add(self, surface):
         self.surfaces[surface.name] = surface
         self.max_position = defined_extrema(self.max_position, surface.max_position, np.maximum)
         self.min_position = defined_extrema(self.min_position, surface.min_position, np.minimum)
 
     def doodle(self):
+        # only for debugging/dev
         MM = self.max_position
         mm = self.min_position
         diameter = np.linalg.norm(MM - mm)
@@ -123,9 +153,46 @@ class SurfacesSequence:
 
     def __init__(self):
         self.sequence = []
+        self.max_position = self.min_position = None
+        self.current_index = 0
+
+    def json_repr(self, multiplier=999):
+        "semi-optimized json repr for transfer to javascript."
+        s_json = { s.json_repr(multiplier) for s in self.sequence }
+        MM = self.max_position
+        mm = self.min_position
+        self.diameter = diameter = np.linalg.norm(MM - mm)
+        self.center = center = (MM + mm) / 2
+        return dict(
+            diameter=diameter,
+            center=center,
+            sequence=s_json,
+            multiplier=multiplier,
+            max_position=multiple_list(self.max_position, multiplier),
+            min_position=multiple_list(self.min_position, multiplier),
+        )
 
     def add(self, surfaces):
         self.sequence.append(surfaces)
+        self.max_position = defined_extrema(self.max_position, surfaces.max_position, np.maximum)
+        self.min_position = defined_extrema(self.min_position, surfaces.min_position, np.minimum)
+
+    def doodle(self):
+        # xxxx cut/paste...
+        MM = self.max_position
+        mm = self.min_position
+        self.diameter = diameter = np.linalg.norm(MM - mm)
+        self.center = center = (MM + mm) / 2
+        from jp_doodle import nd_frame
+        swatch = nd_frame.swatch3d(pixels=800, model_height=diameter)
+        self.doodle_draw(swatch)
+        swatch.orbit_all(center3d=center, radius=diameter)
+        swatch.fit(0.6)
+
+    def doodle_draw(self, swatch):
+        swatch.reset()
+        surface = self.sequence[self.current_index]
+        surface.doodle_draw(swatch)
 
 
 def binned_indexing(triangle_positions, triangle_normals, binsize=10000, epsilon=1e-12):
