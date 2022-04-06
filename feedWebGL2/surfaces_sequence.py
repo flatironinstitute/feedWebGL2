@@ -7,12 +7,51 @@ For displaying related isosurfaces.
 
 import H5Gizmos as gz
 import numpy as np
+from . import local_files
 
 def multiple_list(array, multiplier):
     "return flattened list of integers for semi-optimized json transfer"
     m = array.ravel() * multiplier
     i = m.astype(np.int)
     return i.tolist()
+
+    
+required_javascript_modules = [
+    local_files.vendor_path("js_lib/three.min.js"),
+    local_files.vendor_path("js_lib/OrbitControls.js"),
+    local_files.vendor_path("js/surfaces_sequence.js"),
+]
+
+class SurfacesGizmo(gz.jQueryComponent):
+
+    """
+    Gizmo 3d display for sequence of surfaces
+    """
+
+    def __init__(self, width=800):
+        super().__init__()
+        self.display3d = None
+        self.width = width
+
+    def add_dependencies(self, gizmo):
+        super().add_dependencies(gizmo)
+        for js_file in required_javascript_modules:
+            gizmo._js_file(js_file)
+
+    def dom_element_reference(self, gizmo):
+        result = super().dom_element_reference(gizmo)
+        gz.do(self.element.html("Volume widget not yet loaded."))
+        gz.do(self.element.css({"background-color": "cyan"}))
+        gz.do(self.element.width(self.width))
+        gz.do(self.element.height(self.width))
+        return result
+
+    def load_json_object(self, json_object):
+        constructor = self.element.surfaces_sequence(json_object)
+        self.display3d = self.cache("surfaces3d", constructor)
+
+    def load_3d_display(self):
+        gz.do(self.display3d.load_3d_display(self.element))
 
 class SurfaceInfo:
 
@@ -35,7 +74,7 @@ class SurfaceInfo:
             name=self.name,
             multiplier=multiplier,
             color=multiple_list(self.color, multiplier),
-            indices=multiple_list(self.indices, multiplier),
+            indices=self.indices.ravel().tolist(),
             normals=multiple_list(self.normals, multiplier),
             positions=multiple_list(self.positions, multiplier),
             max_position=multiple_list(self.max_position, multiplier),
@@ -73,7 +112,8 @@ def defined_extrema(old_value, new_value, minmax=np.maximum):
     else:
         return minmax(old_value, new_value)
 
-async def labelled_surfaces(label_array, name_to_label, name_to_color):
+async def labelled_surfaces(label_array, name_to_label, name_to_color, blur=0.7):
+    # deprecated/testing
     result = NamedSurfaces()
     from feedWebGL2 import volume_gizmo
     V = volume_gizmo.VolumeComponent()
@@ -85,13 +125,78 @@ async def labelled_surfaces(label_array, name_to_label, name_to_color):
         if label in labels:
             color = name_to_color[name]
             print(name, "color", color)
-            (positions, normals, mask) = await V.get_geometry_for_range(label_array, label, label, blur=0.7)
+            (positions, normals, mask) = await V.get_geometry_for_range(label_array, label, label, blur=blur)
             print("positions", positions.shape)
             (indices, ipos, inorm) = binned_indexing(positions, normals)
             print("indices", indices.shape)
             S = SurfaceInfo(name, color, indices, ipos, inorm)
             result.add(S)
     return result
+
+class SurfaceMaker:
+
+    """
+    Collect surface sequence for label arrays.
+    all label arrays must have the same shape.
+    """
+
+    def __init__(self, blur=0.7):
+        self.V = None
+        self.sequence = SurfacesSequence()
+        self.blur = blur
+
+    async def set_up_gizmo(self, example_array):
+        from feedWebGL2 import volume_gizmo
+        V = volume_gizmo.VolumeComponent()
+        await V.show()
+        await V.load_3d_numpy_array(example_array)
+        self.V = V
+
+    async def add_surfaces(self, label_array, name_to_label, name_to_color):
+        blur = self.blur
+        if self.V is None:
+            await self.set_up_gizmo(label_array)
+        assert self.V is not None
+        V = self.V
+        result = NamedSurfaces()
+        labels = set(np.unique(label_array))
+        for name in name_to_label:
+            label = name_to_label[name]
+            if label in labels:
+                color = name_to_color[name]
+                print(name, "color", color)
+                (positions, normals, mask) = await V.get_geometry_for_range(label_array, label, label, blur=blur)
+                print("positions", positions.shape)
+                (indices, ipos, inorm) = binned_indexing(positions, normals)
+                print("indices", indices.shape, ipos.shape)
+                S = SurfaceInfo(name, color, indices, ipos, inorm)
+                result.add(S)
+        print ("adding sequence", len(self.sequence.sequence))
+        self.sequence.add(result)
+        return result
+    
+
+async def labelled_surfaces(label_array, name_to_label, name_to_color, blur=0.7):
+    # deprecated/testing replaced by SurfaceMaker
+    result = NamedSurfaces()
+    from feedWebGL2 import volume_gizmo
+    V = volume_gizmo.VolumeComponent()
+    await V.show()
+    await V.load_3d_numpy_array(label_array)
+    labels = set(np.unique(label_array))
+    for name in name_to_label:
+        label = name_to_label[name]
+        if label in labels:
+            color = name_to_color[name]
+            print(name, "color", color)
+            (positions, normals, mask) = await V.get_geometry_for_range(label_array, label, label, blur=blur)
+            print("positions", positions.shape)
+            (indices, ipos, inorm) = binned_indexing(positions, normals)
+            print("indices", indices.shape)
+            S = SurfaceInfo(name, color, indices, ipos, inorm)
+            result.add(S)
+    return result
+
 
 class NamedSurfaces:
 
@@ -105,7 +210,7 @@ class NamedSurfaces:
 
     def json_repr(self, multiplier=999):
         "semi-optimized json repr for transfer to javascript."
-        s_json = { name: s.json_repr(multiplier) for (name, s) in self.surfaces.items() }
+        s_json = { str(name): s.json_repr(multiplier) for (name, s) in self.surfaces.items() }
         return dict(
             surfaces=s_json,
             multiplier=multiplier,
@@ -158,14 +263,14 @@ class SurfacesSequence:
 
     def json_repr(self, multiplier=999):
         "semi-optimized json repr for transfer to javascript."
-        s_json = { s.json_repr(multiplier) for s in self.sequence }
+        s_json = [ s.json_repr(multiplier) for s in self.sequence ]
         MM = self.max_position
         mm = self.min_position
         self.diameter = diameter = np.linalg.norm(MM - mm)
-        self.center = center = (MM + mm) / 2
+        self.center = center = (MM + mm) * 0.5
         return dict(
-            diameter=diameter,
-            center=center,
+            diameter=float(diameter),
+            center=multiple_list(center, multiplier),
             sequence=s_json,
             multiplier=multiplier,
             max_position=multiple_list(self.max_position, multiplier),
@@ -237,4 +342,18 @@ def binned_indexing(triangle_positions, triangle_normals, binsize=10000, epsilon
         dtype = np.int32
     )
     return (indices, positions, normals)
-        
+
+def test_gizmo(fn="simple.json"):
+    import json
+    f = open(fn)
+    ob = json.load(f)
+    G = SurfacesGizmo()
+    async def task():
+        await S.show()
+        G.load_json_object(ob)
+        #G.add(B)
+    def start(*ignored):
+        G.load_3d_display()
+    B = gz.Button("Start", on_click=start)
+    S = gz.Stack([B, G])
+    gz.serve(task())
