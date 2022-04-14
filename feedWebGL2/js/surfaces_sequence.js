@@ -129,9 +129,8 @@
             // max/min position not used here...
         };
         load_3d_display(container, radius_multiple) {
-            debugger;
             var that = this;
-            radius_multiple = radius_multiple || 2;
+            radius_multiple = radius_multiple || 1;
             container.empty();
             var canvas = document.createElement( 'canvas' );
             var context = canvas.getContext( 'webgl2', { alpha: false } ); 
@@ -174,7 +173,7 @@
             camera.position.z = cz + radius * radius_multiple;
             camera.lookAt(new THREE.Vector3(cx, cy, cz));
 
-            var boundary_sphere = true;
+            var boundary_sphere = false;
             if (boundary_sphere) {
                 var g = new THREE.SphereGeometry(radius, 12, 12);
                 var m = new THREE.MeshNormalMaterial();
