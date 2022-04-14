@@ -7,6 +7,7 @@ from . import volume
 import numpy as np
 import H5Gizmos as gz
 import jp_proxy_widget
+import time
 
 # Required javascript modules:
 from jp_doodle.bounded_value_slider import bfs_js
@@ -26,6 +27,7 @@ class VolumeComponent(gz.jQueryComponent):
         self.V = None
         self.width = width
         self.color = color
+        self.reset_stats()
 
     def add_dependencies(self, gizmo):
         super().add_dependencies(gizmo)
@@ -95,8 +97,16 @@ class VolumeComponent(gz.jQueryComponent):
         self.V_container = self.cache("V_container", gizmo.jQuery("<div/>").appendTo(element))
         gz.do(self.V.build_scaffolding(self.V_container, self.width))
 
+    def reset_stats(self):
+        self.send_time = 0
+        self.recv_time = 0
+
+    def print_stats(self):
+        print("  Send time", self.send_time, "  Receive time", self.recv_time)
+
     async def get_positions_and_normals(self, threshold, replacement_array=None):
         if replacement_array is not None:
+            now = time.time()
             assert replacement_array.shape == self.data.shape, "cannot change array shape."
             vname = "volume_data"
             self.data_ref = await self.store_array(replacement_array, vname, dtype=np.float32)
@@ -104,7 +114,9 @@ class VolumeComponent(gz.jQueryComponent):
             gz.do(self.V.reset_array(self.data_ref)) 
             # Break volume_data reference to possibly save memory.
             self.cache(vname, None)
+            self.send_time += time.time() - now
         # cache positions and normal on js side
+        now = time.time()
         gname = "positions_and_normals"
         geometry_ref = self.cache(gname, self.V.get_positions_and_normals(threshold))
         positions = await self.get_array_from_buffer(geometry_ref.positions, dtype=np.float32)
@@ -112,6 +124,7 @@ class VolumeComponent(gz.jQueryComponent):
         assert positions.shape == normals.shape, "shapes should match " + repr((positions.shape,normals.shape))
         N = len(positions) // (3 * 3)
         reshape = (N, 3, 3)
+        self.recv_time += time.time() - now
         return (positions.reshape(reshape), normals.reshape(reshape))
 
     async def get_geometry_for_range(self, values_array, low, high, blur=None):
