@@ -46,9 +46,13 @@ class SurfacesGizmo(gz.jQueryComponent):
         gz.do(self.element.height(self.width))
         return result
 
-    def load_json_object(self, json_object):
-        constructor = self.element.surfaces_sequence(json_object)
+    async def load_json_object(self, json_object):
+        attr = "Surfaces_json"
+        json_ref = await self.store_json(json_object, attr)
+        #constructor = self.element.surfaces_sequence(json_object)
+        constructor = self.element.surfaces_sequence(json_ref)
         self.display3d = self.cache("surfaces3d", constructor)
+        # xxxx could break the ref to the json object in child...
 
     def load_3d_display(self):
         gz.do(self.display3d.load_3d_display(self.element))
@@ -140,16 +144,30 @@ class SurfaceMaker:
     all label arrays must have the same shape.
     """
 
-    def __init__(self, blur=0.7):
+    def __init__(
+        self,
+        di=dict(x=1, y=0, z=0),  # xyz offset between ary[0,0,0] and ary[1,0,0]
+        dj=dict(x=0, y=1, z=0),  # xyz offset between ary[0,0,0] and ary[0,1,0]
+        dk=dict(x=0, y=0, z=1),  # xyz offset between ary[0,0,0] and ary[0,0,1]
+        blur=0.7,
+        ):
         self.V = None
         self.sequence = SurfacesSequence()
         self.blur = blur
+        self.di = di
+        self.dj = dj
+        self.dk = dk
 
     async def set_up_gizmo(self, example_array):
         from feedWebGL2 import volume_gizmo
         V = volume_gizmo.VolumeComponent()
         await V.show()
-        await V.load_3d_numpy_array(example_array)
+        await V.load_3d_numpy_array(
+            example_array,
+            di=self.di,
+            dj=self.dj,
+            dk=self.dk,
+            )
         self.V = V
 
     async def add_surfaces(self, label_array, name_to_label, name_to_color):
@@ -167,10 +185,14 @@ class SurfaceMaker:
                 print(name, "color", color)
                 (positions, normals, mask) = await V.get_geometry_for_range(label_array, label, label, blur=blur)
                 print("positions", positions.shape)
+                if 0 in positions.shape:
+                    print("           no positions??? skipping...")
+                    continue
                 (indices, ipos, inorm) = binned_indexing(positions, normals)
                 print("indices", indices.shape, ipos.shape)
                 S = SurfaceInfo(name, color, indices, ipos, inorm)
                 result.add(S)
+                V.print_stats()
         print ("adding sequence", len(self.sequence.sequence))
         self.sequence.add(result)
         return result
@@ -350,10 +372,32 @@ def test_gizmo(fn="simple.json"):
     G = SurfacesGizmo()
     async def task():
         await S.show()
-        G.load_json_object(ob)
+        #G.load_json_object(ob)
+        # sync
+        #await gz.get(B.element.width())
+        #T.text("Surfaces loaded!")
+        #B.set_on_click(start)
         #G.add(B)
+    def setup(*ignored):
+        T.text("Scheduling load task...")
+        L.set_on_click(None)
+        gz.schedule_task(load())
+    async def load(*ignored):
+        print ("load task starts...")
+        T.text("Loading surfaces...")
+        # sync
+        await gz.get(T.element.width())
+        await G.load_json_object(ob)
+        # sync
+        await gz.get(T.element.width())
+        T.text("Surfaces loaded!")
+        #B.set_on_click(start)
+        start() # auto start
     def start(*ignored):
+        #B.set_on_click(None)
         G.load_3d_display()
-    B = gz.Button("Start", on_click=start)
-    S = gz.Stack([B, G])
+    #B = gz.Button("Start") #, on_click=start)
+    L = gz.Button("Load", on_click=setup)
+    T = gz.Text("Press the load button to start surface loading.")
+    S = gz.Stack([T, L, G])
     gz.serve(task())
