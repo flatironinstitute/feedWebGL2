@@ -150,6 +150,7 @@ class SurfaceMaker:
         dj=dict(x=0, y=1, z=0),  # xyz offset between ary[0,0,0] and ary[0,1,0]
         dk=dict(x=0, y=0, z=1),  # xyz offset between ary[0,0,0] and ary[0,0,1]
         blur=0.7,
+        link=False,
         ):
         self.V = None
         self.sequence = SurfacesSequence()
@@ -157,11 +158,15 @@ class SurfaceMaker:
         self.di = di
         self.dj = dj
         self.dk = dk
+        self.link = link
 
     async def set_up_gizmo(self, example_array):
         from feedWebGL2 import volume_gizmo
         V = volume_gizmo.VolumeComponent()
-        await V.show()
+        if self.link:
+            await V.link()
+        else:
+            await V.show()
         await V.load_3d_numpy_array(
             example_array,
             di=self.di,
@@ -365,13 +370,16 @@ def binned_indexing(triangle_positions, triangle_normals, binsize=10000, epsilon
     )
     return (indices, positions, normals)
 
-def test_gizmo(fn="simple.json"):
+def test_gizmo(fn="simple.json", link=False):
     import json
     f = open(fn)
     ob = json.load(f)
     G = SurfacesGizmo()
     async def task():
-        await S.show()
+        if not link:
+            await S.show()
+        else:
+            await S.link()
         #G.load_json_object(ob)
         # sync
         #await gz.get(B.element.width())
