@@ -108,6 +108,7 @@ class VolumeComponent(gz.jQueryComponent):
         if replacement_array is not None:
             now = time.time()
             assert replacement_array.shape == self.data.shape, "cannot change array shape."
+            assert replacement_array.shape == self.data.shape, "cannot change array shape: " + repr((replacement_array.shape, self.data.shape))
             vname = "volume_data"
             self.data_ref = await self.store_array(replacement_array, vname, dtype=np.float32)
             # Store array in volume component buffer
