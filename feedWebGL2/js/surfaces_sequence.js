@@ -113,6 +113,7 @@
         constructor(options) {
             this.settings = $.extend({
                 // defaults
+                ClearColorHex:  0xffffff,
             }, options);
             var s = this.settings;
             var multiplier = s.multiplier;
@@ -130,11 +131,13 @@
         };
         load_3d_display(container, radius_multiple) {
             var that = this;
+            var s = this.settings;
             radius_multiple = radius_multiple || 1;
             container.empty();
             var canvas = document.createElement( 'canvas' );
             var context = canvas.getContext( 'webgl2', { alpha: false } ); 
             var renderer = new THREE.WebGLRenderer( { canvas: canvas, context: context } );
+            renderer.setClearColor(s.ClearColorHex);
             this.renderer = renderer;
             renderer.setPixelRatio( window.devicePixelRatio );
             renderer.setSize( container.width(), container.height() );
