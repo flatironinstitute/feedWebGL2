@@ -245,23 +245,23 @@
                     max: nseq - 1,
                     step: 1,
                 });
-                // opacity slider
-                var slider_bar = $("<div/>").appendTo(container);
-                slider_bar.css({"display": "flex", "flex-direction": "row"});
-                $("<div>opacity</div>").appendTo(slider_bar);
-                var opacity_slider = $("<div/>").appendTo(slider_bar);
-                opacity_slider.width(300);
-                var update_opacity = function() { that.update_opacity(); };
-                opacity_slider.slider({
-                    value: 0.5,
-                    slide: update_opacity,
-                    change: update_opacity,
-                    min: 0,
-                    max: 1.0,
-                    step: 0.05,
-                });
-                this.opacity_slider = opacity_slider;
             }
+            // opacity slider
+            var slider_bar = $("<div/>").appendTo(container);
+            slider_bar.css({"display": "flex", "flex-direction": "row"});
+            $("<div>opacity</div>").appendTo(slider_bar);
+            var opacity_slider = $("<div/>").appendTo(slider_bar);
+            opacity_slider.width(300);
+            var update_opacity = function() { that.update_opacity(); };
+            opacity_slider.slider({
+                value: 0.5,
+                slide: update_opacity,
+                change: update_opacity,
+                min: 0,
+                max: 1.0,
+                step: 0.05,
+            });
+            this.opacity_slider = opacity_slider;
         };
         update_opacity() {
             var opacity = this.opacity_slider.slider("option", "value");
