@@ -209,7 +209,7 @@
                 opacity: 0.5,
                 transparent: true,
             } );
-            material.depthWrite = false
+            //material.depthWrite = false
             this.material = material;
 
             var mesh = new THREE.Mesh( geometry, material );
