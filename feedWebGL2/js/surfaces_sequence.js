@@ -262,6 +262,7 @@
                 step: 0.05,
             });
             this.opacity_slider = opacity_slider;
+            this.ts_info = $("<div>Setting up display.</div>").appendTo(container);
         };
         update_opacity() {
             var opacity = this.opacity_slider.slider("option", "value");
@@ -269,6 +270,7 @@
         };
         update_timestamp() {
             var tsindex = this.slider.slider("option", "value");
+            this.ts_info.html("Timestamp index: " + tsindex);
             this.current_index = tsindex
             var sequence = this.sequences[this.current_index];
             sequence.set_arrays();
