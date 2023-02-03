@@ -8,6 +8,8 @@ For displaying related isosurfaces.
 import H5Gizmos as gz
 import numpy as np
 from . import local_files
+from imageio import imsave
+import asyncio
 
 def multiple_list(array, multiplier):
     "return flattened list of integers for semi-optimized json transfer"
@@ -15,7 +17,7 @@ def multiple_list(array, multiplier):
     i = m.astype(np.int)
     return i.tolist()
 
-    
+
 required_javascript_modules = [
     local_files.vendor_path("js_lib/three.min.js"),
     local_files.vendor_path("js_lib/OrbitControls.js"),
@@ -56,6 +58,12 @@ class SurfacesGizmo(gz.jQueryComponent):
 
     def load_3d_display(self):
         gz.do(self.display3d.load_3d_display(self.element))
+
+    async def get_image_array(self):
+        #canvas_ref = self.display3d.canvas
+        context_ref = self.display3d.canvas_context
+        array = await self.get_webgl_image_array(context_ref)
+        return array
 
 class SurfaceInfo:
 
@@ -401,11 +409,41 @@ def test_gizmo(fn="simple.json", link=False):
         T.text("Surfaces loaded!")
         #B.set_on_click(start)
         start() # auto start
+    def snapshot(*ignored):
+        gz.schedule_task(snap_task())
+    async def snap_task(*ignored):
+        print("getting image array")
+        array = await G.get_image_array()
+        print("got array", array.min(), array.max(), array.dtype, array.shape)
+        #sfile = "snapshot.npy"
+        #np.save(sfile, array)
+        #print("stored", repr(sfile))
+        filepath = "snapshot.png"
+        imsave(filepath, array)
+        T.text("Saved: " + repr(filepath))
+    async def save_all_timestamps():
+        nseq = await gz.get(G.display3d.sequences.length)
+        print ("Saving", nseq, "timestamp images.")
+        for tsnum in range(nseq):
+            print("setting timestamp", tsnum)
+            gz.do(G.display3d.set_timestamp(tsnum))
+            await asyncio.sleep(1.0)
+            print("getting array for", tsnum)
+            array = await G.get_image_array()
+            filepath = "timestamp_%s.png" % tsnum
+            imsave(filepath, array)
+            print("saved", filepath)
+        print("Done saving timestamps.")
+    def saveall(*ignored):
+        gz.schedule_task(save_all_timestamps())
+
     def start(*ignored):
         #B.set_on_click(None)
         G.load_3d_display()
     #B = gz.Button("Start") #, on_click=start)
     L = gz.Button("Load", on_click=setup)
+    S = gz.Button("Snap", on_click=snapshot)
+    V = gz.Button("Save All", on_click=saveall)
     T = gz.Text("Press the load button to start surface loading.")
-    S = gz.Stack([T, L, G])
+    S = gz.Stack([T, [L, S, V], G])
     gz.serve(task())
