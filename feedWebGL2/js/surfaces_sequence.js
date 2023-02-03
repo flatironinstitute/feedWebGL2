@@ -135,7 +135,13 @@
             radius_multiple = radius_multiple || 1;
             container.empty();
             var canvas = document.createElement( 'canvas' );
-            var context = canvas.getContext( 'webgl2', { alpha: false } ); 
+            this.canvas = canvas;
+            var context_attrs = { 
+                alpha: true,
+                preserveDrawingBuffer: true,
+            } 
+            var context = canvas.getContext( 'webgl2', context_attrs ); 
+            this.canvas_context = context;
             var renderer = new THREE.WebGLRenderer( { canvas: canvas, context: context } );
             renderer.setClearColor(s.ClearColorHex);
             this.renderer = renderer;
@@ -270,6 +276,9 @@
         };
         update_timestamp() {
             var tsindex = this.slider.slider("option", "value");
+            this.set_timestamp(tsindex);
+        }
+        set_timestamp(tsindex) {
             this.ts_info.html("Timestamp index: " + tsindex);
             this.current_index = tsindex
             var sequence = this.sequences[this.current_index];
