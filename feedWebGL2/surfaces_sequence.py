@@ -11,6 +11,8 @@ from . import local_files
 from imageio import imsave
 import asyncio
 
+np.seterr(all="raise") # find caste warning
+
 def multiple_list(array, multiplier):
     "return flattened list of integers for semi-optimized json transfer"
     m = array.ravel() * multiplier
@@ -334,6 +336,27 @@ class SurfacesSequence:
         surface = self.sequence[self.current_index]
         surface.doodle_draw(swatch)
 
+def trivial_indexing(triangle_positions, triangle_normals, binsize=10000, epsilon=1e-12):
+    "for debug and test mainly"
+    tn = np.array(triangle_normals, dtype=np.float32)
+    tp = np.array(triangle_positions, dtype=np.float32)
+    tns = tn.shape
+    tps = tp.shape
+    assert tns == tps, "bad shapes for triangle inputs: " + repr((tns, tps))
+    (ntriangles, t1, t2) = tns
+    assert t1 == 3 and t2 == 3, "triangles should have 3 vert, 3 dims: " + repr(tns)
+    all_size = ntriangles * 3
+    all_positions = tp.reshape((all_size, 3))
+    all_normals = tn.reshape((all_size, 3))
+    all_indices = np.arange(all_size).reshape((ntriangles, 3)).astype(np.float32)
+    return (all_indices, all_positions, all_normals)
+
+def no_nans(triples, sub=[1,0,0]):
+    for triple in triples:
+        n = np.linalg.norm(triple)
+        if np.isnan(n):
+            triple[:] = sub  # in place mod
+    return triples
 
 def binned_indexing(triangle_positions, triangle_normals, binsize=10000, epsilon=1e-12):
     """
@@ -350,6 +373,8 @@ def binned_indexing(triangle_positions, triangle_normals, binsize=10000, epsilon
     all_size = ntriangles * 3
     all_positions = tp.reshape((all_size, 3))
     all_normals = tn.reshape((all_size, 3))
+    all_positions = no_nans(all_positions)
+    all_normals = no_nans(all_normals)
     M = all_positions.max(axis=0)
     m = all_positions.min(axis=0)
     D = M - m
@@ -377,6 +402,10 @@ def binned_indexing(triangle_positions, triangle_normals, binsize=10000, epsilon
         dtype = np.int32
     )
     return (indices, positions, normals)
+
+# DEBUG
+#binned_indexing = trivial_indexing # DEBUG
+
 
 def test_gizmo(fn="simple.json", link=False):
     import json
