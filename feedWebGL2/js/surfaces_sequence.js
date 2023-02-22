@@ -111,9 +111,11 @@
 
     class SurfacesSequence {
         constructor(options) {
+            debugger;
             this.settings = $.extend({
                 // defaults
                 ClearColorHex:  0xffffff,
+                wireframe: false,
             }, options);
             var s = this.settings;
             var multiplier = s.multiplier;
@@ -214,6 +216,7 @@
                 vertexColors: true,
                 opacity: 0.5,
                 transparent: true,
+                wireframe: this.settings.wireframe,
             } );
             //material.depthWrite = false
             this.material = material;
