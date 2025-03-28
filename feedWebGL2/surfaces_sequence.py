@@ -24,6 +24,7 @@ required_javascript_modules = [
     local_files.vendor_path("js_lib/three.min.js"),
     local_files.vendor_path("js_lib/OrbitControls.js"),
     local_files.vendor_path("js/surfaces_sequence.js"),
+    local_files.vendor_path("js/surfaces_display.js"),
 ]
 
 class SurfacesGizmo(gz.jQueryComponent):
@@ -49,12 +50,16 @@ class SurfacesGizmo(gz.jQueryComponent):
         gz.do(self.element.width(self.width))
         gz.do(self.element.height(self.width))
         return result
+    
+    def get_visual_constructor(self, json_ref):
+        return self.element.surfaces_sequence(json_ref)
 
     async def load_json_object(self, json_object):
         attr = "Surfaces_json"
         json_ref = await self.store_json(json_object, attr)
         #constructor = self.element.surfaces_sequence(json_object)
-        constructor = self.element.surfaces_sequence(json_ref)
+        #constructor = self.element.surfaces_sequence(json_ref)
+        constructor = self.get_visual_constructor(json_ref)
         self.display3d = self.cache("surfaces3d", constructor)
         # xxxx could break the ref to the json object in child...
 
@@ -66,6 +71,12 @@ class SurfacesGizmo(gz.jQueryComponent):
         context_ref = self.display3d.canvas_context
         array = await self.get_webgl_image_array(context_ref)
         return array
+    
+class SurfacesDisplayGizmo(SurfacesGizmo):
+    # refactored implementation
+    def get_visual_constructor(self, json_ref):
+        #return super().get_visual_constructor(json_ref)
+        return self.element.surfaces_display(json_ref)
 
 class SurfaceInfo:
 
@@ -197,7 +208,7 @@ class SurfaceMaker:
             label = name_to_label[name]
             if label in labels:
                 color = name_to_color[name]
-                print(name, "color", color)
+                print(name, "color", color, "of", len(name_to_label))
                 (positions, normals, mask) = await V.get_geometry_for_range(label_array, label, label, blur=blur)
                 print("positions", positions.shape)
                 if 0 in positions.shape:
@@ -406,12 +417,14 @@ def binned_indexing(triangle_positions, triangle_normals, binsize=10000, epsilon
 # DEBUG
 #binned_indexing = trivial_indexing # DEBUG
 
+def test_gizmo1(fn="simple.json", link=False, klass=SurfacesDisplayGizmo):
+    return test_gizmo(fn, link, klass)
 
-def test_gizmo(fn="simple.json", link=False):
+def test_gizmo(fn="simple.json", link=False, klass=SurfacesGizmo):
     import json
     f = open(fn)
     ob = json.load(f)
-    G = SurfacesGizmo()
+    G = klass()
     async def task():
         if not link:
             await S.show()

@@ -211,8 +211,8 @@
             geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 3 ) );
 
             const material = new THREE.MeshPhongMaterial( {
-                //side: THREE.DoubleSide,
-                side: THREE.BackSide,
+                side: THREE.DoubleSide,
+                //side: THREE.BackSide,
                 vertexColors: true,
                 opacity: 0.5,
                 transparent: true,
