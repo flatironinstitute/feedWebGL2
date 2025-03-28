@@ -144,8 +144,8 @@ Refactor of surfaces_sequence.js to allow different surfaces to have different o
             // orbitControls.userZoom = false;
             var clock = new THREE.Clock();
             this.clock = clock;
-            this.set_timestamp(0);
-            this.animate();
+            //this.set_timestamp(0);
+            //this.animate();
 
             // set up slider if there are many timestamps
             var nseq = this.sequences.length;
@@ -181,10 +181,26 @@ Refactor of surfaces_sequence.js to allow different surfaces to have different o
             });
             this.opacity_slider = opacity_slider;
             //this.ts_info = $("<div>Setting up display.</div>").appendTo(container);
+
+            this.set_timestamp(0);
+            this.animate();
         };
         update_opacity() {
             var opacity = this.opacity_slider.slider("option", "value");
             // set opacity of all meshes not marked opaque.
+            var opaque_colors = this.opaque_colors;
+            var meshes = this.meshes;
+            for (var i=0; i<meshes.length; i++) {
+                var mesh = meshes[i];
+                var color = mesh.rgb_color;
+                if (color in opaque_colors) {
+                    mesh.material.opacity = 1.0;
+                    mesh.material.transparent = false;
+                } else {
+                    mesh.material.opacity = opacity;
+                    mesh.material.transparent = true;
+                }
+            }
         };
         update_timestamp() {
             var tsindex = this.slider.slider("option", "value");
@@ -208,7 +224,10 @@ Refactor of surfaces_sequence.js to allow different surfaces to have different o
                 var color = visuals.color;
                 var material = mesh.material;
                 material.color.setRGB(color[0], color[1], color[2]);
+                // mark the mesh with the rgb color
+                mesh.rgb_color = visuals.rgb_color;
             }
+            this.update_opacity();
         };
 
         animate() {
