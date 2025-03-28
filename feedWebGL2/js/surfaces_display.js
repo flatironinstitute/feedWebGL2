@@ -182,8 +182,41 @@ Refactor of surfaces_sequence.js to allow different surfaces to have different o
             this.opacity_slider = opacity_slider;
             //this.ts_info = $("<div>Setting up display.</div>").appendTo(container);
 
+            var color_checkbox_div = $("<div/>").appendTo(container);
+            color_checkbox_div.css({"display": "flex", "flex-direction": "row"});
+            var update_colors = function() { that.update_colors(); };
+            var color_checkboxes = {};
+            for (var color in this.all_colors) {
+                // add a checkbox for each color
+                var containerdiv = $("<div/>").appendTo(color_checkbox_div);
+                // make the container div have the color "color"
+                containerdiv.css({
+                    "background-color": color, 
+                    "width": "20px",
+                    "height": "20px",
+                });
+                var checkbox = $("<input type='checkbox'/>").appendTo(color_checkbox_div);
+                color_checkboxes[color] = checkbox;
+                // when the checkbox is clicked, update colors
+                checkbox.on("click", update_colors);
+            }
+            this.color_checkboxes = color_checkboxes;
+
             this.set_timestamp(0);
             this.animate();
+        };
+        update_colors() {
+            // update the opaque colors based on the checkboxes
+            var color_checkboxes = this.color_checkboxes;
+            var opaque_colors = {};
+            for (var color in color_checkboxes) {
+                var checkbox = color_checkboxes[color];
+                if (checkbox.is(":checked")) {
+                    opaque_colors[color] = true;
+                }
+            }
+            this.opaque_colors = opaque_colors;
+            this.update_opacity();
         };
         update_opacity() {
             var opacity = this.opacity_slider.slider("option", "value");
