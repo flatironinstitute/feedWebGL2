@@ -10,6 +10,7 @@ import numpy as np
 from . import local_files
 from imageio import imsave
 import asyncio
+import json
 
 np.seterr(all="raise") # find caste warning
 
@@ -53,8 +54,50 @@ class SurfacesGizmo(gz.jQueryComponent):
     
     def get_visual_constructor(self, json_ref):
         return self.element.surfaces_sequence(json_ref)
-
+    
     async def load_json_object(self, json_object):
+        "transfer json object to javascript using gizmo protocol"
+        # send each timestamp separately
+        # to avoid browser string size limits
+        print("transferring json string")
+        json_dict = json_object.copy()
+        sequence = json_object["sequence"]
+        json_dict["sequence"] = []
+        json_ref = self.cache("Surfaces_json", json_dict)
+        for i in range(len(sequence)):
+            print("sequence", i)
+            sequencei = sequence[i]
+            sequencei_json = json.dumps(sequencei)
+            sequencei_decode = self.window.JSON.parse(sequencei_json)
+            sequencei_push = json_ref.sequence.push(sequencei_decode)
+            gz.do(sequencei_push)
+        print ("making constructor")
+        constructor = self.get_visual_constructor(json_ref)
+        print ("caching constructor")
+        self.display3d = self.cache("surfaces3d", constructor)
+        print ("awaiting completion of constructor")
+        await gz.get(self.window.innerHeight)
+
+    async def load_json_object2(self, json_object):
+        "transfer json object to javascript using gizmo protocol"
+        # this may be slower, but should work for larger objects (?)
+        print("transferring json string")
+        json_string = json.dumps(json_object)
+        json_string_ref = self.cache("Surfaces_json", json_string)
+        json_string_decode = self.window.JSON.parse(json_string_ref)
+        print ("making constructor")
+        constructor = self.get_visual_constructor(json_string_decode)
+        print ("caching constructor")
+        self.display3d = self.cache("surfaces3d", constructor)
+        print ("awaiting completion of constructor")
+        await gz.get(self.window.innerHeight)
+        # free the string
+        #self.cache("Surfaces_json", None)
+        print ("constructor completed")
+
+    async def load_json_object1(self, json_object):
+        "transfer json object to javascript using http get"
+        # this breaks if the object is too large
         attr = "Surfaces_json"
         json_ref = await self.store_json(json_object, attr)
         #constructor = self.element.surfaces_sequence(json_object)
