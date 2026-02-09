@@ -34,7 +34,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 camera_offset: {x:0, y:0, z:1},
                 camera_distance_multiple: 2.0,
                 axis_length: true,  // auto assign length
-                ijk_highlight_corners: null,
+                solid_labels: false,  // if set then make labels solid and add lighting
+                //ijk_highlight_corners: null,
                 //shrink_factor: null,   // how much to strink internal buffers in [0..1] LEAVE UNSET
             }, options);
             var s = this.settings;
@@ -90,12 +91,33 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.kji = [Math.floor(s.num_cols/2), Math.floor(s.num_rows/2), Math.floor(s.num_layers/2), ];
             // for debugging
             this.dump_events = false;
+            this.label_to_color_mapping = null;
+            this.label_meshes = null;
 
             // custom init for subclassing
             this.custom_initialization();
         };
         custom_initialization() {
             this.supports_cutting = true;
+        };
+        set_camera_offset(dx, dy, dz, camera_distance_multiple) {
+            // sanity check
+            var sq = dx*dx + dy*dy + dz*dz;
+            if ((!sq) || (sq < 0.5) || (sq > 1.5)) {
+                console.log("set_camera_offset sanity check failed -- offset out of range: ", dx, dy, dz);
+                throw new Error("camera offset sanity check failed -- bad offset.");
+            }
+            var s = this.settings;
+            camera_distance_multiple = camera_distance_multiple || s.camera_distance_multiple;
+            if ((camera_distance_multiple < 0.1) || (camera_distance_multiple > 10.0)) {
+                console.log("set_camera_offset sanity check failed -- multiple out of range: ", camera_distance_multiple);
+                throw new Error("camera offset sanity check failed -- bad multiple.");
+            }
+            s.camera_offset = {x:dx, y:dy, z:dz};
+            s.camera_distance_multiple = camera_distance_multiple;
+            this.reset_camera(this.surface_camera);
+            this.reset_camera(this.voxel_camera);
+            this.request_render();
         };
         set_slice_ijk(i, j, k, change_threshold) {
             var kji = [k, j, i];
@@ -108,7 +130,10 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             } else {
                 this.redraw();
             }
-        }
+        };
+        load_label_to_color_mapping(label_to_color_mapping) {
+            this.label_to_color_mapping = label_to_color_mapping;
+        };
         // xxxx really should get these from somewhere else
         vsum(v1, v2) {
             var result = [];
@@ -325,6 +350,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var mesh = new THREE.Mesh( geometry,  material );
             var scene = new THREE.Scene();
             scene.add(mesh);
+            if (s.solid_labels) {
+                this.add_lighting(scene);
+            }
             if (s.axis_length) {
                 // add axes indicator
                 var ln = s.axis_length;
@@ -336,6 +364,26 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 THREE.sprite_text(scene, "Y", [[0, ln1, 0]], ln2, "green", 20);
                 THREE.sprite_text(scene, "Z", [[0, 0, ln1]], ln2, "blue", 20);
             }
+            // add labelled meshes if specified
+            var label_to_color_mapping = this.label_to_color_mapping;
+            if (label_to_color_mapping) {
+                var label_meshes = [];
+                for (var string_label in label_to_color_mapping) {
+                    var color_array = label_to_color_mapping[string_label];
+                    var int_label = parseInt(string_label);
+                    if (int_label < 1) {
+                        console.log("Invalid volume label -- ignored: " + int_label);
+                        continue;
+                    }
+                    var label_geometry = this.surface.integer_label_geometry(THREE, int_label);
+                    var label_material = this.label_material(color_array);
+                    var label_mesh = new THREE.Mesh( label_geometry,  label_material );
+                    scene.add(label_mesh);
+                    this.voxel_scene.add(label_mesh.clone())
+                    label_meshes.push(label_mesh)
+                }
+                this.label_meshes = label_meshes;
+            }
             this.surface_context = context;
             this.surface_material = material;
             this.surface_scene = scene;
@@ -346,6 +394,40 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.reset_camera(camera);
             this.sync_cameras();
             //renderer.render( scene, camera );
+        };
+        add_lighting(scene) {
+            var ambientLight = new THREE.AmbientLight( 0xffffff, 0.5 );
+            scene.add( ambientLight );
+            this.add_point_light(scene, -1, -1, -1, 0xffff00);
+            this.add_point_light(scene, +1, +1, -1, 0xff00ff);
+            this.add_point_light(scene, -1, +1, +1, 0x00ffff);
+            this.add_point_light(scene, +1, -1, +1, 0xff8888);
+        };
+        add_point_light(scene, dx, dy, dz, intcolor) {
+            var pointLight = new THREE.PointLight( intcolor, 0.5 );
+            pointLight.position.x = dx * 2500;
+            pointLight.position.y = dy * 2500;
+            pointLight.position.z = dz * 2500;
+            scene.add( pointLight );
+        };
+        label_material(color_array) {
+            var [R, G, B] = color_array;
+            var three_color = new THREE.Color(R / 256.0, G / 256.0, B / 256.0, );
+            var material;
+            if (this.settings.solid_labels) {
+                var parameters = {
+                    color: three_color,
+                    side: THREE.DoubleSide
+                };
+                material = new THREE.MeshStandardMaterial(parameters);
+            } else {
+                var parameters = {
+                    wireframe: true,
+                    color: three_color
+                };
+                var material = new THREE.MeshBasicMaterial(parameters);
+            }
+            return material;
         };
         get_voxel_pixels() {
             return this.get_pixels(self.voxel_context);
@@ -423,6 +505,16 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var mesh = this.get_points_mesh();
             var scene = new THREE.Scene();
             scene.add(mesh);
+            if (s.solid_labels) {
+                this.add_lighting(scene);
+            }
+
+            // clone label meshes if available
+            //var label_meshes = this.label_meshes;
+            //for (var i=0; i<label_meshes.length; i++) {
+            //    var label_mesh = label_meshes[i].clone();
+            //    scene.add(label_meshes)
+            //}
 
             var g = new THREE.SphereGeometry(0.5, 6,6);
             var m = new THREE.MeshNormalMaterial();
@@ -460,6 +552,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
         };
         dispose() {
             // call this when the object is no longer in use.  It tries to free up memory.
+            console.log("disposing of marching squares instance");
+            var container = this.container;
             try {
                 this.feedbackContext.lose_context();
             } catch (e) {};
@@ -471,6 +565,9 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             } catch (e) {};
             for (var name in this) {
                 this[name] = null;
+            }
+            if (container) {
+                container.empty();
             }
         };
         // ??? eventually render on demand:
@@ -594,6 +691,34 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     bytes[ravelled_index] = scaled;
                 }
             }
+            // translate to colors if label colors are provided
+            var label_colors = this.label_colors
+            if (label_colors) {
+                var color_bytes = new Uint8Array(4 * size);
+                for (var rownum=0; rownum<n1; rownum++) {
+                    var ravelled_offset = n0 * (n1 - rownum - 1);
+                    var row = result[rownum];
+                    for (var colnum=0; colnum<n0; colnum++) {
+                        var ravelled_index = colnum + ravelled_offset;
+                        var unscaled = row[colnum];
+                        var scaled = bytes[ravelled_index];
+                        var color_index = ravelled_index * 4;
+                        var possible_label = unscaled | 0;  // Math.floor(unscaled)
+                        var color = label_colors[possible_label];
+                        if (color) {
+                            for (var c=0; c<3; c++) {
+                                color_bytes[color_index + c] = color[c]
+                            }
+                        } else {
+                            for (var c=0; c<3; c++) {
+                                color_bytes[color_index + c] = scaled;
+                            }
+                        }
+                        color_bytes[color_index + 3] = 255;
+                    }
+                }
+                bytes = color_bytes;
+            }
             return {
                 array: result,
                 mins: mins,
@@ -612,6 +737,18 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             if (!container[0].isConnected) {
                 throw new Error("scaffolding must be built on a connected DOM element.")
             }
+            // preprocess label imformatation
+            var label_to_color_mapping = this.label_to_color_mapping;
+            var label_colors = null;
+            if (label_to_color_mapping) {
+                label_colors = new Array();
+                for (var string_label in label_to_color_mapping) {
+                    var color_array = label_to_color_mapping[string_label];
+                    var int_label = parseInt(string_label);
+                    label_colors[int_label] = color_array;
+                }
+            }
+            this.label_colors = label_colors;
             var contour_side = width * 0.5;
             var slice_side = contour_side * 0.5;
             var slider_breadth = slice_side * 0.1;
@@ -709,6 +846,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 "height": `${contour_side}px`,
             });
             this.initialize_surface_display(contour_div);
+            //this.initialize_voxels(dots_div);  // doesn't work -- camera not initialized.
 
             this.slice_displays = [this.x_slicer, this.y_slicer, this.z_slicer];
 
@@ -809,10 +947,13 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 //that.update_volume();
                 that.redraw();
             };
+            // allow slider to go below and above limits
+            var slider_range = bmax - bmin;
+            var slider_margin = slider_range * 0.05;
             slider.slider({
-                min: bmin,
-                max: bmax,
-                step: 0.01 * (bmax - bmin),
+                min: bmin - slider_margin,
+                max: bmax + slider_margin,
+                step: 0.01 * slider_range,
                 value: this.threshold,
                 slide: update,
                 change: update,
@@ -852,7 +993,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 )
             );
             var [cx, cy, cz] = center;
-            var r = Math.max(cx, cy, cz)  * 2;
+            //var r = Math.max(cx, cy, cz)  * 2;
+            var r = Math.max(cx, cy, cz)  * s.camera_distance_multiple;
             var crossing = this.surface.crossing;
             var shift = 2.0;
             //crossing.reset_three_camera(this.surface_camera, shift, null, r, cx, cy, cz);
@@ -955,6 +1097,12 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 orbit_control.update();
             }
             return camera;
+        };
+        get_positions_and_normals(threshold) {
+            return this.surface.get_positions_and_normals(threshold);
+        };
+        reset_array(replacement_array) {
+            return this.surface.reset_array(replacement_array);
         };
         set_sphere_locations() {
             //var marching = this.surface;

@@ -57,7 +57,8 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             if (s.num_blocks > 1) {
                 throw new Error("multiple blocks not yet supported " + s.num_blocks)
             }
-            this.shape = [s.num_layers, s.num_rows, s.num_cols]
+            this.shape = [s.num_layers, s.num_rows, s.num_cols];
+            this.original_array = s.valuesArray;
             var [I, J, K] = this.shape;
             var grid_size = I * J * K;
             if (s.valuesArray.length != grid_size) {
@@ -132,7 +133,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.linearized_normals = null;
             this.after_run = null;
         };
-        run() {
+        run(no_after_run) {
             var indexer = this.indexer;
             indexer.run();
             this.voxel_indices = indexer.voxel_index_array;
@@ -168,7 +169,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.mid_point = mid;
             this.mins = mins;
             this.maxes = maxes;
-            if (this.after_run) {
+            if ((!no_after_run) && (this.after_run)) {
                 // post processing callback
                 this.after_run();
             }
@@ -254,7 +255,65 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             this.check_update_link = check_update_link;
             geometry.check_update_link = check_update_link;
             return geometry;
+        };
+
+        integer_label_geometry(THREE, int_value) {
+            // return a three geometry corresponding to values near int_value in the initial_array
+            if (int_value < 1) {
+                throw new Error("int_value should be a positive integer: " + int_value);
+            }
+            var save_threshold = this.settings.threshold;
+            var min_value = int_value - 0.5;
+            var max_value = int_value + 0.5;
+            var default_value = -1.0;
+            // clamp the array to the range
+            this.indexer.clamp_array(min_value, max_value, default_value);
+            this.set_threshold(min_value);
+            // process isosurface without calling after_run callback
+            this.run(true); 
+            // extract the clamped geometry
+            var geometry = new THREE.BufferGeometry();
+            var linearized_positions = this.get_positions()
+            var linearized_normals = this.get_normals();
+            //var num_triangle_triples = this.num_edge_triples;
+            var drawn_vertex_count = this.drawn_vertex_count;
+            var linearized_length = drawn_vertex_count * 3;
+            // slice out only relevant values into fresh arrays
+            var fresh_positions = linearized_positions.slice(0, linearized_length)
+            var fresh_normals = linearized_normals.slice(0, linearized_length)
+            geometry.setAttribute( 'position', new THREE.BufferAttribute( fresh_positions, 3 ) );
+            geometry.setAttribute( 'normal', new THREE.BufferAttribute( fresh_normals, 3 ) );
+            // unclamp the array for general use (xxx this could be optimized to lazy evaluation maybe)
+            this.indexer.unclamp_array();
+            this.set_threshold(save_threshold);
+            return geometry;
+        };
+
+        get_positions_and_normals(threshold) {
+            // copy/pasted -- should refactor.
+            this.set_threshold(threshold);
+            this.run(true);
+            var linearized_positions = this.get_positions()
+            var linearized_normals = this.get_normals();
+            var drawn_vertex_count = this.drawn_vertex_count;
+            var linearized_length = drawn_vertex_count * 3;
+            // slice out only relevant values into fresh arrays
+            var fresh_positions = linearized_positions.slice(0, linearized_length)
+            var fresh_normals = linearized_normals.slice(0, linearized_length)
+            return {
+                positions: fresh_positions,
+                normals: fresh_normals,
+            }
         }
+
+        reset_array(replacement_array) {
+            var s = this.settings;
+            //if (!replacement_array) {
+            //    replacement_array = this.original_array;
+            //}
+            s.valuesArray = replacement_array;
+            this.indexer.reset_array(replacement_array);
+        };
 
         xxx_linked_three_geometry_indexed(THREE, clean, normal_binning) {
             // this doesn't work for large models on my Mac Laptop.  I think it's a GPU limitation...
@@ -589,7 +648,6 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
             var [Ioffset, Joffset, Koffset] = [J*K, K, 1];
             var anomaly = function(message) {
                 console.log(message);
-                //debugger;
                 // don't throw an error to permit debug test runs
             };
             if ((triangle_count % 3) != 0) {
@@ -954,6 +1012,7 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                     voxel_index: {type: "int"},
                 }
             });
+            this.initial_array = s.valuesArray;
             var inputs = {};
             var nvalues = s.valuesArray.length;
             // allocate and load buffer with a fresh name
@@ -974,6 +1033,34 @@ Structure follows: https://learn.jquery.com/plugins/basic-plugin-creation/
                 },
                 inputs: inputs,
             });
+        };
+        // Special feature introduced for mouse embryo project
+        clamp_array(min_value, max_value, default_value) {
+            var valuesArray = this.initial_array;
+            var clampArray = new Float32Array(valuesArray);
+            for (var i=0; i<clampArray.length; i++) {
+                var value = clampArray[i];
+                if ((value < min_value) || (value > max_value)) {
+                    clampArray[i] = default_value;
+                }
+            }
+            this.buffer.copy_from_array(clampArray);
+        };
+        unclamp_array() {
+            this.buffer.copy_from_array(this.initial_array);
+        };
+        reset_array(replacement_array) {
+            var initial_array = this.initial_array;
+            if (replacement_array) {
+                if (replacement_array.length != initial_array.length) {
+                    throw new Error("Array must be of same length as initial array.");
+                }
+                // xxxx should not be needed???
+                //this.initial_array = replacement_array;
+            } else {
+                replacement_array = initial_array;
+            }
+            this.buffer.copy_from_array(replacement_array);
         };
         run() {
             this.runner.install_uniforms();

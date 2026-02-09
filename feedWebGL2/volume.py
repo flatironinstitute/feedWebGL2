@@ -1,6 +1,6 @@
 
 """
-Jupyter widget for viewing a dense 3d matrix.
+Jupyter widget for viewing a dense 3d matrix isosurfaces.
 """
 
 from . import local_files
@@ -74,9 +74,8 @@ element.send_voxel_pixels = function () {
 };
 
 element.send_snapshot_surface = function(current_pixels) {
-    debugger;
     //console.log("send snapsnot surface");
-    current_pixels = current_pixels || element.V.get_pixels();
+    var current_pixels = current_pixels || element.V.get_pixels();
     var data = current_pixels.data;
     // store the buffer for sending in chunks
     element.buffer_to_send = data;
@@ -129,6 +128,8 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             di=None,
             dj=None,
             dk=None,
+            solid_labels=None,
+            axis_length=True,
             ):
         methods = ("tetrahedra", "diagonal", "cubes")
         assert method in methods, "method must be in " + repr(methods)
@@ -141,6 +142,8 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             camera_offset=camera_offset,
             camera_distance_multiple=camera_distance_multiple,
             di=di, dj=dj, dk=dk,
+            solid_labels=solid_labels,
+            axis_length=axis_length,
         )
         self.options = options
         self.js_init("""
@@ -150,6 +153,18 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
                 element.V = element.volume32(options);
             }
         """, options=options)
+
+    def dispose(self, verbose=True):
+        "Attempt to release all resources in self."
+        if verbose:
+            print ("Disposing of volume widget.")
+        #self.element.V.dispose()
+        self.js_init("""
+            if (element.V) {
+                element.V.dispose();
+            };
+            element.V = null;
+        """)
 
     def sync(self, message="Volume widget is ready"):
         "Wait for the widget to initialize before proceeding. Widget must be displayed!"
@@ -173,7 +188,6 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         self.received_end = None
         # XXXX bug in js_proxy_widget -- must call with argument ???
         #self.js_init("""
-        #    debugger;
         #    element.send_snapshot_surface();
         #""")
         data = self.await_buffer_to_send()
@@ -211,6 +225,7 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
         self.received_end = None
         start = 0
         end = self.buffer_chunk_size
+        self.received_count = 0
         self.element.send_buffer_chunk(start, end)
         #self.js_init("""
         #    // should be equivalent???
@@ -253,24 +268,36 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             raise ValueError("buffer sanity callback limit exceeded.")
         data = info["data"]
         end = info["end"]
-        ##pr(self.received_count, "receive bytes", len(data), "ending at", end, "expecting", self.buffer_length)
+        #(self.received_count, "receive bytes", len(data), "ending at", end, "expecting", self.buffer_length)
         self.received_end = end
         self.buffer_chunks.append(data)
         # request the next chunk
         next_start = end
         next_end = end + self.buffer_chunk_size
         if next_start < self.buffer_length:
+            #("requesting", next_start, next_end)
             self.element.send_buffer_chunk(next_start, next_end)
             #self.js_init("""
             #    // should be equivalent???
             #    element.send_buffer_chunk(start, end);
             #""", start=next_start, end=next_end)
+        else:
+            #("finished receiving", next_start, self.buffer_length)
+            self.received_count = 0
 
     def set_slice_ijk(self, i, j, k, change_threshold=False):
         self.element.V.set_slice_ijk(i, j, k, change_threshold)
 
     def set_threshold(self, value):
         self.element.V.set_threshold(value)
+
+    def set_camera_offset(self, dx, dy, dz, camera_distance_multiple=None):
+        test = dx * dx + dy * dy + dz * dz
+        if test < 0.5 or test > 1.5:
+            raise ValueError("offset should be a vector with norm between 0.5 and 1.5: " + repr([dx,dy,dz]))
+        if camera_distance_multiple is not None and (camera_distance_multiple < 0.1) or (camera_distance_multiple > 10.0):
+            raise ValueError("camera distance multiple should be in range 0.1 .. 10.0: " + repr(camera_distance_multiple))
+        self.element.V.set_camera_offset(dx, dy, dz, camera_distance_multiple)
 
     def load_stream_lines(
         self, 
@@ -293,6 +320,14 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             element.V.settings.stream_lines_parameters = parameters;
         """, parameters=parameters)
 
+    def load_label_to_color_mapping(self, label_to_color_mapping):
+        mapping = {}
+        # convert labels to strings for json compatibility
+        for (key, value) in label_to_color_mapping.items():
+            skey = str(key)
+            mapping[skey] = value
+        self.element.V.load_label_to_color_mapping(mapping)
+
     def load_3d_numpy_array(
             self, ary, 
             threshold=None, shrink_factor=None, chunksize=SEND_BUFFER_SIZE_DEFAULT, method="cubes",
@@ -303,6 +338,8 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             di=dict(x=1, y=0, z=0),  # xyz offset between ary[0,0,0] and ary[1,0,0]
             dj=dict(x=0, y=1, z=0),  # xyz offset between ary[0,0,0] and ary[0,1,0]
             dk=dict(x=0, y=0, z=1),  # xyz offset between ary[0,0,0] and ary[0,0,1]
+            solid_labels=None,
+            axis_length=True,
             ):
         self.array = ary
         self.dk = self.positional_xyz(dk)
@@ -327,6 +364,8 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
             dk=self.dk,
             dj=self.dj,
             di=self.di,
+            solid_labels=solid_labels,
+            axis_length=axis_length,
             )
         self.data = ary32
         ary_bytes = bytearray(ary32.tobytes())
@@ -384,6 +423,10 @@ class Volume32(jp_proxy_widget.JSProxyWidget):
     def triangles_and_normals(self, just_triangles=False):
         # new implementation should work for larger data sizes
         from . import segmented_caller
+        if self.method != "tetrahedra":
+            raise ValueError(
+                "Please call load_3d_numpy_array using method='tetrahedra' to allow geometry export: method="
+                +repr(self.method))
         # Must call position_count -- this loads the data from the GPU to javascript.
         float_count = self.element.position_count().sync_value()
         def get_3_by_3(method):
